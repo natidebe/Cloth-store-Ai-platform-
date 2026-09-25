@@ -3,12 +3,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.v1 import admin, health, webhook
+from app.core.config import get_settings
 from app.utils.logging import setup_logging
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    setup_logging()
+    setup_logging(get_settings().log_level)
     # TODO: initialize the Supabase client once here and store it on app.state
     yield
 
