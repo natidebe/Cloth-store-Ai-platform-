@@ -57,7 +57,8 @@ startup rather than per-request).
 
 ### `core/config.py`
 Loads environment variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-`LLM_PROVIDER`, `LLM_API_KEY`. Note: individual store Telegram bot tokens
+`LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `PUBLIC_BASE_URL`, `LOG_LEVEL`.
+Note: individual store Telegram bot tokens
 are **not** environment variables — they're stored in `stores.telegram_bot_token`,
 since each store has its own bot. The `.env` only holds platform-level
 secrets.
@@ -160,8 +161,11 @@ per-model performance if you're comparing providers, as discussed earlier.
 ```
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
-LLM_PROVIDER=            # e.g. openai, anthropic, deepseek, gemini
+LLM_PROVIDER=        # e.g. openai, anthropic, deepseek, gemini
+LLM_MODEL=           # e.g. gpt-5-mini
 LLM_API_KEY=
+PUBLIC_BASE_URL=     # public HTTPS URL of this server, for Telegram webhooks
+LOG_LEVEL=           # DEBUG, INFO, WARNING, ERROR, CRITICAL
 ```
 
 ## Notes on future schema extensions
