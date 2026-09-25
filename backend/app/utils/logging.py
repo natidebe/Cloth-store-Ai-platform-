@@ -1,44 +1,30 @@
-"""Structured (JSON) logging with per-request context.
+"""Structured logging.
 
-Usage:
-    with log_context(store_id=store.id, telegram_id=msg.telegram_id):
-        logger.info("message received")   # includes store_id and telegram_id
+Every log line is `timestamp level logger message key=value ...`, so it's
+readable in a terminal and still easy to search/filter by field.
 
-    logger.info("llm call", extra={"model": "gpt-5-mini", "tokens": 812})
+Two ways to attach fields:
+
+    logger.info("order created", extra={"order_id": order.id})
+
+    with log_context(store_id=store_id, telegram_id=telegram_id):
+        ...  # every log line inside here (including in called functions)
+             # automatically gets store_id=... telegram_id=...
 """
-import json
 import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime, timezone
 from typing import Any, Iterator
 
 _context: ContextVar[dict[str, Any]] = ContextVar("log_context", default={})
 
-# Attributes every LogRecord has; anything else came from `extra=`
-_STANDARD_ATTRS = set(vars(logging.makeLogRecord({}))) | {"message", "asctime"}
-
-
-class JsonFormatter(logging.Formatter):
-    def format(self, record: logging.LogRecord) -> str:
-        entry: dict[str, Any] = {
-            "time": datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
-            "level": record.levelname,
-            "logger": record.name,
-            "msg": record.getMessage(),
-        }
-        entry.update(_context.get())
-        entry.update(
-            {k: v for k, v in vars(record).items() if k not in _STANDARD_ATTRS}
-        )
-        if record.exc_info:
-            entry["error"] = self.formatException(record.exc_info)
-        return json.dumps(entry, default=str, ensure_ascii=False)
+# Attributes every LogRecord has; anything else came from `extra=`.
+_STANDARD_ATTRS = set(vars(logging.makeLogRecord({}))) | {"message", "asctime", "taskName"}
 
 
 @contextmanager
 def log_context(**fields: Any) -> Iterator[None]:
-    """Attach fields (store_id, telegram_id, ...) to every log line inside the block."""
+    """Attach fields to every log line emitted inside this block."""
     token = _context.set({**_context.get(), **fields})
     try:
         yield
@@ -46,9 +32,36 @@ def log_context(**fields: Any) -> Iterator[None]:
         _context.reset(token)
 
 
+def _format_value(value: Any) -> str:
+    text = str(value)
+    if not text or any(c in text for c in ' ="'):
+        text = '"' + text.replace('"', '\\"') + '"'
+    return text
+
+
+class KeyValueFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        fields = dict(_context.get())
+        fields.update(
+            {k: v for k, v in vars(record).items() if k not in _STANDARD_ATTRS}
+        )
+        line = (
+            f"{self.formatTime(record, '%Y-%m-%d %H:%M:%S')} "
+            f"{record.levelname:<8} {record.name} {record.getMessage()}"
+        )
+        if fields:
+            line += " " + " ".join(f"{k}={_format_value(v)}" for k, v in fields.items())
+        if record.exc_info:
+            line += "\n" + self.formatException(record.exc_info)
+        return line
+
+
 def setup_logging(level: str = "INFO") -> None:
     handler = logging.StreamHandler()
-    handler.setFormatter(JsonFormatter())
+    handler.setFormatter(KeyValueFormatter())
     root = logging.getLogger()
     root.handlers = [handler]
-    root.setLevel(level.upper())
+    root.setLevel(level)
+    # httpx logs every request URL at INFO — that would include Telegram bot
+    # tokens (they're part of the URL), so keep it quiet.
+    logging.getLogger("httpx").setLevel(logging.WARNING)

@@ -1,27 +1,23 @@
-import json
 import logging
 
-from app.utils.logging import JsonFormatter, log_context
+from app.utils.logging import KeyValueFormatter, log_context
 
 
-def _format(record_msg: str, **extra) -> dict:
-    logger = logging.getLogger("test")
-    record = logger.makeRecord("test", logging.INFO, __file__, 1, record_msg, (), None, extra=extra)
-    return json.loads(JsonFormatter().format(record))
+def _format(msg: str, **extra) -> str:
+    record = logging.makeLogRecord({"name": "test", "levelname": "INFO", "msg": msg, **extra})
+    return KeyValueFormatter().format(record)
 
 
-def test_json_line_has_message_and_extra_fields():
-    entry = _format("llm call", model="gpt-5-mini", tokens=812)
-    assert entry["msg"] == "llm call"
-    assert entry["level"] == "INFO"
-    assert entry["model"] == "gpt-5-mini"
-    assert entry["tokens"] == 812
+def test_extra_fields_are_appended():
+    line = _format("order created", order_id="abc")
+    assert line.endswith("INFO     test order created order_id=abc")
 
 
-def test_log_context_is_added_and_removed():
-    with log_context(store_id="store-1", telegram_id=42):
-        inside = _format("inside")
-    outside = _format("outside")
-    assert inside["store_id"] == "store-1"
-    assert inside["telegram_id"] == 42
-    assert "store_id" not in outside
+def test_log_context_fields_are_included_and_removed_after():
+    with log_context(store_id="s1"):
+        assert "store_id=s1" in _format("hello")
+    assert "store_id" not in _format("hello")
+
+
+def test_values_with_spaces_are_quoted():
+    assert 'customer_name="Abebe Kebede"' in _format("x", customer_name="Abebe Kebede")
