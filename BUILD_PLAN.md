@@ -129,7 +129,7 @@ Still to do:
 
 ---
 
-### Phase 2 — Database updates (migration 002)
+### Phase 2 — Database updates (migration 002) — written, waiting for Supabase run
 
 **Goal:** get the database into its final shape before writing code that
 depends on it, so nothing has to be redone later.
@@ -329,11 +329,12 @@ Answer each before the phase listed, and record the answer here.
 |---|----------|-----------|--------|
 | D1 | Upgrade to Python 3.11+ (currently 3.10.11) or stay on 3.10? | Phase 1 | Stay on 3.10 |
 | D2 | Move `backend-architecture.md` into a `docs/` folder? | Phase 1 | Yes — now `docs/backend-architecture.md` |
-| D3 | Reduce stock when the order is placed, or when staff confirm payment? | Phase 2 | |
-| D4 | Delivery, pickup, or both? Save the address and phone on each order? | Phase 2 | |
-| D5 | Which currency (ETB?), and save it on orders? | Phase 2 | |
-| D6 | Which payment methods (Telebirr, bank transfer, cash on delivery, …)? | Phase 2 | |
-| D7 | Which order stages (e.g. pending → confirmed → shipped → delivered, or cancelled)? | Phase 2 | |
+| D3 | Reduce stock when the order is placed, or when staff confirm payment? | Phase 2 | When staff confirm payment |
+| D4 | Delivery, pickup, or both? Save the address and phone on each order? | Phase 2 | Both, chosen per order; address and phone saved on each order |
+| D5 | Which currency (ETB?), and save it on orders? | Phase 2 | ETB only; not saved on orders |
+| D6 | Which payment methods (Telebirr, bank transfer, cash on delivery, …)? | Phase 2 | `telebirr`, `bank_transfer`, `cash_on_delivery`, `cash_in_store` |
+| D7 | Which order stages (e.g. pending → confirmed → shipped → delivered, or cancelled)? | Phase 2 | `pending` → `confirmed` → `ready_for_pickup` / `out_for_delivery` → `completed`, or `cancelled` |
+| D7b | Which payment statuses? | Phase 2 | `unpaid`, `pending_verification`, `paid`, `refunded` |
 | D8 | Approve the `003_conversations.sql` tables? | Phase 7 | |
 | D9 | How does the bot resume after a handover (staff command, button, time limit)? | Phase 9 | |
 

@@ -99,9 +99,24 @@ raw queries. Functions map directly onto tables:
 | `get_store_by_id`                   | `stores`                              |
 | `find_variant_stock(product, color, size)` | `products`, `product_variants` |
 | `get_or_create_customer(telegram_id)` | `customers`                         |
-| `create_order(customer, items)`     | `orders`, `order_items`               |
-| `record_payment(order_id, amount)`  | `payments`                            |
-| `update_stock(variant_id, delta)`   | `product_variants`                    |
+| `create_order(customer, items)`     | `orders`, `order_items` (via the `place_order` database function) |
+| `confirm_payment(order_id, amount, method)` | `payments`, `orders`, `product_variants` (via the `confirm_payment` database function) |
+| `update_stock(variant_id, delta)`   | `product_variants` (via the `adjust_stock` database function) |
+
+Anything that must fully succeed or fully fail runs as one Postgres
+function, defined in `db/migrations/002_platform_updates.sql`:
+
+- `place_order`: checks the customer and items belong to the store, takes
+  prices from the database, checks stock, and creates the order and its
+  items. It does **not** reduce stock.
+- `confirm_payment`: records the payment, reduces stock, and marks the order
+  paid. Stock goes down here, once staff confirm the money arrived.
+- `adjust_stock`: changes stock without ever letting it go below zero.
+
+They fail with a short error code as the message (`out_of_stock`,
+`variant_not_found`, …) and a readable explanation in the details, so the
+service can turn them into a sensible reply. Only `service_role` can call
+them.
 
 This service uses the **service_role** key, since it's a trusted backend
 process — it bypasses Row Level Security intentionally (RLS is there to
