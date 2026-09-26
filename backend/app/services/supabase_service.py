@@ -188,6 +188,21 @@ class SupabaseService:
         )
         return Store.model_validate(rows[0]) if rows else None
 
+    async def find_store_by_name(self, name: str) -> list[Store]:
+        """Active stores with exactly this name (for setup scripts)."""
+        rows = await self._run(
+            self._db.table("stores").select("*").eq("name", name).eq("is_active", True)
+        )
+        return [Store.model_validate(row) for row in rows]
+
+    async def set_webhook_secret(self, store_id: UUID, secret: str) -> None:
+        """Save the secret Telegram must send with every webhook call."""
+        rows = await self._run(
+            self._db.table("stores").update({"webhook_secret": secret}).eq("id", str(store_id))
+        )
+        if not rows:
+            raise NotFoundError("store_not_found", str(store_id))
+
     # --- Products -----------------------------------------------------------
 
     async def search_variants(

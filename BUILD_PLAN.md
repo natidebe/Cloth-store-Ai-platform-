@@ -205,7 +205,7 @@ adding sample products and variants.
 
 ---
 
-### Phase 5 — Telegram connection (echo bot)
+### Phase 5 — Telegram connection (echo bot) ✅ Done
 
 **Goal:** real Telegram messages reach our server and get a reply.
 
@@ -422,5 +422,5 @@ Answer each before the phase listed, and record the answer here.
 
 ## 7. Where to start
 
-Phase 4 is done and its tests pass against my Supabase project. Next is
-**Phase 5** (Telegram echo bot) — no coding until I say "continue".
+Phase 5 is done: the echo bot works in real Telegram. Next is **Phase 6**
+(AI model service) — no coding until I say "continue".

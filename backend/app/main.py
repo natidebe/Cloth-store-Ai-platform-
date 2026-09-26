@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from app.api.v1 import admin, health, webhook
 from app.core.config import get_settings
 from app.services.supabase_service import SupabaseService
+from app.services.telegram_service import TelegramService
 from app.utils.logging import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,11 @@ async def lifespan(app: FastAPI):
         )
     else:
         logger.warning("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set; database disabled")
+
+    # One Telegram client shared by all stores' bots.
+    app.state.telegram = TelegramService.create()
     yield
+    await app.state.telegram.close()
     if app.state.db is not None:
         await app.state.db.close()
     logger.info("shutting down")

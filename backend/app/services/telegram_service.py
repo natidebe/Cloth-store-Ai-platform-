@@ -1,1 +1,142 @@
-"""Parses raw Telegram updates and sends replies via each store's bot token."""
+"""Everything that talks to the Telegram Bot API.
+
+The only module that calls Telegram. Each store has its own bot, so every
+call takes that store's bot token.
+
+The token is part of Telegram's URL (https://api.telegram.org/bot<TOKEN>/...),
+so errors and logs from this module never include the URL.
+"""
+import logging
+from typing import Any
+from uuid import UUID
+
+import httpx
+
+from app.models.schemas import IncomingMessage, Store, TelegramUpdate
+
+logger = logging.getLogger(__name__)
+
+TELEGRAM_API = "https://api.telegram.org"
+MAX_MESSAGE_LENGTH = 4096  # Telegram's limit for one text message
+_TIMEOUT_SECONDS = 15.0
+
+
+class TelegramError(Exception):
+    """A Telegram call failed. The message never contains the bot token."""
+
+    def __init__(self, method: str, description: str, status: int | None = None):
+        super().__init__(f"Telegram {method} failed: {description}")
+        self.method = method
+        self.description = description
+        self.status = status
+
+
+def parse_update(store_id: UUID, update: TelegramUpdate) -> IncomingMessage | None:
+    """Turn a Telegram update into an IncomingMessage.
+
+    Returns None for anything the bot should ignore: edited messages,
+    messages from groups or channels, and messages from other bots.
+    """
+    message = update.message
+    if message is None or message.chat.type != "private":
+        return None
+    sender = message.from_user
+    if sender is None or sender.is_bot:
+        return None
+
+    if message.photo:
+        kind, text = "photo", message.caption
+    elif message.text:
+        kind, text = "text", message.text
+    elif message.sticker:
+        kind, text = "sticker", None
+    elif message.voice:
+        kind, text = "voice", None
+    elif message.document:
+        kind, text = "document", message.caption
+    else:
+        kind, text = "other", None
+
+    return IncomingMessage(
+        store_id=store_id,
+        update_id=update.update_id,
+        chat_id=message.chat.id,
+        message_id=message.message_id,
+        telegram_id=sender.id,
+        customer_name=sender.full_name,
+        language_code=sender.language_code,
+        kind=kind,
+        text=text,
+        # Telegram sends each photo in several sizes; the last is the largest.
+        photo_file_id=message.photo[-1].file_id if message.photo else None,
+        sent_at=message.date,
+    )
+
+
+class TelegramService:
+    def __init__(self, http: httpx.AsyncClient):
+        self._http = http
+
+    @classmethod
+    def create(cls) -> "TelegramService":
+        """Create once at app startup; all stores share one HTTP client."""
+        return cls(httpx.AsyncClient(base_url=TELEGRAM_API, timeout=_TIMEOUT_SECONDS))
+
+    async def close(self) -> None:
+        await self._http.aclose()
+
+    async def _call(self, bot_token: str, method: str, payload: dict[str, Any] | None = None) -> Any:
+        try:
+            response = await self._http.post(f"/bot{bot_token}/{method}", json=payload or {})
+        except httpx.HTTPError as error:
+            # str(error) can include the URL, and so the token: use only the type.
+            raise TelegramError(method, type(error).__name__) from None
+        try:
+            body = response.json()
+        except ValueError:
+            raise TelegramError(method, "response was not JSON", response.status_code) from None
+        if not body.get("ok"):
+            raise TelegramError(method, body.get("description", "unknown error"), response.status_code)
+        return body["result"]
+
+    # --- Messages -----------------------------------------------------------
+
+    async def send_message(self, bot_token: str, chat_id: int, text: str) -> None:
+        if len(text) > MAX_MESSAGE_LENGTH:
+            text = text[: MAX_MESSAGE_LENGTH - 1] + "…"
+        await self._call(bot_token, "sendMessage", {"chat_id": chat_id, "text": text})
+
+    async def notify_staff(self, store: Store, text: str) -> bool:
+        """Send a message to the store's staff group.
+
+        Returns False (and logs a warning) if the store has no staff group yet.
+        """
+        if store.staff_chat_id is None or store.telegram_bot_token is None:
+            logger.warning("store has no staff group; staff not notified",
+                           extra={"store_id": str(store.id)})
+            return False
+        await self.send_message(store.telegram_bot_token.get_secret_value(), store.staff_chat_id, text)
+        return True
+
+    # --- Bot setup ----------------------------------------------------------
+
+    async def get_me(self, bot_token: str) -> dict[str, Any]:
+        """Check a bot token. Returns the bot's id, username, and name."""
+        return await self._call(bot_token, "getMe")
+
+    async def set_webhook(self, bot_token: str, url: str, secret: str) -> None:
+        """Tell Telegram to send this bot's messages to `url`, with `secret`
+        in the X-Telegram-Bot-Api-Secret-Token header."""
+        await self._call(bot_token, "setWebhook", {
+            "url": url,
+            "secret_token": secret,
+            "allowed_updates": ["message"],
+            "drop_pending_updates": True,  # don't replay old messages
+        })
+
+    async def delete_webhook(self, bot_token: str) -> None:
+        await self._call(bot_token, "deleteWebhook")
+
+    async def get_webhook_info(self, bot_token: str) -> dict[str, Any]:
+        """Where Telegram currently sends messages, and the last error, if any."""
+        return await self._call(bot_token, "getWebhookInfo")
