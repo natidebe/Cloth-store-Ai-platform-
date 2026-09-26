@@ -1,22 +1,176 @@
 # Backend Architecture
 
-This document describes the structure of the FastAPI backend and how each
-part maps to the database schema defined in `db/migrations/001_init_schema.sql`.
+This document describes how the FastAPI backend works: the business flow,
+the message lifecycle, the folder structure, and how each part maps to the
+database schema in `db/migrations/`.
 
-## Responsibilities
+---
 
-The backend is a pure API service with three jobs:
+## 1. What the backend does
 
-1. Receive incoming Telegram messages (one webhook per store)
-2. Run the AI agent logic: classify the message, check live data, decide
-   how to respond
-3. Read from and write to Supabase — inventory, customers, orders, payments
+Each store connects its own Telegram bot. Customers message the bot to ask
+about stock and prices, place orders, and check order status. The backend:
 
-It has no server-rendered pages and no built-in admin UI — the staff
-dashboard is a separate frontend project that talks to Supabase directly
-(using the `anon` key + Row Level Security), not through this backend.
+1. Receives every customer message through a webhook
+2. Runs the AI assistant, which answers questions and collects orders using
+   real data from the database
+3. Hands conversations to the store's staff when a person is needed
+   (bargaining, complaints, payment checks)
 
-## Folder structure
+The staff dashboard is a separate frontend. It talks to Supabase directly
+using the `anon` key and Row Level Security, not through this backend.
+
+---
+
+## 2. Business flow (non-technical)
+
+Example: a customer asks Selam Shoes for white Air Force 1 in size 42.
+
+| Step | Who | What happens |
+|------|-----|--------------|
+| 1 | Customer | Asks "Do you have white AF1 in 42?" |
+| 2 | Assistant | Checks real stock and replies with availability and price. If sold out, offers other sizes or colors |
+| 3 | Assistant | Collects name, phone, and delivery address |
+| 4 | Customer | Confirms the order summary |
+| 5 | Assistant + Staff | Order is created as pending. Staff get an alert. Customer gets payment instructions |
+| 6 | Customer | Pays by Telebirr or bank and sends a screenshot |
+| 7 | Staff | Verifies the payment and marks the order as paid |
+| 8 | Assistant | Tells the customer payment is received and when delivery is expected |
+| 9 | Staff | Delivers the order |
+| 10 | Assistant | Answers "where is my order?" questions |
+
+**The assistant handles:** stock and price questions, order details,
+payment instructions, order status.
+
+**Staff handle:** payment confirmation, bargaining, complaints, returns,
+delivery, and keeping stock numbers correct.
+
+---
+
+## 3. Business rules
+
+These rules must be enforced **in code**, not only in the prompt.
+
+1. **The assistant never confirms payments.** Only staff can mark an order
+   as paid, through the admin endpoint. A customer saying "I paid" changes
+   nothing.
+2. **The assistant never invents stock or prices.** Every answer about
+   availability or price must come from a `check_stock` result.
+3. **The assistant never gives discounts.** Bargaining is escalated to staff.
+4. **Orders are created as pending and unpaid.** They become confirmed only
+   after staff verify payment.
+5. **When staff take over a conversation, the assistant stays silent** until
+   staff hand it back.
+6. **Every query is scoped to one store.** The backend uses the
+   service_role key, which bypasses Row Level Security, so the code must
+   always filter by `store_id`.
+
+---
+
+## 4. Message lifecycle
+
+```
+Telegram
+   │
+   ▼
+FastAPI Webhook
+   ├─ Verify Telegram secret (per store)
+   ├─ Find store
+   ├─ Check store is active
+   ├─ Check duplicate update (store_id + update_id)
+   └─ Return 200 immediately
+          │
+          ▼
+Background Job
+   └─ Sequential per store + customer
+          │
+          ▼
+Handoff Check
+   └─ Staff in control → STOP (message is still saved)
+          │
+          ▼
+Save incoming message
+          │
+          ▼
+Load Context
+   ├─ Recent conversation
+   ├─ Current order draft
+   ├─ Customer profile
+   └─ Relevant order history
+          │
+          ▼
+Orchestrator ◄──────────────────┐
+   │                            │ tool result
+   ▼                            │ (max ~5 rounds)
+LLM Service ── tool call ──► Tools
+   │                            ├─ check_stock
+   │                            ├─ update_order_draft
+   │                            ├─ confirm_order
+   │                            ├─ check_order_status
+   │                            └─ escalate_to_staff ──► Staff group
+   ▼
+Final AI Response
+   │
+   ▼
+Did STAFF take over during this run?
+   ├─ yes → don't send
+   └─ no  → save bot reply → send Telegram reply
+
+Any failure at any step → polite fallback to customer + alert to staff
+```
+
+### Step details
+
+**Webhook.** Must respond fast. Telegram retries if it doesn't get a 200
+quickly, so all slow work (database, LLM) happens in the background job.
+
+**Duplicate check.** Telegram can resend the same update. The key is
+`store_id + update_id`, because each bot numbers its updates separately.
+
+**Sequential per customer.** If a customer sends three quick messages, they
+are processed one after another, never in parallel, so the order draft is
+never corrupted. An in-memory lock is fine while running one server. With
+more than one server, this must move to Redis.
+
+**Handoff check (first).** If staff control the conversation, the assistant
+does nothing. The customer's message is still saved so staff see it.
+
+**Save incoming message first.** The customer's message is saved before the
+LLM runs, so it's never lost, even if the run fails or is stopped.
+
+**Tool loop.** The LLM either replies or asks for a tool. The orchestrator
+runs the tool and sends the result back. This repeats until a final reply,
+with a limit of about 5 rounds to prevent runaway costs.
+
+**Handoff check (second).** Staff may take over while the LLM is working.
+The check asks "did *staff* take over during this run?", not just "is
+handoff on?". Otherwise the assistant's own `escalate_to_staff` call would
+block its "I'm connecting you with our team" message.
+
+**Failure path.** If the LLM, database, or Telegram fails, the customer gets
+a polite fallback message and staff get an alert. The bot never goes silent.
+
+---
+
+## 5. Tools
+
+| Tool | What it does | Rules enforced in code |
+|------|--------------|------------------------|
+| `check_stock(query, color, size)` | Finds matching variants with stock and price | Only this store's products |
+| `update_order_draft(fields)` | Saves item, size, color, name, phone, address as they're collected | Validates formats (e.g. phone) |
+| `confirm_order()` | Creates the order from the draft (through the `place_order` database function) | All required fields present; customer confirmed; stock re-checked at this moment; prices read from the database; safe to call twice (one order only); status = pending, payment = unpaid |
+| `check_order_status()` | Returns this customer's recent orders | Only this customer, only this store |
+| `escalate_to_staff(reason, summary)` | Alerts the staff group and pauses the assistant for this customer | Sets handoff state |
+
+There is no payment tool. Payment confirmation happens only through the
+admin endpoint.
+
+Tools never accept `store_id`, `customer_id`, or prices from the LLM. The
+orchestrator fills those in from the webhook and the database.
+
+---
+
+## 6. Folder structure
 
 ```
 backend/
@@ -48,132 +202,153 @@ backend/
 └── .env.example
 ```
 
-## File-by-file, mapped to the schema
+### Separation rules
+
+- Only `supabase_service.py` talks to the database
+- Only `llm_service.py` talks to the LLM provider
+- Only `telegram_service.py` talks to the Telegram API
+
+---
+
+## 7. File-by-file
 
 ### `main.py`
-Creates the FastAPI app, registers all routers from `api/v1/`, sets up
-startup/shutdown hooks (e.g. initializing the Supabase client once at
-startup rather than per-request).
+Creates the FastAPI app, registers routers, and initializes shared clients
+(Supabase, HTTP client) once at startup.
 
 ### `core/config.py`
-Loads environment variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-`LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `PUBLIC_BASE_URL`, `LOG_LEVEL`.
-Note: individual store Telegram bot tokens
-are **not** environment variables — they're stored in `stores.telegram_bot_token`,
-since each store has its own bot. The `.env` only holds platform-level
-secrets.
+Loads platform-level environment variables. Store bot tokens are **not**
+here; they live in the `stores` table.
 
 ### `core/security.py`
-Verifies that incoming webhook requests genuinely came from Telegram
-(Telegram supports a secret token check per webhook), preventing spoofed
-requests from hitting your agent logic.
+Verifies the Telegram secret header against the store's `webhook_secret`,
+and protects admin endpoints: it verifies the staff member's Supabase login
+token (`Authorization: Bearer ...`) and checks they have a `store_staff` row
+for that store. There is no shared admin key.
 
 ### `api/v1/webhook.py`
-`POST /webhook/{store_id}` — the single entry point for every customer
-message, across every store. Looks up the store, hands the message to
-`conversation_service.py`, and returns a fast response to Telegram (it
-expects a quick 200 OK; slow LLM calls should be handled asynchronously
-where possible).
+`POST /api/v1/webhook/{store_id}`. Runs the webhook checks, starts the
+background job, and returns 200 immediately.
 
 ### `api/v1/admin.py`
-Endpoints the staff dashboard (or you, manually) can call for actions the
-agent doesn't handle itself — e.g. manually resolving an escalation, or
-retrying a stuck order.
+Actions for staff (called from the dashboard):
+- Confirm payment for an order
+- Resolve an escalation and hand the conversation back to the assistant
+- Retry a failed order
 
 ### `api/v1/health.py`
-A simple `GET /health` endpoint — useful once you deploy this somewhere
-and want uptime monitoring.
+`GET /api/v1/health` for uptime monitoring.
 
 ### `services/telegram_service.py`
-Two jobs: parses the raw Telegram update payload into a clean message
-object, and sends replies back to the customer via Telegram's `sendMessage`
-API using the correct store's bot token (fetched from `stores` via
-`supabase_service.py`).
+Parses incoming updates (text, photos, stickers, voice), sends replies with
+the correct store's bot token, sends staff alerts, and registers webhooks.
 
 ### `services/supabase_service.py`
-Every database interaction lives here — nothing else in the app writes
-raw queries. Functions map directly onto tables:
+All database reads and writes, always scoped by `store_id`:
 
-| Function (conceptual)              | Table(s) touched                     |
-|-------------------------------------|----------------------------------------|
-| `get_store_by_id`                   | `stores`                              |
-| `find_variant_stock(product, color, size)` | `products`, `product_variants` |
-| `get_or_create_customer(telegram_id)` | `customers`                         |
-| `create_order(customer, items)`     | `orders`, `order_items`               |
-| `record_payment(order_id, amount)`  | `payments`                            |
-| `update_stock(variant_id, delta)`   | `product_variants`                    |
-
-This service uses the **service_role** key, since it's a trusted backend
-process — it bypasses Row Level Security intentionally (RLS is there to
-protect staff-facing dashboard access, not this server).
+| Function | Tables |
+|----------|--------|
+| `get_store(store_id)` | `stores` (inactive stores return nothing) |
+| `search_variants(store_id, query, color, size)` | `products`, `product_variants` |
+| `get_or_create_customer(store_id, telegram_id, name)` | `customers` |
+| `update_customer(store_id, customer_id, ...)` | `customers` |
+| `create_order(store_id, customer_id, items)` | `place_order` database function |
+| `get_customer_orders(store_id, customer_id)` | `orders`, `order_items` |
+| `update_stock(store_id, variant_id, delta)` | `adjust_stock` database function (never below zero) |
+| `record_payment(store_id, order_id, amount, method, staff_id)` | `confirm_payment` database function (reduces stock, saves payment, marks paid) |
+| `is_duplicate_update(store_id, update_id)` | `processed_updates` |
+| `get_handoff_state` / `set_handoff_state` | `conversations` |
 
 ### `services/llm_service.py`
-The only file that talks to whichever LLM provider you're using
-(GPT-5 mini, Claude Haiku, DeepSeek, etc). Takes a system prompt + message
-history, returns the model's response — including any structured tool-call
-output. Swapping providers means editing only this file.
+A provider-agnostic interface. Takes a system prompt, message history, and
+tool definitions. Returns text and/or tool calls, plus token usage. The
+provider and model come from `LLM_PROVIDER` and `LLM_MODEL`. Includes
+timeouts and retries. Logs model, tokens, and cost for every call.
 
 ### `services/conversation_service.py`
-Tracks each customer's recent message history and any in-progress order
-state (e.g. "we know size and color, still need address"). Note: the
-current schema doesn't have a dedicated `conversations` or `messages`
-table — this service can start with an in-memory or Redis-backed store for
-simplicity, or you can extend the schema later with a `messages` table if
-you want full conversation history persisted in Postgres.
+Stores recent messages, the current order draft, and handoff state per
+`(store_id, telegram_id)`. Stored in the database (migration 003) so it
+survives restarts. An in-memory version exists only for tests.
 
 ### `models/schemas.py`
-Pydantic models defining the shape of data moving through the app:
-the incoming Telegram payload, an `OrderRequest` (mirrors the fields needed
-for `orders` + `order_items`), and an `AgentDecision` (what the orchestrator
-decided to do with a message).
+Pydantic models for the database tables, the incoming Telegram update, and
+internal objects: `IncomingMessage`, `OrderDraft`, `AgentDecision`.
 
 ### `agents/orchestrator.py`
-The core decision loop:
-1. Receive the parsed message + conversation history
-2. Decide what context is needed (does this look like a stock question? an
-   order? a complaint?)
-3. Call `supabase_service.py` for any live data needed (e.g. stock levels)
-4. Call `llm_service.py` with the assembled context
-5. Act on the result: reply directly, write an order via `supabase_service.py`,
-   or flag for staff via `telegram_service.py`
+Runs the lifecycle in section 4: handoff checks, context loading, the tool
+loop with its round limit, the final send, and the failure path.
 
 ### `agents/prompts.py`
-System prompt templates — the store's persona, rules, and how the catalog
-data should be formatted when injected into the prompt.
+The system prompt: store name, friendly and short tone, rules from
+section 3, how to collect an order, and replying in the customer's language
+(Amharic or English).
 
 ### `agents/tools.py`
-Structured tool/function definitions the LLM can invoke, each one
-corresponding to a `supabase_service.py` function:
-
-- `check_stock(product_name, color, size)` → reads `product_variants`
-- `create_order(customer_info, items)` → writes `customers`, `orders`,
-  `order_items`
-- `escalate_to_staff(reason)` → no database write required; triggers a
-  Telegram notification to the store's staff group
+Tool definitions from section 5 and the code that runs them.
 
 ### `utils/logging.py`
-Structured logging for every step — which store, which customer, which
-model handled the request, and the outcome. This is also where you'd track
-per-model performance if you're comparing providers, as discussed earlier.
+Structured logs with store, customer, model, tokens, and outcome for every
+message.
 
-## Environment variables (`.env.example`)
+---
+
+## 8. Database changes needed
+
+`001_init_schema.sql` is already applied and is never edited. Changes go in
+new numbered migrations (see `BUILD_PLAN.md`, Phases 2 and 7).
+
+**`002_platform_updates.sql`** (Phase 2):
+- Fix the recursive `store_staff` security rule with an
+  `is_store_member(store_id)` helper, used by every table's rules
+- Add to `stores`: `staff_chat_id` (Telegram group for staff alerts),
+  `webhook_secret` (per-store secret for verifying requests), `is_active`
+  (switch a store on or off)
+- Hide `telegram_bot_token` and `webhook_secret` from the staff dashboard
+- Variant fixes: keep `store_id` correct when `product_id` changes; make it
+  required
+- Allowed values for order status, payment status, payment method, and
+  staff role
+- Missing indexes: `product_variants(store_id)`, `orders(customer_id)`
+- Order delivery details (address, phone, currency) if needed
+- `place_order` function: in one transaction, checks the items belong to
+  the store, reads prices, checks stock, creates `orders` + `order_items`,
+  calculates the total (stock is reduced at payment, not here)
+- `adjust_stock` function: changes stock atomically, never below zero
+- `confirm_payment` function: reduces stock, saves the payment, and marks
+  the order paid in one step; refused if an item sold out
+
+**`003_conversations.sql`** (Phase 7):
+- `conversations` — one row per store + customer: current order draft,
+  handoff state, who took over
+- `messages` — full message history for staff context and auditing
+- `processed_updates` — `(store_id, update_id)` with a unique constraint,
+  for the duplicate check
+
+---
+
+## 9. Environment variables
 
 ```
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
-LLM_PROVIDER=        # e.g. openai, anthropic, deepseek, gemini
-LLM_MODEL=           # e.g. gpt-5-mini
+LLM_PROVIDER=          # openai, anthropic, gemini, deepseek
+LLM_MODEL=             # e.g. gpt-5-mini
 LLM_API_KEY=
-PUBLIC_BASE_URL=     # public HTTPS URL of this server, for Telegram webhooks
-LOG_LEVEL=           # DEBUG, INFO, WARNING, ERROR, CRITICAL
+PUBLIC_BASE_URL=       # used to register Telegram webhooks
+LOG_LEVEL=INFO         # DEBUG, INFO, WARNING, ERROR, CRITICAL (uppercase)
 ```
 
-## Notes on future schema extensions
+There is no admin key: admin endpoints use the staff member's Supabase
+login (see `core/security.py`).
 
-Two things discussed that aren't in the current schema but may be worth
-adding later, once the backend structure above is running:
+---
 
-- A `messages` table, if you want full conversation history persisted in
-  Postgres rather than in-memory/Redis (useful for auditing or analytics)
-- An `escalations` table, if you want structured tracking of
-  staff-handled cases rather than relying on Telegram group messages alone
+## 10. Open decisions
+
+All decisions are tracked in the Decisions table in `BUILD_PLAN.md`:
+
+- **Stock** goes down when staff confirm payment (D3, decided). Because
+  nothing is reserved, unpaid orders don't need to expire.
+- **How do staff hand a conversation back** to the assistant? (D9) A button
+  in the dashboard, a command in the staff group, or automatically after a
+  period of time.

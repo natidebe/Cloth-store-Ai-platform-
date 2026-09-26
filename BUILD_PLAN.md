@@ -129,7 +129,7 @@ Still to do:
 
 ---
 
-### Phase 2 — Database updates (migration 002)
+### Phase 2 — Database updates (migration 002) 🟡 Written, waiting for me to run it
 
 **Goal:** get the database into its final shape before writing code that
 depends on it, so nothing has to be redone later.
@@ -153,13 +153,21 @@ What goes in `002_platform_updates.sql` (each part explained to me first):
    on D4 and D5.
 8. **`place_order` function:** in one step it checks the items belong to
    the store, reads prices, checks stock, creates the order and its items,
-   calculates the total, and reduces stock if D3 says so. If anything is
-   wrong (e.g. out of stock), nothing is saved.
+   and calculates the total. It does not reduce stock (D3). An
+   idempotency key makes a retried call return the same order. If anything
+   is wrong (e.g. out of stock), nothing is saved.
 9. **`adjust_stock` function:** changes stock safely and never lets it go
    below zero.
+10. **`confirm_payment` function:** because of D3, stock goes down here. In
+    one step it reduces stock for every item, saves the payment, and marks
+    the order paid. If an item sold out in the meantime, nothing changes
+    and staff are told which item.
+11. **Delete fix:** a store with variants couldn't be deleted in 001; the
+    link now deletes variants with the store.
 
-**Check:** I run the migration, then a short SQL checklist confirms it
-worked, including placing a test order.
+**Check:** I run `db/migrations/002_platform_updates.sql`, then
+`db/checks/002_verify.sql`, which tests everything on a temporary test
+store and removes it again.
 
 ---
 
@@ -189,7 +197,7 @@ worked, including placing a test order.
   - `create_order` (uses `place_order`)
   - `get_customer_orders` (for "where is my order?")
   - `update_stock` (uses `adjust_stock`)
-  - `record_payment`
+  - `record_payment` (uses `confirm_payment`)
 - Clear errors for "not found", "out of stock" and database problems.
 
 **Check:** a script or tests I run against my test store, plus a guide for
@@ -329,17 +337,19 @@ Answer each before the phase listed, and record the answer here.
 |---|----------|-----------|--------|
 | D1 | Upgrade to Python 3.11+ (currently 3.10.11) or stay on 3.10? | Phase 1 | Stay on 3.10 |
 | D2 | Move `backend-architecture.md` into a `docs/` folder? | Phase 1 | Yes — now `docs/backend-architecture.md` |
-| D3 | Reduce stock when the order is placed, or when staff confirm payment? | Phase 2 | |
-| D4 | Delivery, pickup, or both? Save the address and phone on each order? | Phase 2 | |
-| D5 | Which currency (ETB?), and save it on orders? | Phase 2 | |
-| D6 | Which payment methods (Telebirr, bank transfer, cash on delivery, …)? | Phase 2 | |
-| D7 | Which order stages (e.g. pending → confirmed → shipped → delivered, or cancelled)? | Phase 2 | |
+| D3 | Reduce stock when the order is placed, or when staff confirm payment? | Phase 2 | When staff confirm payment. If an item sold out by then, confirmation is refused and staff are told |
+| D4 | Delivery, pickup, or both? Save the address and phone on each order? | Phase 2 | Both. Each order saves name, phone, and address (address required for delivery) |
+| D5 | Which currency (ETB?), and save it on orders? | Phase 2 | ETB, saved on each order |
+| D6 | Which payment methods (Telebirr, bank transfer, cash on delivery, …)? | Phase 2 | Up to each store; we don't integrate payments. Method is free text recorded by staff |
+| D7 | Which order stages (e.g. pending → confirmed → shipped → delivered, or cancelled)? | Phase 2 | Order: pending, confirmed, out_for_delivery, delivered, cancelled. Payment: unpaid, paid, refunded |
 | D8 | Approve the `003_conversations.sql` tables? | Phase 7 | |
 | D9 | How does the bot resume after a handover (staff command, button, time limit)? | Phase 9 | |
+| D10 | One order can hold several items? | Phase 2 | Yes |
+| D11 | Staff roles? | Phase 2 | owner and staff |
 
 ---
 
 ## 7. Where to start
 
-Phase 1 is done. Next is **Phase 2** (needs decisions D3–D7 first) — no
-coding until I say "continue".
+Phase 2 is written and tested locally. Next: I run it in Supabase, then
+**Phase 3** — no coding until I say "continue".
