@@ -129,7 +129,7 @@ Still to do:
 
 ---
 
-### Phase 2 — Database updates (migration 002) ✅ Migration run on Supabase
+### Phase 2 — Database updates (migration 002) ✅ Done
 
 **Goal:** get the database into its final shape before writing code that
 depends on it, so nothing has to be redone later.
@@ -342,5 +342,5 @@ Answer each before the phase listed, and record the answer here.
 
 ## 7. Where to start
 
-Phase 1 is done. Next is **Phase 2** (needs decisions D3–D7 first) — no
-coding until I say "continue".
+Phases 1 and 2 are done (migration 002 is live on Supabase and its checklist
+passes). Next is **Phase 3** (data models) — no coding until I say "continue".
