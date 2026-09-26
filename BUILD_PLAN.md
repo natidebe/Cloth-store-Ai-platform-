@@ -215,7 +215,9 @@ adding sample products and variants.
 - The webhook checks the store exists and is active, answers Telegram
   immediately, and processes the message in the background.
 - For now, the bot just repeats the customer's message back.
-- A small script to connect a store's bot to our server.
+- A small script to connect a store's bot to our server. (Creating new
+  stores properly comes in Phase 9b; until then the test store is set up
+  by hand.)
 
 **Check:** with a guide to ngrok (makes my local server reachable from the
 internet), I message my bot and see my message echoed back.
@@ -303,6 +305,68 @@ Supabase and the stock change.
 
 ---
 
+### Phase 9b — Store onboarding
+
+**Goal:** new stores join the platform through the dashboard, without
+anyone touching code or Supabase.
+
+Only the backend can write to `stores` (it keeps the bot token secret), so
+the dashboard asks the backend to do each step.
+
+**The store owner's journey (in the dashboard):**
+
+1. **Sign up** with email and password (Supabase login, handled by the
+   dashboard).
+2. **Create the store:** enter the store name and paste the bot token from
+   @BotFather (the dashboard shows a short guide). The backend:
+   - checks the token with Telegram (`getMe`)
+   - refuses a bot that another store already uses
+   - saves the store and generates its webhook secret automatically
+   - makes this user the store's **owner**
+3. **Wait for approval** if D14 says so. The store stays switched off
+   (`is_active = false`) until approved, so its bot answers no one.
+4. **Connect the staff group:** add the bot to the staff Telegram group and
+   send `/link <code>` (the code is shown in the dashboard). The bot saves
+   the group automatically, so nobody has to find or type chat IDs.
+5. **Add products** in the dashboard (already allowed by the Phase 2
+   security rules).
+6. **Invite staff** by email. They get an invitation and join as `staff`.
+7. **Go live:** once active, the backend connects the bot to our server
+   (`setWebhook`) and customers can start chatting.
+
+**Platform admin page (for me):**
+- A list of all stores with status (pending / active / suspended), plan,
+  and number of orders.
+- **Approve**, **Suspend** (turns the bot off), **Change plan**.
+- Only platform admins (D15) can see it.
+
+**What to build:**
+- Migration `004_store_onboarding.sql` (I approve it first):
+  - a way to mark platform admins
+  - store status: pending, active, suspended
+  - one store per bot (no two stores with the same bot)
+  - short-lived staff-group link codes
+- Backend endpoints, all behind the staff login from Phase 9:
+  - create a store (becomes owner)
+  - invite staff, remove staff (owner only)
+  - create a staff-group link code
+  - approve / suspend / change plan (platform admin only)
+- `/link <code>` handled by the webhook when it comes from a group.
+- Changing a store's bot token later (D17), which re-checks it and
+  re-connects the webhook.
+- For the dashboard (my teammate): sign-up page, "create store" form,
+  "connect staff group" page, staff invite page, platform admin page.
+
+**Check:** create a new store from start to finish using only the dashboard
+(or `/docs` if the dashboard isn't ready): sign up, create store, approve
+it, link a staff group, add a product, message the bot, and see it answer.
+Prove a staff member can't approve stores and can't see another store.
+
+**Until this phase:** Phases 5–9 use one test store created by hand in
+Supabase (store row + bot token + my user in `store_staff` as owner).
+
+---
+
 ### Phase 10 — Making it robust
 
 **Goal:** the bot behaves well when things go wrong.
@@ -348,6 +412,11 @@ Answer each before the phase listed, and record the answer here.
 | D11 | Staff roles? | Phase 2 | owner and staff |
 | D12 | Which phone numbers are accepted? | Phase 3 | Any number: optional +, 7–15 digits (spaces, dashes, brackets removed) |
 | D13 | Is the customer's name required to place an order? | Phase 3 | Yes |
+| D14 | Do new stores need my approval before their bot goes live, or are they live immediately? | Phase 9b | |
+| D15 | Who is a platform admin (only me, or a list of emails)? How are they marked? | Phase 9b | |
+| D16 | Which plans exist (e.g. basic, pro), and does a plan limit anything (products, staff, messages)? | Phase 9b | |
+| D17 | Can an owner change the store's bot token later, and what happens to open conversations? | Phase 9b | |
+| D18 | Can one person own or work in several stores? | Phase 9b | |
 
 ---
 

@@ -16,9 +16,14 @@ about stock and prices, place orders, and check order status. The backend:
    real data from the database
 3. Hands conversations to the store's staff when a person is needed
    (bargaining, complaints, payment checks)
+4. Onboards new stores: creates the store, checks and connects its bot, and
+   sets up its owner and staff (section 10)
 
 The staff dashboard is a separate frontend. It talks to Supabase directly
-using the `anon` key and Row Level Security, not through this backend.
+using the `anon` key and Row Level Security for everyday work (products,
+orders). Anything that touches the `stores` table or bot tokens (creating a
+store, approving it, linking the staff group) goes through this backend,
+because only the backend may write to `stores`.
 
 ---
 
@@ -228,7 +233,9 @@ for that store. There is no shared admin key.
 
 ### `api/v1/webhook.py`
 `POST /api/v1/webhook/{store_id}`. Runs the webhook checks, starts the
-background job, and returns 200 immediately.
+background job, and returns 200 immediately. Messages from a group (not a
+private chat) are only used for the `/link <code>` command that connects a
+store's staff group (section 10); anything else from a group is ignored.
 
 ### `api/v1/admin.py`
 Actions for staff (called from the dashboard):
@@ -236,12 +243,21 @@ Actions for staff (called from the dashboard):
 - Resolve an escalation and hand the conversation back to the assistant
 - Retry a failed order
 
+Store onboarding (section 10):
+- Create a store (the caller becomes its owner)
+- Invite and remove staff (owner only)
+- Create a staff-group link code (owner only)
+- Change the bot token (owner only, D17)
+- Approve, suspend, change plan, list all stores (platform admin only)
+
 ### `api/v1/health.py`
 `GET /api/v1/health` for uptime monitoring.
 
 ### `services/telegram_service.py`
 Parses incoming updates (text, photos, stickers, voice), sends replies with
 the correct store's bot token, sends staff alerts, and registers webhooks.
+For onboarding it also checks a new bot token with Telegram (`getMe`), which
+returns the bot's id and username.
 
 ### `services/supabase_service.py`
 All database reads and writes, always scoped by `store_id`:
@@ -258,6 +274,10 @@ All database reads and writes, always scoped by `store_id`:
 | `record_payment(store_id, order_id, amount, method, staff_id)` | `confirm_payment` database function (reduces stock, saves payment, marks paid) |
 | `is_duplicate_update(store_id, update_id)` | `processed_updates` |
 | `get_handoff_state` / `set_handoff_state` | `conversations` |
+| `create_store(name, bot_token, owner_user_id)` | `stores`, `store_staff` (section 10) |
+| `set_store_status(store_id, status)` / `list_stores()` | `stores` (platform admin only) |
+| `add_staff` / `remove_staff(store_id, ...)` | `store_staff` |
+| `create_link_code(store_id)` / `use_link_code(code, chat_id)` | link codes, `stores.staff_chat_id` |
 
 ### `services/llm_service.py`
 A provider-agnostic interface. Takes a system prompt, message history, and
@@ -324,6 +344,13 @@ new numbered migrations (see `BUILD_PLAN.md`, Phases 2 and 7).
 - `processed_updates` — `(store_id, update_id)` with a unique constraint,
   for the duplicate check
 
+**`004_store_onboarding.sql`** (Phase 9b):
+- A way to mark platform admins (D15)
+- Store status: `pending`, `active`, `suspended` (the bot answers only when
+  active)
+- One store per bot: the bot's Telegram id is saved and must be unique
+- Short-lived staff-group link codes (store, code, expiry, used or not)
+
 ---
 
 ## 9. Environment variables
@@ -343,7 +370,45 @@ login (see `core/security.py`).
 
 ---
 
-## 10. Open decisions
+## 10. Store onboarding
+
+New stores join without anyone touching code or Supabase (BUILD_PLAN.md,
+Phase 9b). Until that phase, the one test store is created by hand.
+
+### The store owner's journey
+
+| Step | Owner does (in the dashboard) | Backend does |
+|------|-------------------------------|--------------|
+| 1. Sign up | Creates an account (email + password) | Nothing: Supabase login, handled by the dashboard |
+| 2. Create store | Enters the store name, pastes the bot token from @BotFather | Checks the token with Telegram (`getMe`); refuses a bot another store uses; saves the store with a generated `webhook_secret`; makes the user `owner` |
+| 3. Approval | Sees "under review" (if D14 requires approval) | Store stays `pending`, so the bot answers no one |
+| 4. Link staff group | Adds the bot to the staff Telegram group, sends `/link <code>` shown in the dashboard | Webhook receives the group message, checks the code (right store, not expired, not used), saves the group as `staff_chat_id` |
+| 5. Add products | Fills in products, colors, sizes, stock, prices | Nothing: dashboard writes directly, allowed by the security rules |
+| 6. Invite staff | Enters a staff member's email | Sends a Supabase invitation; adds them to `store_staff` as `staff` |
+| 7. Go live | Nothing | When the store becomes `active`, registers the webhook with Telegram (`setWebhook` with the store's secret) |
+
+### Platform admin
+
+A platform admin (D15) sees every store with its status, plan, and number of
+orders, and can **approve**, **suspend** (the bot stops answering and the
+webhook is removed), and **change plan**. Platform admin endpoints check the
+caller is a platform admin; being a store owner is not enough.
+
+### Onboarding rules (enforced in code)
+
+1. Only the backend writes to `stores`. The dashboard never sees a bot token
+   or webhook secret after it is saved.
+2. A bot token is saved only after Telegram confirms it is valid.
+3. One bot belongs to one store.
+4. The webhook secret is always generated by the backend, never typed.
+5. A store's bot answers customers only while the store is `active`.
+6. Only the owner can invite or remove staff, link the staff group, or
+   change the bot token. Only a platform admin can approve or suspend.
+7. Link codes are single-use and expire after a short time.
+
+---
+
+## 11. Open decisions
 
 All decisions are tracked in the Decisions table in `BUILD_PLAN.md`:
 
@@ -352,3 +417,7 @@ All decisions are tracked in the Decisions table in `BUILD_PLAN.md`:
 - **How do staff hand a conversation back** to the assistant? (D9) A button
   in the dashboard, a command in the staff group, or automatically after a
   period of time.
+- **Store onboarding** (D14–D18): do new stores need approval before going
+  live? Who is a platform admin? Which plans exist and what do they limit?
+  Can an owner change the bot token later? Can one person be in several
+  stores?
