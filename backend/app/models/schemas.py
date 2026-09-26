@@ -120,6 +120,37 @@ class Payment(DbModel):
     confirmed_by: UUID | None = None  # the staff member's user id
 
 
+class VariantMatch(BaseModel):
+    """A search result: one variant with its product and effective price.
+
+    This is what the AI sees, so it deliberately has no cost_price.
+    """
+    variant_id: UUID
+    product_id: UUID
+    product_name: str
+    brand: str | None = None
+    category: str | None = None
+    color: str | None = None
+    size: str | None = None
+    stock_quantity: int
+    price: Decimal | None  # price_override, otherwise base_price
+
+    @property
+    def in_stock(self) -> bool:
+        return self.stock_quantity > 0
+
+
+class OrderItemDetail(OrderItem):
+    """An order line plus what was bought, for "where is my order?"."""
+    product_name: str | None = None
+    color: str | None = None
+    size: str | None = None
+
+
+class OrderWithItems(Order):
+    items: list[OrderItemDetail] = Field(default_factory=list)
+
+
 # ---------------------------------------------------------------------------
 # 2. Telegram update (only the fields we use)
 # https://core.telegram.org/bots/api#update

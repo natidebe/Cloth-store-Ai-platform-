@@ -5,6 +5,7 @@ from fastapi import FastAPI
 
 from app.api.v1 import admin, health, webhook
 from app.core.config import get_settings
+from app.services.supabase_service import SupabaseService
 from app.utils.logging import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -18,8 +19,18 @@ async def lifespan(app: FastAPI):
         "starting up",
         extra={"llm_provider": settings.llm_provider, "llm_model": settings.llm_model},
     )
-    # TODO: initialize the Supabase client once here and store it on app.state
+
+    # One Supabase client for the whole app, created once here.
+    app.state.db = None
+    if settings.supabase_url and settings.supabase_service_role_key.get_secret_value():
+        app.state.db = await SupabaseService.connect(
+            settings.supabase_url, settings.supabase_service_role_key.get_secret_value()
+        )
+    else:
+        logger.warning("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set; database disabled")
     yield
+    if app.state.db is not None:
+        await app.state.db.close()
     logger.info("shutting down")
 
 

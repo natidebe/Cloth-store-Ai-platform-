@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/.env, regardless of which directory the server is started from.
@@ -32,6 +32,16 @@ class Settings(BaseSettings):
     public_base_url: str = ""
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+
+    @field_validator("supabase_url")
+    @classmethod
+    def _project_url_only(cls, value: str) -> str:
+        # The client adds /rest/v1 itself, so accept the REST URL from the
+        # dashboard too: https://x.supabase.co/rest/v1/ -> https://x.supabase.co
+        value = value.strip().rstrip("/")
+        if value.endswith("/rest/v1"):
+            value = value[: -len("/rest/v1")]
+        return value
 
 
 @lru_cache
