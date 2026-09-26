@@ -224,7 +224,7 @@ internet), I message my bot and see my message echoed back.
 
 ---
 
-### Phase 6 — AI model service
+### Phase 6 — AI model service 🟡 Built; waiting for my real OpenAI test
 
 **Goal:** talk to the AI model in a way that makes switching providers easy.
 
@@ -422,5 +422,5 @@ Answer each before the phase listed, and record the answer here.
 
 ## 7. Where to start
 
-Phase 5 is done: the echo bot works in real Telegram. Next is **Phase 6**
-(AI model service) — no coding until I say "continue".
+Phase 6 is built and its tests pass. Next: I run `python -m scripts.try_llm`
+with my OpenAI key, then **Phase 7** — no coding until I say "continue".

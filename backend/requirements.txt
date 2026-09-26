@@ -2,4 +2,5 @@ fastapi[standard]==0.141.1
 pydantic-settings==2.15.0
 supabase==2.31.0
 httpx==0.28.1
+openai==3.19.2
 pytest==9.1.1

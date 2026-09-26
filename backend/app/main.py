@@ -5,6 +5,7 @@ from fastapi import FastAPI
 
 from app.api.v1 import admin, health, webhook
 from app.core.config import get_settings
+from app.services.llm_service import create_provider
 from app.services.supabase_service import SupabaseService
 from app.services.telegram_service import TelegramService
 from app.utils.logging import setup_logging
@@ -32,7 +33,18 @@ async def lifespan(app: FastAPI):
 
     # One Telegram client shared by all stores' bots.
     app.state.telegram = TelegramService.create()
+
+    # The AI provider, chosen by LLM_PROVIDER / LLM_MODEL. Used from Phase 8.
+    app.state.llm = None
+    try:
+        app.state.llm = create_provider(
+            settings.llm_provider, settings.llm_model, settings.llm_api_key.get_secret_value()
+        )
+    except ValueError as error:
+        logger.warning("AI provider disabled", extra={"reason": str(error)})
     yield
+    if app.state.llm is not None:
+        await app.state.llm.close()
     await app.state.telegram.close()
     if app.state.db is not None:
         await app.state.db.close()
