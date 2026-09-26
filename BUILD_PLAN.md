@@ -129,7 +129,7 @@ Still to do:
 
 ---
 
-### Phase 2 — Database updates (migration 002) 🟡 Written, waiting for me to run it
+### Phase 2 — Database updates (migration 002) ✅ Done
 
 **Goal:** get the database into its final shape before writing code that
 depends on it, so nothing has to be redone later.
@@ -171,7 +171,7 @@ store and removes it again.
 
 ---
 
-### Phase 3 — Data models
+### Phase 3 — Data models ✅ Done
 
 **Goal:** define the shape of every piece of data moving through the app.
 
@@ -346,10 +346,12 @@ Answer each before the phase listed, and record the answer here.
 | D9 | How does the bot resume after a handover (staff command, button, time limit)? | Phase 9 | |
 | D10 | One order can hold several items? | Phase 2 | Yes |
 | D11 | Staff roles? | Phase 2 | owner and staff |
+| D12 | Which phone numbers are accepted? | Phase 3 | Any number: optional +, 7–15 digits (spaces, dashes, brackets removed) |
+| D13 | Is the customer's name required to place an order? | Phase 3 | Yes |
 
 ---
 
 ## 7. Where to start
 
-Phase 2 is written and tested locally. Next: I run it in Supabase, then
-**Phase 3** — no coding until I say "continue".
+Phase 3 is done. Next is **Phase 4** (database service) — no coding until
+I say "continue".
