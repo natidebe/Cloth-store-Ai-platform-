@@ -129,7 +129,7 @@ Still to do:
 
 ---
 
-### Phase 2 — Database updates (migration 002) — written, waiting for Supabase run
+### Phase 2 — Database updates (migration 002) ✅ Migration run on Supabase
 
 **Goal:** get the database into its final shape before writing code that
 depends on it, so nothing has to be redone later.

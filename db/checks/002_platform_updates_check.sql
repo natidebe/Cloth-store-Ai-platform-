@@ -4,6 +4,7 @@
 -- tries each rule, then rolls everything back, so nothing is left behind.
 --
 -- Passed:  the result is one row saying "002 checks passed".
+--          ("Success. No rows returned" means you ran something else.)
 -- Failed:  an error naming the check that failed.
 
 begin;
@@ -308,6 +309,9 @@ begin
 end;
 $$;
 
-select '002 checks passed' as result;
-
+-- Undo all test data. If any check above failed, Supabase stops at the
+-- error and never reaches this point.
 rollback;
+
+-- Supabase shows only the last statement's result, so this must be last.
+select '002 checks passed' as result;
