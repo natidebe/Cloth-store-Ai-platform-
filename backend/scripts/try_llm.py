@@ -38,7 +38,10 @@ CHECK_STOCK = ToolDefinition(
 )
 
 TESTS = [
-    
+    ("English greeting", "Hi! What are your opening hours?"),
+    ("Amharic greeting", "ሰላም! እንዴት ናችሁ? ጫማ መግዛት እፈልጋለሁ።"),
+    ("Stock question (should ask to use check_stock)", "Do you have white Air Force 1 in size 42?"),
+    ("Amharic Stock question(should ask to use check_stock)","ጥቁር ሳምባ ቁጥር 42 አለ? ዋጋው ስንት ነው?"),
     ("Amharic Stock question(should ask to use check_stock)","white AF1 ቁጥር 43 ስንት ነው?")
 ]
 
