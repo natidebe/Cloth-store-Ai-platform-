@@ -290,7 +290,7 @@ send three messages quickly and get one sensible reply.
 
 ---
 
-### Phase 7b — Store profile and product nicknames 🟡 Built; waiting for me to run migration 004
+### Phase 7b — Store profile and product nicknames ✅ Done
 
 **Goal:** the bot knows the store's own information and the nicknames
 customers use for products, so it never has to guess.
@@ -535,6 +535,5 @@ Answer each before the phase listed, and record the answer here.
 
 ## 7. Where to start
 
-Phase 7b is built and tested locally. Next: I run `004_store_profile.sql`
-in Supabase, then **Phase 8** (the agent; needs D19 first) — no coding
-until I say "continue".
+Phase 7b is done (migration 004 applied and tested on Supabase). Next is
+**Phase 8** (the agent; needs D19 first) — no coding until I say "continue".
