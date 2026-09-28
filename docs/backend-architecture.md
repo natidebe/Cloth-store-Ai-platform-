@@ -155,6 +155,9 @@ startup and every minute) picks up anything stuck in `received` or
 `processing`. An update that keeps failing is marked `failed` and staff are
 alerted, so a customer is never silently ignored.
 
+Only private messages from people are saved to the inbox. Group messages,
+edits, and messages from other bots get their 200 and are not stored.
+
 **Duplicate check.** Telegram can resend the same update. The inbox has a
 unique key on `store_id + update_id` (each bot numbers its updates
 separately), so a resent update is recognised and ignored.
@@ -316,10 +319,15 @@ All database reads and writes, always scoped by `store_id`:
 | `get_customer_orders(store_id, customer_id)` | `orders`, `order_items` |
 | `update_stock(store_id, variant_id, delta)` | `adjust_stock` database function (never below zero) |
 | `record_payment(store_id, order_id, amount, method, staff_id)` | `confirm_payment` database function (reduces stock, saves payment, marks paid) |
-| `save_to_inbox(store_id, update)` | `inbox` (returns "duplicate" if already saved) |
-| `claim_inbox(store_id, telegram_id)` / `finish_inbox(ids, status)` | `inbox` |
-| `find_stuck_inbox()` | `inbox` (recovery sweep) |
-| `get_handoff_state` / `set_handoff_state` | `conversations` |
+| `save_to_inbox(store_id, update_id, telegram_id, payload)` | `inbox` (returns False if already saved) |
+| `claim_inbox(store_id, telegram_id)` | `claim_inbox` database function (received → processing, attempts + 1) |
+| `finish_inbox(store_id, ids)` | `inbox` (→ done) |
+| `release_inbox(store_id, ids, error, max_attempts)` | `release_inbox` database function (→ received for a retry, or failed) |
+| `reset_stuck_inbox(claimed_before)` / `find_waiting_inbox(received_before)` | `inbox` (recovery sweep; the only functions that look across stores, to find work) |
+| `get_or_create_conversation` / `get_conversation(store_id, telegram_id)` | `conversations` |
+| `save_conversation(conversation)` | `conversations` (only if the version is unchanged) |
+| `add_messages` / `get_recent_messages(store_id, conversation_id, ...)` | `messages` |
+| `get_handoff_state` / `set_handoff_state` (Phase 9) | `conversations` |
 | `create_store(name, bot_token, owner_user_id)` | `stores`, `store_staff` (section 10) |
 | `set_store_status(store_id, status)` / `list_stores()` | `stores` (platform admin only) |
 | `add_staff` / `remove_staff(store_id, ...)` | `store_staff` |
@@ -337,6 +345,11 @@ Stores recent messages, the current order draft, and handoff state per
 survives restarts. An in-memory version exists only for tests. Saving
 checks the conversation's version number, so a parallel run can't
 overwrite newer data. Also holds the per-customer lock and the burst wait.
+
+Settings (in the file): burst wait 2 s (D20), 20 most recent messages sent
+to the AI, conversations expire after 24 hours without a customer message
+(the AI stops seeing old messages and the order draft is cleared; the
+history stays for staff), 3 tries before an update is marked failed.
 
 ### `models/schemas.py`
 Pydantic models for the database tables, the incoming Telegram update, and

@@ -10,6 +10,7 @@ all-or-nothing.
 """
 import logging
 import re
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -20,7 +21,10 @@ from supabase import AsyncClient, acreate_client
 from supabase.lib.client_options import AsyncClientOptions
 
 from app.models.schemas import (
+    ChatMessage,
+    Conversation,
     Customer,
+    InboxItem,
     OrderDraft,
     OrderItemDetail,
     OrderWithItems,
@@ -63,6 +67,10 @@ class DuplicateError(DatabaseError):
 
 class DatabaseUnavailableError(DatabaseError):
     """Supabase couldn't be reached."""
+
+
+class VersionConflictError(DatabaseError):
+    """The conversation was saved by someone else since we loaded it."""
 
 
 # Error codes raised by the 002 functions.
@@ -388,3 +396,187 @@ class SupabaseService:
         }))
         logger.info("payment recorded", extra={"store_id": str(store_id), "order_id": str(order_id)})
         return UUID(payment_id)
+
+    # --- Inbox (migration 003) ----------------------------------------------
+
+    async def save_to_inbox(
+        self, store_id: UUID, update_id: int, telegram_id: int, payload: dict[str, Any]
+    ) -> bool:
+        """Save an incoming update. Returns False if it was already saved
+        (Telegram resent it), True if it's new."""
+        rows = await self._run(
+            self._db.table("inbox").upsert(
+                {
+                    "store_id": str(store_id),
+                    "update_id": update_id,
+                    "telegram_id": telegram_id,
+                    "payload": payload,
+                },
+                on_conflict="store_id,update_id",
+                ignore_duplicates=True,  # an existing row is left alone and not returned
+            )
+        )
+        return bool(rows)
+
+    async def claim_inbox(self, store_id: UUID, telegram_id: int) -> list[InboxItem]:
+        """Mark this customer's waiting updates as processing and return
+        them, oldest first. Each claim counts as one attempt."""
+        rows = await self._run(self._db.rpc("claim_inbox", {
+            "p_store_id": str(store_id),
+            "p_telegram_id": telegram_id,
+        }))
+        return sorted((InboxItem.model_validate(row) for row in rows or []),
+                      key=lambda item: item.update_id)
+
+    async def finish_inbox(self, store_id: UUID, ids: list[int]) -> None:
+        """Handling succeeded: mark these updates done."""
+        if not ids:
+            return
+        await self._run(
+            self._db.table("inbox")
+            .update({"status": "done", "finished_at": _now().isoformat(), "last_error": None})
+            .eq("store_id", str(store_id))
+            .in_("id", ids)
+        )
+
+    async def release_inbox(
+        self, store_id: UUID, ids: list[int], error: str, max_attempts: int
+    ) -> list[InboxItem]:
+        """Handling failed. Updates tried max_attempts times become 'failed';
+        the rest go back to 'received' for the recovery sweep to retry."""
+        if not ids:
+            return []
+        rows = await self._run(self._db.rpc("release_inbox", {
+            "p_store_id": str(store_id),
+            "p_ids": ids,
+            "p_error": error,
+            "p_max_attempts": max_attempts,
+        }))
+        return [InboxItem.model_validate(row) for row in rows or []]
+
+    # The two recovery functions below look across ALL stores on purpose:
+    # they only find work, and the work itself is then done per store.
+
+    async def reset_stuck_inbox(self, claimed_before: datetime) -> int:
+        """Updates stuck in 'processing' since before `claimed_before` (the
+        server crashed or restarted mid-run) go back to 'received'.
+        Returns how many were reset."""
+        rows = await self._run(
+            self._db.table("inbox")
+            .update({"status": "received"})
+            .eq("status", "processing")
+            .lt("claimed_at", claimed_before.isoformat())
+        )
+        return len(rows or [])
+
+    async def find_waiting_inbox(
+        self, received_before: datetime, limit: int = 200
+    ) -> list[tuple[UUID, int]]:
+        """(store_id, telegram_id) of customers with updates still waiting
+        since before `received_before`, oldest first, without repeats."""
+        rows = await self._run(
+            self._db.table("inbox")
+            .select("store_id, telegram_id")
+            .eq("status", "received")
+            .lt("received_at", received_before.isoformat())
+            .order("received_at")
+            .limit(limit)
+        )
+        customers = {(UUID(row["store_id"]), row["telegram_id"]): None for row in rows or []}
+        return list(customers)
+
+    # --- Conversations (migration 003) --------------------------------------
+
+    async def get_or_create_conversation(self, store_id: UUID, telegram_id: int) -> Conversation:
+        """This customer's conversation with the store, created if new.
+        The customer must already exist in this store."""
+        await self._run(
+            self._db.table("conversations").upsert(
+                {"store_id": str(store_id), "telegram_id": telegram_id},
+                on_conflict="store_id,telegram_id",
+                ignore_duplicates=True,
+            )
+        )
+        conversation = await self.get_conversation(store_id, telegram_id)
+        if conversation is None:  # deleted in the split second between the two calls
+            raise NotFoundError("conversation_not_found", str(telegram_id))
+        return conversation
+
+    async def get_conversation(self, store_id: UUID, telegram_id: int) -> Conversation | None:
+        rows = await self._run(
+            self._db.table("conversations")
+            .select("*")
+            .eq("store_id", str(store_id))
+            .eq("telegram_id", telegram_id)
+            .limit(1)
+        )
+        return Conversation.model_validate(rows[0]) if rows else None
+
+    async def save_conversation(self, conversation: Conversation) -> Conversation:
+        """Save the order draft and last_message_at, only if nobody saved
+        since this copy was loaded. Returns the saved copy (version + 1).
+
+        Raises VersionConflictError otherwise: load it again and redo the work.
+        Pausing the bot is not saved here; staff do that (Phase 9).
+        """
+        rows = await self._run(
+            self._db.table("conversations")
+            .update({
+                "order_draft": conversation.order_draft.model_dump(mode="json"),
+                "last_message_at": _iso(conversation.last_message_at),
+                "version": conversation.version + 1,
+                "updated_at": _now().isoformat(),
+            })
+            .eq("id", str(conversation.id))
+            .eq("store_id", str(conversation.store_id))
+            .eq("version", conversation.version)  # the version check
+        )
+        if not rows:
+            raise VersionConflictError("version_conflict", str(conversation.id))
+        return Conversation.model_validate(rows[0])
+
+    # --- Messages (migration 003) -------------------------------------------
+
+    async def add_messages(
+        self, store_id: UUID, conversation_id: UUID, messages: list[ChatMessage]
+    ) -> None:
+        """Add messages to the history. A customer message whose update_id
+        is already saved is skipped, so retrying never saves it twice."""
+        if not messages:
+            return
+        rows = [
+            {
+                "store_id": str(store_id),
+                "conversation_id": str(conversation_id),
+                **message.model_dump(mode="json", exclude={"created_at"}),
+            }
+            for message in messages
+        ]
+        await self._run(
+            self._db.table("messages").upsert(
+                rows, on_conflict="store_id,update_id", ignore_duplicates=True
+            )
+        )
+
+    async def get_recent_messages(
+        self, store_id: UUID, conversation_id: UUID, limit: int, since: datetime | None = None
+    ) -> list[ChatMessage]:
+        """The last `limit` messages (sent after `since`), oldest first."""
+        request = (
+            self._db.table("messages")
+            .select("role, kind, content, update_id, telegram_message_id, created_at")
+            .eq("store_id", str(store_id))
+            .eq("conversation_id", str(conversation_id))
+        )
+        if since is not None:
+            request = request.gte("created_at", since.isoformat())
+        rows = await self._run(request.order("id", desc=True).limit(limit))
+        return [ChatMessage.model_validate(row) for row in reversed(rows or [])]
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None

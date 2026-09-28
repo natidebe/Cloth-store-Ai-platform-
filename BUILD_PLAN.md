@@ -243,7 +243,7 @@ and prints the replies and token usage.
 
 ---
 
-### Phase 7 — Conversation memory
+### Phase 7 — Conversation memory ✅ Built (waiting for migration 003 and the manual check)
 
 **Goal:** the bot remembers each customer's conversation.
 
@@ -492,5 +492,6 @@ Answer each before the phase listed, and record the answer here.
 
 ## 7. Where to start
 
-Phase 6 is done (real AI tested through OpenRouter). Next is **Phase 7**
-(conversation memory) — no coding until I say "continue".
+Phase 7 is built (conversation memory, inbox, recovery). Run
+`db/migrations/003_conversations.sql`, do the Phase 7 check, then
+**Phase 8** (the agent) — no coding until I say "continue".

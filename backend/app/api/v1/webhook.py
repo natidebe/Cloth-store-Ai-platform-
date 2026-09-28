@@ -1,8 +1,10 @@
 """Single entry point for every customer message, across every store.
 
 Telegram calls POST /api/v1/webhook/{store_id} for each new message sent to
-that store's bot. We check the request, answer 200 right away, and handle
-the message in the background so Telegram isn't kept waiting.
+that store's bot. We check the request, save the message to the inbox, and
+only then answer 200. So "OK" to Telegram means "safely stored": if the
+server crashes afterwards, the message is still in the inbox and the
+recovery sweep handles it. The real work happens in the background.
 """
 import logging
 from uuid import UUID
@@ -10,11 +12,12 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from pydantic import ValidationError
 
-from app.agents.orchestrator import handle_update
+from app.agents.orchestrator import Orchestrator
 from app.core.security import verify_telegram_secret
 from app.models.schemas import TelegramUpdate
 from app.services.supabase_service import DatabaseError, SupabaseService
-from app.services.telegram_service import TelegramService
+from app.services.telegram_service import parse_update
+from app.utils.logging import log_context
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["webhook"])
@@ -32,8 +35,11 @@ def get_db(request: Request) -> SupabaseService:
     return db
 
 
-def get_telegram(request: Request) -> TelegramService:
-    return request.app.state.telegram
+def get_orchestrator(request: Request) -> Orchestrator:
+    orchestrator = request.app.state.orchestrator
+    if orchestrator is None:
+        raise HTTPException(status_code=503, detail="database not configured")
+    return orchestrator
 
 
 @router.post("/webhook/{store_id}")
@@ -43,7 +49,7 @@ async def telegram_webhook(
     background: BackgroundTasks,
     secret: str | None = Header(default=None, alias=SECRET_HEADER),
     db: SupabaseService = Depends(get_db),
-    telegram: TelegramService = Depends(get_telegram),
+    orchestrator: Orchestrator = Depends(get_orchestrator),
 ) -> dict[str, bool]:
     # 1. Find the store (switched-off stores count as not found).
     try:
@@ -63,11 +69,34 @@ async def telegram_webhook(
 
     # 3. Read the update. If it's malformed, say OK anyway: retrying won't fix it.
     try:
-        update = TelegramUpdate.model_validate(await request.json())
+        payload = await request.json()
+        update = TelegramUpdate.model_validate(payload)
     except (ValueError, ValidationError):
         logger.warning("unreadable update ignored", extra={"store_id": str(store_id)})
         return {"ok": True}
 
-    # 4. Handle it after responding.
-    background.add_task(handle_update, store, update, telegram)
-    return {"ok": True}
+    # 4. Only private messages from people are handled (not groups, edits, bots).
+    message = parse_update(store.id, update)
+    if message is None:
+        logger.info("update ignored", extra={"store_id": str(store_id), "update_id": update.update_id})
+        return {"ok": True}
+
+    with log_context(store_id=str(store_id), telegram_id=message.telegram_id,
+                     update_id=message.update_id):
+        # 5. Save it BEFORE answering. If saving fails, answer 503 so
+        #    Telegram sends it again later.
+        try:
+            is_new = await orchestrator.conversations.save_to_inbox(
+                store.id, update.update_id, message.telegram_id, payload
+            )
+        except DatabaseError:
+            logger.exception("could not save to inbox")
+            raise HTTPException(status_code=503, detail="try again later")
+        if not is_new:
+            logger.info("duplicate update ignored")
+            return {"ok": True}
+
+        logger.info("message received", extra={"kind": message.kind})
+        # 6. Handle it after responding.
+        background.add_task(orchestrator.process_customer, store, message.telegram_id)
+        return {"ok": True}

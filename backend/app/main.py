@@ -1,10 +1,13 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.agents.orchestrator import Orchestrator
 from app.api.v1 import admin, health, webhook
 from app.core.config import get_settings
+from app.services.conversation_service import DatabaseConversationStore
 from app.services.llm_service import create_provider
 from app.services.supabase_service import SupabaseService
 from app.services.telegram_service import TelegramService
@@ -42,7 +45,25 @@ async def lifespan(app: FastAPI):
         )
     except ValueError as error:
         logger.warning("AI provider disabled", extra={"reason": str(error)})
+
+    # Handles customer messages in the background (needs the database).
+    app.state.orchestrator = None
+    recovery_task = None
+    if app.state.db is not None:
+        app.state.orchestrator = Orchestrator(
+            app.state.db, DatabaseConversationStore(app.state.db), app.state.telegram
+        )
+        # Messages left unfinished by the last run (crash or restart).
+        try:
+            await app.state.orchestrator.recover(startup=True)
+        except Exception:
+            logger.exception("startup recovery failed; the sweep will try again")
+        recovery_task = asyncio.create_task(app.state.orchestrator.run_recovery_loop())
     yield
+    if recovery_task is not None:
+        recovery_task.cancel()
+    if app.state.orchestrator is not None:
+        await app.state.orchestrator.close()
     if app.state.llm is not None:
         await app.state.llm.close()
     await app.state.telegram.close()

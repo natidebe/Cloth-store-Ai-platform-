@@ -6,9 +6,11 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.v1.webhook import SECRET_HEADER, get_db, get_telegram
+from app.agents.orchestrator import Orchestrator
+from app.api.v1.webhook import SECRET_HEADER, get_db, get_orchestrator
 from app.main import app
-from app.models.schemas import Store, TelegramUpdate
+from app.models.schemas import Customer, Store, TelegramUpdate
+from app.services.conversation_service import InMemoryConversationStore
 from app.services.supabase_service import DatabaseUnavailableError
 from app.services.telegram_service import (
     TELEGRAM_API,
@@ -31,6 +33,9 @@ class FakeDb:
             raise self.error
         return self.store if self.store and store_id == self.store.id else None
 
+    async def get_or_create_customer(self, store_id, telegram_id, name=None):
+        return Customer(id=uuid4(), store_id=store_id, telegram_id=telegram_id, name=name)
+
 
 class FakeTelegram:
     """Records every Telegram call; answers like Telegram would."""
@@ -50,10 +55,14 @@ class FakeTelegram:
 
 @pytest.fixture
 def setup():
-    def _setup(db=None, telegram=None):
+    def _setup(db=None, telegram=None, conversations=None):
         telegram = telegram or FakeTelegram()
-        app.dependency_overrides[get_db] = lambda: db or FakeDb()
-        app.dependency_overrides[get_telegram] = telegram.service
+        db = db or FakeDb()
+        orchestrator = Orchestrator(
+            db, conversations or InMemoryConversationStore(), telegram.service(), burst_wait=0
+        )
+        app.dependency_overrides[get_db] = lambda: db
+        app.dependency_overrides[get_orchestrator] = lambda: orchestrator
         return TestClient(app), telegram
     yield _setup
     app.dependency_overrides.clear()

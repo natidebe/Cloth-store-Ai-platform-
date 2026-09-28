@@ -1,7 +1,7 @@
 """Pydantic models: the shape of every piece of data moving through the app.
 
 Three groups:
-1. Database rows — mirror the tables after migration 002. The rules match
+1. Database rows — mirror the tables after migration 003. The rules match
    the database's own checks, so bad data is caught in Python first.
 2. Telegram — only the parts of an incoming update we use.
 3. Internal — IncomingMessage, OrderDraft, AgentDecision.
@@ -120,6 +120,36 @@ class Payment(DbModel):
     confirmed_by: UUID | None = None  # the staff member's user id
 
 
+MessageRole = Literal["customer", "assistant", "staff"]
+MessageKind = Literal["text", "photo", "sticker", "voice", "document", "other"]
+InboxStatus = Literal["received", "processing", "done", "failed"]
+
+
+class InboxItem(DbModel):
+    """One Telegram update saved before we answered Telegram (migration 003)."""
+    id: int
+    store_id: UUID
+    update_id: int
+    telegram_id: int
+    payload: dict  # the update exactly as Telegram sent it
+    status: InboxStatus = "received"
+    attempts: int = Field(default=0, ge=0)
+    last_error: str | None = None
+    received_at: datetime | None = None
+    claimed_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+class ChatMessage(DbModel):
+    """One message in a conversation's history (the `messages` table)."""
+    role: MessageRole
+    kind: MessageKind = "text"
+    content: str | None = None
+    update_id: int | None = None  # customer messages only
+    telegram_message_id: int | None = None
+    created_at: datetime | None = None
+
+
 class VariantMatch(BaseModel):
     """A search result: one variant with its product and effective price.
 
@@ -215,9 +245,6 @@ class TelegramUpdate(TelegramModel):
 # ---------------------------------------------------------------------------
 # 3. Internal models
 # ---------------------------------------------------------------------------
-
-MessageKind = Literal["text", "photo", "sticker", "voice", "document", "other"]
-
 
 class IncomingMessage(BaseModel):
     """One customer message, cleaned up from a TelegramUpdate.
@@ -330,3 +357,23 @@ class AgentDecision(BaseModel):
         if self.action == "escalate" and not self.escalation_reason:
             raise ValueError("action 'escalate' needs escalation_reason")
         return self
+
+
+class Conversation(DbModel):
+    """One customer's conversation with one store (the `conversations` table).
+
+    Defined here, after OrderDraft, because it holds one.
+    `version` goes up on every save; a save only succeeds if nobody else
+    saved since this copy was loaded.
+    """
+    id: UUID
+    store_id: UUID
+    telegram_id: int
+    order_draft: OrderDraft = Field(default_factory=OrderDraft)
+    version: int = Field(default=0, ge=0)
+    bot_paused: bool = False  # true while staff handle the chat
+    paused_at: datetime | None = None
+    paused_by: UUID | None = None
+    last_message_at: datetime | None = None  # last customer message
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
