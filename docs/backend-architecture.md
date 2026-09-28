@@ -407,7 +407,7 @@ new numbered migrations (see `BUILD_PLAN.md`, Phases 2 and 7).
   `telegram_id`, the update itself, status (`received`, `processing`,
   `done`, `failed`), number of attempts, timestamps
 
-**`004_store_onboarding.sql`** (Phase 9b):
+**`005_store_onboarding.sql`** (Phase 9b):
 - A way to mark platform admins (D15)
 - Store status: `pending`, `active`, `suspended` (the bot answers only when
   active)

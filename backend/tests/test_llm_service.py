@@ -193,5 +193,13 @@ async def test_create_provider():
     await router.close()
     with pytest.raises(ValueError, match="OpenRouter"):
         create_provider("openrouter", "some/model:free", "")
+
+    gemini = create_provider("gemini", "gemini-model", "AIza-x")
+    assert isinstance(gemini, OpenAIProvider)
+    assert str(gemini._client.base_url).startswith("https://generativelanguage.googleapis.com/v1beta/openai")
+    assert gemini._reasoning_effort is None
+    await gemini.close()
+    with pytest.raises(ValueError, match="Gemini"):
+        create_provider("gemini", "gemini-model", "")
     with pytest.raises(ValueError, match="Unknown LLM_PROVIDER"):
         create_provider("claude", "x", "key")

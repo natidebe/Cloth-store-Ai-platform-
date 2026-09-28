@@ -2,7 +2,8 @@
 
 Run from the backend folder, with the virtual environment active:
 
-    python -m scripts.try_llm
+    python -m scripts.try_llm            send the test messages
+    python -m scripts.try_llm --models   list the models your key can use
 
 Uses LLM_PROVIDER, LLM_MODEL, and LLM_API_KEY from backend/.env. Each run
 makes 3 small AI calls (a fraction of a US cent with gpt-5-mini).
@@ -40,6 +41,8 @@ TESTS = [
     ("English greeting", "Hi! What are your opening hours?"),
     ("Amharic greeting", "ሰላም! እንዴት ናችሁ? ጫማ መግዛት እፈልጋለሁ።"),
     ("Stock question (should ask to use check_stock)", "Do you have white Air Force 1 in size 42?"),
+    ("Amharic Stock question(should ask to use check_stock)","ነጭ ኤር ፎርስ 1 በሳይዝ 42 አላችሁ?"),
+    ("Amharic Stock question(should ask to use check_stock)","white AF1 ቁጥር 43 ስንት ነው?")
 ]
 
 
@@ -51,6 +54,18 @@ async def main() -> None:
                               settings.llm_api_key.get_secret_value())
     except ValueError as error:
         sys.exit(str(error))
+
+    if "--models" in sys.argv:
+        try:
+            names = await llm.list_models()
+        except LLMError as error:
+            sys.exit(f"Could not list models: {error.reason}")
+        finally:
+            await llm.close()
+        print(f"Models available to your {settings.llm_provider} key ({len(names)}):")
+        for name in names:
+            print(f"  {name}")
+        return
 
     print(f"Provider: {settings.llm_provider}   Model: {llm.model}\n")
     total_cost = Decimal(0)

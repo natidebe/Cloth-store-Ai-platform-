@@ -12,6 +12,9 @@ Providers:
                 format as OpenAI, so it reuses the OpenAI adapter. Gives
                 access to many models, including free ones (ids ending
                 in ":free") for testing.
+- "gemini":     Google Gemini through Google's OpenAI-compatible endpoint,
+                also reusing the OpenAI adapter. Key from
+                https://aistudio.google.com/apikey.
 - "fake":       scripted replies for tests and local development; costs nothing.
 """
 import json
@@ -92,6 +95,7 @@ class LLMError(Exception):
 
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> Decimal | None:
@@ -144,6 +148,10 @@ class LLMProvider(ABC):
     async def close(self) -> None:
         """Release network connections (app shutdown)."""
 
+    async def list_models(self) -> list[str]:
+        """Model ids this provider offers (for choosing LLM_MODEL)."""
+        return [self.model]
+
 
 # ---------------------------------------------------------------------------
 # OpenAI (Chat Completions)
@@ -171,6 +179,16 @@ class OpenAIProvider(LLMProvider):
 
     async def close(self) -> None:
         await self._client.close()
+
+    async def list_models(self) -> list[str]:
+        try:
+            page = await self._client.models.list()
+        except openai.AuthenticationError:
+            raise LLMError("invalid API key") from None
+        except openai.APIError as error:
+            raise LLMError(type(error).__name__) from None
+        # Gemini names models "models/gemini-..."; the id to use drops "models/".
+        return sorted([model.id.removeprefix("models/") async for model in page])
 
     @staticmethod
     def _to_openai_messages(system_prompt: str, messages: list[LLMMessage]) -> list[dict[str, Any]]:
@@ -298,4 +316,8 @@ def create_provider(provider: str, model: str, api_key: str) -> LLMProvider:
         if not api_key:
             raise ValueError("LLM_API_KEY is not set in backend/.env (use your OpenRouter key)")
         return OpenAIProvider(api_key, model, base_url=OPENROUTER_BASE_URL)
-    raise ValueError(f"Unknown LLM_PROVIDER '{provider}'. Supported: openai, openrouter, fake")
+    if provider == "gemini":
+        if not api_key:
+            raise ValueError("LLM_API_KEY is not set in backend/.env (use your Gemini API key)")
+        return OpenAIProvider(api_key, model, base_url=GEMINI_BASE_URL)
+    raise ValueError(f"Unknown LLM_PROVIDER '{provider}'. Supported: openai, openrouter, gemini, fake")

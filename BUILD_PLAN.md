@@ -53,7 +53,7 @@ doc gets updated to match.
 | Database | Supabase (Postgres) via the official `supabase` client |
 | Calling Telegram | `httpx` |
 | Data shapes and settings | Pydantic v2, `pydantic-settings` |
-| AI model | Start with OpenAI GPT-5 mini; must be easy to switch to Claude Haiku, Gemini, or DeepSeek. OpenRouter free models for testing |
+| AI model | Must be easy to switch provider (OpenAI, Gemini, OpenRouter, fake are supported). Development uses Gemini `gemini-3.5-flash-lite` (good Amharic, correct tool calls in testing); compare with a stronger model before going live |
 | Tests | `pytest` |
 
 Always check current library versions instead of relying on memory, and
@@ -290,6 +290,35 @@ send three messages quickly and get one sensible reply.
 
 ---
 
+### Phase 7b — Store profile and product nicknames
+
+**Goal:** the bot knows the store's own information and the nicknames
+customers use for products, so it never has to guess.
+
+Why: in testing (Gemini and Nemotron), the AI **invented opening hours**
+when asked, and searched for "AF1" (a nickname), which finds nothing
+because the product is called "Air Force 1".
+
+- Migration `004_store_profile.sql` (I approve it first):
+  - **Store profile** on each store (fields: D22), e.g. opening hours,
+    location, delivery areas and fees, pickup instructions, **payment
+    instructions** (e.g. Telebirr number or bank account, sent to the
+    customer after ordering), return policy.
+  - **Product nicknames:** a "search keywords" field on each product
+    (e.g. `AF1, air force, ኤር ፎርስ`) that the search also looks at (D23).
+- The store owner fills these in from the dashboard (the security rules
+  must allow staff to edit their own store's profile, but still never see
+  the bot token or webhook secret).
+- `supabase_service.py`: read the store profile; `search_variants` also
+  matches keywords.
+- Until the dashboard is ready, I fill them in for the test store by hand.
+
+**Check:** search for "AF1" and find Air Force 1; ask the bot for opening
+hours and get the real ones (Phase 8); a store with no hours set gets "I'll
+check with the team" instead of invented hours.
+
+---
+
 ### Phase 8 — The agent
 
 **Goal:** the bot actually helps customers and takes orders.
@@ -299,8 +328,20 @@ send three messages quickly and get one sensible reply.
   pass to staff when unsure, how to collect an order. Reply in the
   customer's language (Amharic or English), and translate product requests
   into catalog terms before searching.
+  - **Store information:** the store profile from Phase 7b (hours,
+    location, delivery, payment instructions, returns). If something isn't
+    in the profile, the AI must not guess: it says it will check with the
+    team and escalates.
+  - **Product names:** a short list of what the store sells (product
+    names and brands, not stock or prices), so the AI can turn nicknames
+    and Amharic names into catalog names ("AF1" → "Air Force 1",
+    "ሳምባ" → "Samba") before searching.
 - **Tools the AI can use (`tools.py`):**
-  - `check_stock` — look up products, colors, sizes
+  - `check_stock` — look up products, colors, sizes. When there's no exact
+    match it also returns the closest alternatives (other sizes and colors
+    of the same product), so the bot can offer something instead of just
+    saying no. When nothing matches at all, it returns the store's product
+    names so the AI can try again with the right name.
   - `update_order_draft` — save details as the customer gives them
   - `confirm_order` — only when everything is filled in and the customer
     said yes
@@ -395,7 +436,7 @@ the dashboard asks the backend to do each step.
 - Only platform admins (D15) can see it.
 
 **What to build:**
-- Migration `004_store_onboarding.sql` (I approve it first):
+- Migration `005_store_onboarding.sql` (I approve it first):
   - a way to mark platform admins
   - store status: pending, active, suspended
   - one store per bot (no two stores with the same bot)
@@ -487,6 +528,8 @@ Answer each before the phase listed, and record the answer here.
 | D19 | Last-item risk: keep D3 and re-check stock before sending payment instructions, or reserve stock for a short time (how long?) after ordering? | Phase 8 | |
 | D20 | How long to wait for more quick messages before replying (e.g. 2 seconds)? | Phase 7 | 2 seconds |
 | D21 | Daily AI budget per store (e.g. $1), and what happens when it's reached? | Phase 10 | |
+| D22 | Which store profile fields? (suggested: opening hours, location, delivery areas and fees, pickup instructions, payment instructions, return policy) | Phase 7b | |
+| D23 | Add product nicknames ("search keywords") now in 7b, or rely only on the product-name list in the AI's instructions for now? | Phase 7b | |
 
 ---
 
