@@ -195,6 +195,32 @@ async def test_quick_burst_gets_one_reply():
     assert _statuses(store) == ["done", "done", "done"]
 
 
+async def test_burst_waits_only_once():
+    # Each message starts its own run. Only the first should wait; the others
+    # find their messages already handled and stop without waiting.
+    wait = 0.3
+    orchestrator, store, telegram = _world(burst_wait=wait)
+    loop = asyncio.get_running_loop()
+
+    async def arrive(update_id, text, delay):
+        await asyncio.sleep(delay)
+        await _receive(orchestrator, _update(update_id, text))
+        await orchestrator.process_customer(STORE, CUSTOMER)
+
+    started = loop.time()
+    await asyncio.gather(*(arrive(i, f"msg {i}", i * 0.01) for i in range(1, 6)))
+    elapsed = loop.time() - started
+
+    assert telegram.texts_to(CUSTOMER) == ["You said: msg 1 / msg 2 / msg 3 / msg 4 / msg 5"]
+    assert elapsed < 2 * wait  # was about 5 x wait before the fix
+
+
+async def test_run_with_nothing_waiting_returns_at_once():
+    orchestrator, store, telegram = _world(burst_wait=5)
+    await asyncio.wait_for(orchestrator.process_customer(STORE, CUSTOMER), timeout=1)
+    assert telegram.sent == []
+
+
 async def test_one_customer_at_a_time_but_customers_in_parallel():
     locks = CustomerLocks()
     order = []

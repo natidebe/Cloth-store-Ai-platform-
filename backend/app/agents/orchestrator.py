@@ -51,6 +51,11 @@ WAITING_TOO_LONG = timedelta(seconds=30)
 # A row 'processing' for longer than this belongs to a run that died. Must be
 # longer than the slowest real run (AI calls with retries, tool rounds).
 PROCESSING_TOO_LONG = timedelta(minutes=10)
+# At startup every unfinished row is ours. "Before now + a margin" instead of
+# "before now": some computers' clocks return the same time twice in a row,
+# so a row saved a moment ago may not count as "before now". No new rows can
+# arrive yet: startup recovery runs before the server accepts requests.
+STARTUP_MARGIN = timedelta(minutes=1)
 
 # How many times to redo a run when the conversation was changed under us.
 MAX_VERSION_RETRIES = 3
@@ -112,6 +117,11 @@ class Orchestrator:
         with log_context(store_id=str(store.id), telegram_id=telegram_id):
             try:
                 async with self.locks.hold(store.id, telegram_id):
+                    # An earlier run may already have handled everything
+                    # (a burst of 5 messages starts 5 runs; the first takes
+                    # all 5). Then there's nothing to wait for.
+                    if not await self.conversations.has_waiting_inbox(store.id, telegram_id):
+                        return
                     # Let quick follow-up messages arrive, so they get one reply.
                     if self.burst_wait:
                         await asyncio.sleep(self.burst_wait)
@@ -251,13 +261,13 @@ class Orchestrator:
         """
         now = utc_now()
         reset = await self.conversations.reset_stuck_inbox(
-            now if startup else now - PROCESSING_TOO_LONG
+            now + STARTUP_MARGIN if startup else now - PROCESSING_TOO_LONG
         )
         if reset:
             logger.warning("reset stuck messages", extra={"count": reset})
 
         waiting = await self.conversations.find_waiting_inbox(
-            now if startup else now - WAITING_TOO_LONG
+            now + STARTUP_MARGIN if startup else now - WAITING_TOO_LONG
         )
         stores: dict = {}
         scheduled = 0

@@ -77,6 +77,10 @@ class ConversationStore(ABC):
         """True if new, False if this update was already saved."""
 
     @abstractmethod
+    async def has_waiting_inbox(self, store_id: UUID, telegram_id: int) -> bool:
+        """True if this customer has updates waiting to be handled."""
+
+    @abstractmethod
     async def claim_inbox(self, store_id: UUID, telegram_id: int) -> list[InboxItem]:
         """This customer's waiting updates, now marked processing; oldest first."""
 
@@ -133,6 +137,9 @@ class DatabaseConversationStore(ConversationStore):
     async def save_to_inbox(self, store_id, update_id, telegram_id, payload):
         return await self._db.save_to_inbox(store_id, update_id, telegram_id, payload)
 
+    async def has_waiting_inbox(self, store_id, telegram_id):
+        return await self._db.has_waiting_inbox(store_id, telegram_id)
+
     async def claim_inbox(self, store_id, telegram_id):
         return await self._db.claim_inbox(store_id, telegram_id)
 
@@ -183,6 +190,10 @@ class InMemoryConversationStore(ConversationStore):
             payload=payload, received_at=utc_now(),
         )
         return True
+
+    async def has_waiting_inbox(self, store_id, telegram_id):
+        return any(i.store_id == store_id and i.telegram_id == telegram_id and i.status == "received"
+                   for i in self.inbox.values())
 
     async def claim_inbox(self, store_id, telegram_id):
         claimed = []

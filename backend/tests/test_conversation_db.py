@@ -101,6 +101,19 @@ async def test_inbox_duplicates_and_stores(world):
     assert await _inbox_status(world, b, 1) == "received"
 
 
+async def test_has_waiting_inbox(world):
+    db, a, b = world["service"], world["a"], world["b"]
+    other_customer = CUSTOMER + 1
+    await db.get_or_create_customer(a, other_customer, "Sara")
+    assert await db.has_waiting_inbox(a, other_customer) is False
+    await db.save_to_inbox(a, 50, other_customer, _payload(50))
+    assert await db.has_waiting_inbox(a, other_customer) is True
+    assert await db.has_waiting_inbox(b, other_customer) is False  # other store
+    [item] = await db.claim_inbox(a, other_customer)
+    assert await db.has_waiting_inbox(a, other_customer) is False  # processing, not waiting
+    await db.finish_inbox(a, [item.id])
+
+
 async def test_inbox_retry_then_fail(world):
     db, a = world["service"], world["a"]
     await db.save_to_inbox(a, 2, CUSTOMER, _payload(2))

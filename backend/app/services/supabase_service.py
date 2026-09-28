@@ -418,6 +418,18 @@ class SupabaseService:
         )
         return bool(rows)
 
+    async def has_waiting_inbox(self, store_id: UUID, telegram_id: int) -> bool:
+        """True if this customer has updates still waiting to be handled."""
+        rows = await self._run(
+            self._db.table("inbox")
+            .select("id")
+            .eq("store_id", str(store_id))
+            .eq("telegram_id", telegram_id)
+            .eq("status", "received")
+            .limit(1)
+        )
+        return bool(rows)
+
     async def claim_inbox(self, store_id: UUID, telegram_id: int) -> list[InboxItem]:
         """Mark this customer's waiting updates as processing and return
         them, oldest first. Each claim counts as one attempt."""
