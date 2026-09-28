@@ -164,6 +164,7 @@ def test_estimate_cost():
     assert estimate_cost("gpt-5-mini-2025-08-07", 0, 1_000_000) == Decimal("2.00")
     assert estimate_cost("gpt-5", 1_000_000, 0) == Decimal("1.25")  # not confused with gpt-5-mini
     assert estimate_cost("some-other-model", 100, 100) is None
+    assert estimate_cost("nvidia/nemotron-3-ultra-550b-a55b:free", 5000, 500) == Decimal(0)
 
 
 async def test_fake_provider_returns_script_then_default():
@@ -184,5 +185,13 @@ async def test_create_provider():
     await llm.close()
     with pytest.raises(ValueError, match="LLM_API_KEY"):
         create_provider("openai", "gpt-5-mini", "")
+
+    router = create_provider("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free", "sk-or-x")
+    assert isinstance(router, OpenAIProvider)
+    assert str(router._client.base_url).startswith("https://openrouter.ai/api/v1")
+    assert router._reasoning_effort is None  # OpenAI-only setting, not sent to other models
+    await router.close()
+    with pytest.raises(ValueError, match="OpenRouter"):
+        create_provider("openrouter", "some/model:free", "")
     with pytest.raises(ValueError, match="Unknown LLM_PROVIDER"):
         create_provider("claude", "x", "key")

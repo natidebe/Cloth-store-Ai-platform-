@@ -7,8 +7,12 @@ means changing LLM_PROVIDER / LLM_MODEL in .env (and adding an adapter if
 it's a new provider).
 
 Providers:
-- "openai": OpenAI Chat Completions (GPT-5 mini first).
-- "fake":   scripted replies for tests and local development; costs nothing.
+- "openai":     OpenAI Chat Completions (GPT-5 mini first).
+- "openrouter": OpenRouter (https://openrouter.ai), which speaks the same
+                format as OpenAI, so it reuses the OpenAI adapter. Gives
+                access to many models, including free ones (ids ending
+                in ":free") for testing.
+- "fake":       scripted replies for tests and local development; costs nothing.
 """
 import json
 import logging
@@ -87,7 +91,12 @@ class LLMError(Exception):
         self.retryable = retryable
 
 
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> Decimal | None:
+    if model.endswith(":free"):  # OpenRouter's free models
+        return Decimal(0)
     # Match "gpt-5-mini-2025-08-07" to "gpt-5-mini": longest known prefix wins.
     known = sorted((m for m in PRICES_PER_MILLION if model.startswith(m)), key=len, reverse=True)
     if not known:
@@ -285,4 +294,8 @@ def create_provider(provider: str, model: str, api_key: str) -> LLMProvider:
         # GPT-5 models "think" before answering; low effort keeps chat replies fast and cheap.
         effort = "low" if model.startswith("gpt-5") else None
         return OpenAIProvider(api_key, model, reasoning_effort=effort)
-    raise ValueError(f"Unknown LLM_PROVIDER '{provider}'. Supported: openai, fake")
+    if provider == "openrouter":
+        if not api_key:
+            raise ValueError("LLM_API_KEY is not set in backend/.env (use your OpenRouter key)")
+        return OpenAIProvider(api_key, model, base_url=OPENROUTER_BASE_URL)
+    raise ValueError(f"Unknown LLM_PROVIDER '{provider}'. Supported: openai, openrouter, fake")

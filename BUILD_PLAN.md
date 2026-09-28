@@ -53,7 +53,7 @@ doc gets updated to match.
 | Database | Supabase (Postgres) via the official `supabase` client |
 | Calling Telegram | `httpx` |
 | Data shapes and settings | Pydantic v2, `pydantic-settings` |
-| AI model | Start with OpenAI GPT-5 mini; must be easy to switch to Claude Haiku, Gemini, or DeepSeek |
+| AI model | Start with OpenAI GPT-5 mini; must be easy to switch to Claude Haiku, Gemini, or DeepSeek. OpenRouter free models for testing |
 | Tests | `pytest` |
 
 Always check current library versions instead of relying on memory, and
@@ -226,7 +226,7 @@ internet), I message my bot and see my message echoed back.
 
 ---
 
-### Phase 6 — AI model service 🟡 Built; waiting for my real OpenAI test
+### Phase 6 — AI model service ✅ Done (tested with OpenRouter's free Nemotron model; OpenAI needs credit)
 
 **Goal:** talk to the AI model in a way that makes switching providers easy.
 
@@ -492,5 +492,5 @@ Answer each before the phase listed, and record the answer here.
 
 ## 7. Where to start
 
-Phase 6 is built and its tests pass. Next: I run `python -m scripts.try_llm`
-with my OpenAI key, then **Phase 7** — no coding until I say "continue".
+Phase 6 is done (real AI tested through OpenRouter). Next is **Phase 7**
+(conversation memory) — no coding until I say "continue".
