@@ -215,3 +215,22 @@ def test_agent_decision_rules():
         AgentDecision(action="reply")
     with pytest.raises(ValidationError):
         AgentDecision(action="escalate", reply_text="Connecting you.")
+
+
+# --- Store profile (migration 004) ------------------------------------------
+
+def test_store_profile_filled_and_missing():
+    store = Store(id=STORE_ID, name="Selam Shoes", opening_hours="Mon–Sat 8:30–19:00",
+                  payment_instructions="Telebirr 0911 000 000", location="   ")
+    profile = store.profile
+    assert profile.filled() == {"opening_hours": "Mon–Sat 8:30–19:00",
+                                "payment_instructions": "Telebirr 0911 000 000"}
+    # Blank text counts as not set, so the AI knows not to guess it.
+    assert profile.missing() == ["location", "delivery_info", "pickup_instructions", "return_policy"]
+
+
+def test_store_profile_has_no_secrets():
+    store = Store(id=STORE_ID, name="Selam Shoes", telegram_bot_token="123:ABC",
+                  webhook_secret="s3cret", opening_hours="9–5")
+    dumped = str(store.profile.model_dump())
+    assert "123:ABC" not in dumped and "s3cret" not in dumped

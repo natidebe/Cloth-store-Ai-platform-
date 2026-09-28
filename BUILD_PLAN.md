@@ -243,7 +243,7 @@ and prints the replies and token usage.
 
 ---
 
-### Phase 7 — Conversation memory ✅ Built (waiting for migration 003 and the manual check)
+### Phase 7 — Conversation memory ✅ Done
 
 **Goal:** the bot remembers each customer's conversation.
 
@@ -290,7 +290,7 @@ send three messages quickly and get one sensible reply.
 
 ---
 
-### Phase 7b — Store profile and product nicknames
+### Phase 7b — Store profile and product nicknames 🟡 Built; waiting for me to run migration 004
 
 **Goal:** the bot knows the store's own information and the nicknames
 customers use for products, so it never has to guess.
@@ -528,13 +528,13 @@ Answer each before the phase listed, and record the answer here.
 | D19 | Last-item risk: keep D3 and re-check stock before sending payment instructions, or reserve stock for a short time (how long?) after ordering? | Phase 8 | |
 | D20 | How long to wait for more quick messages before replying (e.g. 2 seconds)? | Phase 7 | 2 seconds |
 | D21 | Daily AI budget per store (e.g. $1), and what happens when it's reached? | Phase 10 | |
-| D22 | Which store profile fields? (suggested: opening hours, location, delivery areas and fees, pickup instructions, payment instructions, return policy) | Phase 7b | |
-| D23 | Add product nicknames ("search keywords") now in 7b, or rely only on the product-name list in the AI's instructions for now? | Phase 7b | |
+| D22 | Which store profile fields? (suggested: opening hours, location, delivery areas and fees, pickup instructions, payment instructions, return policy) | Phase 7b | The suggested fields: opening hours, location, delivery areas and fees, pickup instructions, payment instructions, return policy |
+| D23 | Add product nicknames ("search keywords") now in 7b, or rely only on the product-name list in the AI's instructions for now? | Phase 7b | Now, in 7b (plus the product-name list in Phase 8) |
 
 ---
 
 ## 7. Where to start
 
-Phase 7 is built (conversation memory, inbox, recovery). Run
-`db/migrations/003_conversations.sql`, do the Phase 7 check, then
-**Phase 8** (the agent) — no coding until I say "continue".
+Phase 7b is built and tested locally. Next: I run `004_store_profile.sql`
+in Supabase, then **Phase 8** (the agent; needs D19 first) — no coding
+until I say "continue".

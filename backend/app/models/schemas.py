@@ -32,6 +32,38 @@ class DbModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class StoreProfile(BaseModel):
+    """What the AI may tell customers about the store (migration 004, D22).
+
+    Free text written by the store owner. An empty field means "not set":
+    the AI must say it will check with the team, never guess.
+    """
+    opening_hours: str | None = None
+    location: str | None = None
+    delivery_info: str | None = None  # delivery areas and fees
+    pickup_instructions: str | None = None
+    payment_instructions: str | None = None
+    return_policy: str | None = None
+
+    @field_validator("*")
+    @classmethod
+    def _blank_is_not_set(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
+    def filled(self) -> dict[str, str]:
+        """The fields the owner has filled in."""
+        return {name: value for name, value in self.model_dump().items() if value}
+
+    def missing(self) -> list[str]:
+        """The fields still empty (the AI must not guess these)."""
+        return [name for name, value in self.model_dump().items() if not value]
+
+
+PROFILE_FIELDS = tuple(StoreProfile.model_fields)
+
+
 class Store(DbModel):
     id: UUID
     name: str
@@ -42,6 +74,17 @@ class Store(DbModel):
     telegram_bot_token: SecretStr | None = None
     webhook_secret: SecretStr | None = None
     created_at: datetime | None = None
+    # Store profile (migration 004).
+    opening_hours: str | None = None
+    location: str | None = None
+    delivery_info: str | None = None
+    pickup_instructions: str | None = None
+    payment_instructions: str | None = None
+    return_policy: str | None = None
+
+    @property
+    def profile(self) -> StoreProfile:
+        return StoreProfile(**{name: getattr(self, name) for name in PROFILE_FIELDS})
 
 
 class StoreStaff(DbModel):
@@ -59,6 +102,8 @@ class Product(DbModel):
     brand: str | None = None
     category: str | None = None
     base_price: Decimal | None = Field(default=None, ge=0)
+    # Nicknames customers use, comma-separated, e.g. "AF1, air force, ኤር ፎርስ" (D23).
+    search_keywords: str | None = None
     created_at: datetime | None = None
 
 

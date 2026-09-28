@@ -223,8 +223,9 @@ class SupabaseService:
     ) -> list[VariantMatch]:
         """Variants of this store matching the search, most stock first.
 
-        Every word of `query` must appear in the product's name, brand, or
-        category (case-insensitive). `color` matches part of the color
+        Every word of `query` must appear in the product's name, brand,
+        category, or nicknames (search_keywords, e.g. "AF1"), ignoring
+        upper/lower case. `color` matches part of the color
         ("white" finds "White/Black"); `size` must match exactly.
         Sold-out variants are included, so the AI can say "sold out in 42,
         but we have 43".
@@ -236,7 +237,8 @@ class SupabaseService:
         )
         for word in _search_words(query):
             request = request.or_(
-                f'name.ilike."*{word}*",brand.ilike."*{word}*",category.ilike."*{word}*"',
+                f'name.ilike."*{word}*",brand.ilike."*{word}*",'
+                f'category.ilike."*{word}*",search_keywords.ilike."*{word}*"',
                 reference_table="products",
             )
         color_words = _search_words(color)

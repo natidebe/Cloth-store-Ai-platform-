@@ -311,8 +311,8 @@ All database reads and writes, always scoped by `store_id`:
 
 | Function | Tables |
 |----------|--------|
-| `get_store(store_id)` | `stores` (inactive stores return nothing) |
-| `search_variants(store_id, query, color, size)` | `products`, `product_variants` |
+| `get_store(store_id)` | `stores` (inactive stores return nothing); includes the store profile |
+| `search_variants(store_id, query, color, size)` | `products`, `product_variants` (name, brand, category, and nicknames) |
 | `get_or_create_customer(store_id, telegram_id, name)` | `customers` |
 | `update_customer(store_id, customer_id, ...)` | `customers` |
 | `create_order(store_id, customer_id, items)` | `place_order` database function |
@@ -406,6 +406,16 @@ new numbered migrations (see `BUILD_PLAN.md`, Phases 2 and 7).
   `store_id`, `update_id` (unique together, for the duplicate check),
   `telegram_id`, the update itself, status (`received`, `processing`,
   `done`, `failed`), number of attempts, timestamps
+
+**`004_store_profile.sql`** (Phase 7b):
+- Store profile on `stores` (D22), free text up to 1000 characters each:
+  `opening_hours`, `location`, `delivery_info` (areas and fees),
+  `pickup_instructions`, `payment_instructions`, `return_policy`. Empty means
+  "not set": the AI says it will check with the team instead of guessing.
+- Staff can read and edit these columns for their own store only; they still
+  can't change the name, plan, on/off switch, or see the bot token and secret
+- `products.search_keywords`: nicknames customers use (D23), e.g.
+  `AF1, air force, ኤር ፎርስ`; the product search also looks here
 
 **`005_store_onboarding.sql`** (Phase 9b):
 - A way to mark platform admins (D15)
