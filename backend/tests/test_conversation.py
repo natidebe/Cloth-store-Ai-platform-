@@ -22,6 +22,7 @@ from app.services.conversation_service import (
     InMemoryConversationStore,
     utc_now,
 )
+from app.services.llm_service import LLMProvider, LLMResponse
 from app.services.supabase_service import DatabaseUnavailableError, VersionConflictError
 from app.services.telegram_service import TELEGRAM_API, TelegramService
 
@@ -37,6 +38,19 @@ OTHER_STORE = Store(id=uuid4(), name="Other Store", telegram_bot_token="999:OTHE
 CUSTOMER = 42
 
 
+class EchoLLM(LLMProvider):
+    """Stands in for the AI: repeats the customer's last message."""
+    model = "echo"
+
+    def __init__(self):
+        self.requests = []  # the messages the AI was shown, per call
+
+    async def _complete(self, system_prompt, messages, tools):
+        self.requests.append(list(messages))
+        last = next(m.content for m in reversed(messages) if m.role == "user")
+        return LLMResponse(text=f"You said: {last}", model=self.model, stop_reason="stop")
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
@@ -49,6 +63,9 @@ class FakeDb:
 
     async def get_store(self, store_id):
         return self.stores.get(store_id)
+
+    async def list_products(self, store_id, limit=100):
+        return []
 
     async def get_or_create_customer(self, store_id, telegram_id, name=None):
         if self.customer_error:
@@ -91,7 +108,8 @@ def _update(update_id, text=None, customer=CUSTOMER, **fields):
 def _world(db=None, telegram=None, store=None, burst_wait=0.0):
     store = store or InMemoryConversationStore()
     telegram = telegram or FakeTelegram()
-    orchestrator = Orchestrator(db or FakeDb(), store, telegram.service(), burst_wait=burst_wait)
+    orchestrator = Orchestrator(db or FakeDb(), store, telegram.service(), EchoLLM(),
+                                burst_wait=burst_wait)
     return orchestrator, store, telegram
 
 
@@ -117,10 +135,10 @@ async def test_bot_remembers_the_conversation():
     await _message(orchestrator, _update(1, "hi"))
     await _message(orchestrator, _update(2, "white AF1?"))
 
-    assert telegram.texts_to(CUSTOMER) == [
-        "You said: hi",
-        # customer "hi" + bot reply = 2 earlier messages
-        "You said: white AF1?\n(I remember 2 earlier messages in our chat.)",
+    assert telegram.texts_to(CUSTOMER) == ["You said: hi", "You said: white AF1?"]
+    # The second time, the AI saw the whole chat so far.
+    assert [(m.role, m.content) for m in orchestrator.llm.requests[1]] == [
+        ("user", "hi"), ("assistant", "You said: hi"), ("user", "white AF1?"),
     ]
     conversation = store.conversations[(STORE.id, CUSTOMER)]
     history = await store.get_recent_messages(STORE.id, conversation.id, limit=20)
@@ -138,8 +156,10 @@ async def test_only_recent_messages_are_used():
     await store.add_messages(STORE.id, conversation.id,
                              [ChatMessage(role="customer", content=f"old {i}") for i in range(30)])
     await _message(orchestrator, _update(1, "hi"))
-    # 20 are loaded, including the new one: 19 earlier
-    assert telegram.texts_to(CUSTOMER)[0].endswith("(I remember 19 earlier messages in our chat.)")
+    # Only the 20 most recent (including the new one) go to the AI.
+    shown = orchestrator.llm.requests[0]
+    assert len(shown) == 20
+    assert (shown[0].content, shown[-1].content) == ("old 11", "hi")
 
 
 async def test_expired_conversation_starts_fresh():
@@ -154,16 +174,17 @@ async def test_expired_conversation_starts_fresh():
 
     await _message(orchestrator, _update(1, "hello again"))
 
-    assert telegram.texts_to(CUSTOMER) == ["You said: hello again"]  # nothing remembered
+    assert [m.content for m in orchestrator.llm.requests[0]] == ["hello again"]  # nothing remembered
     saved = store.conversations[(STORE.id, CUSTOMER)]
-    assert saved.order_draft == OrderDraft()  # draft cleared
+    assert saved.order_draft.items == []  # draft cleared
+    assert saved.order_draft.revision == 1  # but its revision keeps counting
     assert len(store.messages[conversation.id]) == 3  # old message still kept for staff
 
 
-async def test_non_text_gets_a_polite_reply_and_is_saved():
+async def test_non_text_is_described_to_the_ai_and_saved():
     orchestrator, store, telegram = _world()
     await _message(orchestrator, _update(1, sticker={"file_id": "s", "file_unique_id": "u"}))
-    assert telegram.texts_to(CUSTOMER)[0].startswith("Sorry, I can only read text")
+    assert telegram.texts_to(CUSTOMER) == ["You said: [The customer sent a sticker]"]
     conversation = store.conversations[(STORE.id, CUSTOMER)]
     assert store.messages[conversation.id][0][1].kind == "sticker"
 
@@ -191,7 +212,8 @@ async def test_quick_burst_gets_one_reply():
     # Three messages within the wait; each starts its own run, like the webhook does.
     await asyncio.gather(arrive(1, "white", 0), arrive(2, "size 42", 0.01), arrive(3, "0911223344", 0.02))
 
-    assert telegram.texts_to(CUSTOMER) == ["You said: white / size 42 / 0911223344"]
+    assert telegram.texts_to(CUSTOMER) == ["You said: 0911223344"]  # one reply
+    assert [m.content for m in orchestrator.llm.requests[0]] == ["white", "size 42", "0911223344"]
     assert _statuses(store) == ["done", "done", "done"]
 
 
@@ -211,7 +233,8 @@ async def test_burst_waits_only_once():
     await asyncio.gather(*(arrive(i, f"msg {i}", i * 0.01) for i in range(1, 6)))
     elapsed = loop.time() - started
 
-    assert telegram.texts_to(CUSTOMER) == ["You said: msg 1 / msg 2 / msg 3 / msg 4 / msg 5"]
+    assert telegram.texts_to(CUSTOMER) == ["You said: msg 5"]  # one reply
+    assert [m.content for m in orchestrator.llm.requests[0]] == [f"msg {i}" for i in range(1, 6)]
     assert elapsed < 2 * wait  # was about 5 x wait before the fix
 
 
@@ -393,7 +416,7 @@ def client():
     def _client(conversations=None):
         telegram = FakeTelegram()
         orchestrator = Orchestrator(FakeDb(), conversations or InMemoryConversationStore(),
-                                    telegram.service(), burst_wait=0)
+                                    telegram.service(), EchoLLM(), burst_wait=0)
         app.dependency_overrides[get_db] = lambda: orchestrator.db
         app.dependency_overrides[get_orchestrator] = lambda: orchestrator
         return TestClient(app), telegram, orchestrator.conversations

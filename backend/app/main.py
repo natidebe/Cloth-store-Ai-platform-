@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
     # One Telegram client shared by all stores' bots.
     app.state.telegram = TelegramService.create()
 
-    # The AI provider, chosen by LLM_PROVIDER / LLM_MODEL. Used from Phase 8.
+    # The AI provider, chosen by LLM_PROVIDER / LLM_MODEL.
     app.state.llm = None
     try:
         app.state.llm = create_provider(
@@ -51,7 +51,8 @@ async def lifespan(app: FastAPI):
     recovery_task = None
     if app.state.db is not None:
         app.state.orchestrator = Orchestrator(
-            app.state.db, DatabaseConversationStore(app.state.db), app.state.telegram
+            app.state.db, DatabaseConversationStore(app.state.db), app.state.telegram,
+            app.state.llm,
         )
         # Messages left unfinished by the last run (crash or restart).
         try:

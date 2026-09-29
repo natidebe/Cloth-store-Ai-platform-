@@ -28,6 +28,7 @@ from app.models.schemas import (
     OrderDraft,
     OrderItemDetail,
     OrderWithItems,
+    Product,
     Store,
     VariantMatch,
     normalize_phone,
@@ -248,7 +249,43 @@ class SupabaseService:
             request = request.eq("size", size.strip())
 
         rows = await self._run(request.order("stock_quantity", desc=True).limit(limit))
-        return [_to_variant_match(row) for row in rows]
+        return await self._with_holds(store_id, [_to_variant_match(row) for row in rows])
+
+    async def list_products(self, store_id: UUID, limit: int = 100) -> list[Product]:
+        """This store's products (name, brand, category, nicknames), by name.
+        For the AI's product-name list: no stock, no prices."""
+        rows = await self._run(
+            self._db.table("products")
+            .select("id, store_id, name, brand, category, search_keywords")
+            .eq("store_id", str(store_id))
+            .order("name")
+            .limit(limit)
+        )
+        return [Product.model_validate(row) for row in rows]
+
+    async def get_variants(self, store_id: UUID, variant_ids: list[UUID]) -> list[VariantMatch]:
+        """These variants of this store, with current price and stock.
+        Ids that don't exist or belong to another store are left out."""
+        if not variant_ids:
+            return []
+        rows = await self._run(
+            self._db.table("product_variants")
+            .select(_VARIANT_COLUMNS)
+            .eq("store_id", str(store_id))
+            .in_("id", [str(v) for v in variant_ids])
+        )
+        return await self._with_holds(store_id, [_to_variant_match(row) for row in rows])
+
+    async def _with_holds(self, store_id: UUID, variants: list[VariantMatch]) -> list[VariantMatch]:
+        """Fill in how much of each variant other customers' orders hold (D19)."""
+        if not variants:
+            return variants
+        rows = await self._run(self._db.rpc("held_quantities", {
+            "p_store_id": str(store_id),
+            "p_variant_ids": [str(v.variant_id) for v in variants],
+        }))
+        held = {UUID(row["variant_id"]): row["held"] for row in rows or []}
+        return [v.model_copy(update={"held": held.get(v.variant_id, 0)}) for v in variants]
 
     # --- Customers ----------------------------------------------------------
 
@@ -318,10 +355,12 @@ class SupabaseService:
         customer_id: UUID,
         draft: OrderDraft,
         idempotency_key: str,
+        hold_minutes: int = 5,
     ) -> UUID:
         """Place the order through the place_order database function.
 
-        Prices come from the database. Stock is checked but not reduced (D3).
+        Prices come from the database. Stock is checked but not reduced (D3);
+        the order holds its items for hold_minutes (D19).
         Calling again with the same idempotency_key returns the same order.
         Checking that the customer confirmed is the caller's job (the
         confirm_order tool); this only checks the draft is complete.
@@ -342,6 +381,7 @@ class SupabaseService:
             "p_contact_phone": draft.contact_phone,
             "p_delivery_address": draft.delivery_address,
             "p_idempotency_key": idempotency_key,
+            "p_hold_minutes": hold_minutes,
         }))
         logger.info("order placed", extra={"store_id": str(store_id), "order_id": order_id})
         return UUID(order_id)
@@ -527,17 +567,19 @@ class SupabaseService:
         return Conversation.model_validate(rows[0]) if rows else None
 
     async def save_conversation(self, conversation: Conversation) -> Conversation:
-        """Save the order draft and last_message_at, only if nobody saved
-        since this copy was loaded. Returns the saved copy (version + 1).
+        """Save the order draft, last_message_at, and the bot-paused state,
+        only if nobody saved since this copy was loaded. Returns the saved
+        copy (version + 1).
 
         Raises VersionConflictError otherwise: load it again and redo the work.
-        Pausing the bot is not saved here; staff do that (Phase 9).
         """
         rows = await self._run(
             self._db.table("conversations")
             .update({
                 "order_draft": conversation.order_draft.model_dump(mode="json"),
                 "last_message_at": _iso(conversation.last_message_at),
+                "bot_paused": conversation.bot_paused,
+                "paused_at": _iso(conversation.paused_at),
                 "version": conversation.version + 1,
                 "updated_at": _now().isoformat(),
             })

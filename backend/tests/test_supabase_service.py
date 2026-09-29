@@ -159,6 +159,13 @@ async def test_search_shows_sold_out_and_base_price(world):
     assert results[0].price == Decimal("4500")
 
 
+async def test_list_products_is_per_store(world):
+    names = [p.name for p in await world["service"].list_products(world["store_a"])]
+    assert "Air Force 1" in names
+    other = await world["service"].list_products(world["store_b"])
+    assert all(p.store_id == world["store_b"] for p in other)
+
+
 @pytest.mark.parametrize("query", ["ጫማ", "air,force)", "'; drop table stores; --", "*", ""])
 async def test_search_handles_any_text_safely(world, query):
     results = await world["service"].search_variants(world["store_a"], query)
@@ -253,7 +260,9 @@ async def test_record_payment(world):
     last_one = v[("White", "41")]  # only 1 in stock
 
     first = await service.create_order(store, customer, _draft((last_one, 1), delivery=False), f"k-{uuid4()}")
-    second = await service.create_order(store, customer, _draft((last_one, 1)), f"k-{uuid4()}")
+    # The first order holds the last pair (D19): a second order is refused.
+    with pytest.raises(OutOfStockError):
+        await service.create_order(store, customer, _draft((last_one, 1)), f"k-{uuid4()}")
 
     with pytest.raises(NotFoundError):  # another store can't confirm it
         await service.record_payment(world["store_b"], first, Decimal("4500"), "Telebirr", None)
@@ -265,11 +274,57 @@ async def test_record_payment(world):
         await service.record_payment(store, first, Decimal("4500"), "Telebirr", None)
     assert paid_twice.value.code == "already_paid"
 
-    # The last pair is gone: confirming the second order is refused
-    with pytest.raises(OutOfStockError) as sold_out:
-        await service.record_payment(store, second, Decimal("4500"), "CBE transfer", None)
-    assert sold_out.value.detail == str(last_one)
-
     orders = {o.id: o for o in await service.get_customer_orders(store, customer, limit=20)}
     assert orders[first].payment_status == "paid" and orders[first].status == "confirmed"
-    assert orders[second].payment_status == "unpaid"
+    assert orders[first].reserved_until is None  # paid: the stock itself went down
+
+
+# --- Holding stock (D19) ----------------------------------------------------
+
+async def _new_variant(world, stock: int) -> UUID:
+    product = await _insert(world["service"], "products", {
+        "store_id": str(world["store_a"]), "name": f"Hold test {uuid4()}", "base_price": 1000,
+    })
+    variant = await _insert(world["service"], "product_variants", {
+        "product_id": product["id"], "color": "Red", "size": "M", "stock_quantity": stock,
+    })
+    return UUID(variant["id"])
+
+
+async def test_an_order_holds_its_items(world):
+    service, store, customer = world["service"], world["store_a"], world["customer"].id
+    variant = await _new_variant(world, stock=2)
+
+    await service.create_order(store, customer, _draft((variant, 2)), f"k-{uuid4()}", hold_minutes=5)
+    [match] = await service.get_variants(store, [variant])
+    assert (match.stock_quantity, match.held, match.in_stock) == (2, 2, False)
+    assert await _stock(world, variant) == 2  # held, not taken (D3)
+
+    with pytest.raises(OutOfStockError):
+        await service.create_order(store, customer, _draft((variant, 1)), f"k-{uuid4()}")
+    # Another store never sees this store's variants or holds.
+    assert await service.get_variants(world["store_b"], [variant]) == []
+
+
+async def test_an_ended_hold_frees_the_items(world):
+    service, store, customer = world["service"], world["store_a"], world["customer"].id
+    variant = await _new_variant(world, stock=1)
+
+    old = await service.create_order(store, customer, _draft((variant, 1)), f"k-{uuid4()}", hold_minutes=0)
+    new = await service.create_order(store, customer, _draft((variant, 1)), f"k-{uuid4()}", hold_minutes=5)
+
+    # The new order holds the last one, so the old order can't be paid for.
+    with pytest.raises(OutOfStockError):
+        await service.record_payment(store, old, Decimal("1000"), "Telebirr", None)
+    await service.record_payment(store, new, Decimal("1000"), "Telebirr", None)
+    assert await _stock(world, variant) == 0
+
+
+async def test_same_variant_on_two_lines_is_added_up(world):
+    service, store, customer = world["service"], world["store_a"], world["customer"].id
+    variant = await _new_variant(world, stock=3)
+    with pytest.raises(OutOfStockError):  # 2 + 2 > 3
+        await service.create_order(store, customer, _draft((variant, 2), (variant, 2)), f"k-{uuid4()}")
+    order_id = await service.create_order(store, customer, _draft((variant, 2), (variant, 1)), f"k-{uuid4()}")
+    order = next(o for o in await service.get_customer_orders(store, customer, limit=50) if o.id == order_id)
+    assert [(i.quantity, i.price) for i in order.items] == [(3, Decimal("1000"))]

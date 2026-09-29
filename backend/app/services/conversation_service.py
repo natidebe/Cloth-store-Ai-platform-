@@ -255,6 +255,8 @@ class InMemoryConversationStore(ConversationStore):
         saved = current.model_copy(deep=True, update={
             "order_draft": OrderDraft.model_validate(conversation.order_draft.model_dump()),
             "last_message_at": conversation.last_message_at,
+            "bot_paused": conversation.bot_paused,
+            "paused_at": conversation.paused_at,
             "version": conversation.version + 1,
             "updated_at": utc_now(),
         })

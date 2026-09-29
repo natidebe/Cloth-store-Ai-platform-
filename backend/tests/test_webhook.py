@@ -11,6 +11,7 @@ from app.api.v1.webhook import SECRET_HEADER, get_db, get_orchestrator
 from app.main import app
 from app.models.schemas import Customer, Store, TelegramUpdate
 from app.services.conversation_service import InMemoryConversationStore
+from app.services.llm_service import LLMProvider, LLMResponse
 from app.services.supabase_service import DatabaseUnavailableError
 from app.services.telegram_service import (
     TELEGRAM_API,
@@ -24,6 +25,19 @@ SECRET = "correct-secret"
 STORE = Store(id=uuid4(), name="Selam Shoes", telegram_bot_token=BOT_TOKEN, webhook_secret=SECRET)
 
 
+class EchoLLM(LLMProvider):
+    """Stands in for the AI: repeats the customer's last message."""
+    model = "echo"
+
+    def __init__(self):
+        self.requests = []  # the messages the AI was shown, per call
+
+    async def _complete(self, system_prompt, messages, tools):
+        self.requests.append(list(messages))
+        last = next(m.content for m in reversed(messages) if m.role == "user")
+        return LLMResponse(text=f"You said: {last}", model=self.model, stop_reason="stop")
+
+
 class FakeDb:
     def __init__(self, store=STORE, error=None):
         self.store, self.error = store, error
@@ -32,6 +46,9 @@ class FakeDb:
         if self.error:
             raise self.error
         return self.store if self.store and store_id == self.store.id else None
+
+    async def list_products(self, store_id, limit=100):
+        return []
 
     async def get_or_create_customer(self, store_id, telegram_id, name=None):
         return Customer(id=uuid4(), store_id=store_id, telegram_id=telegram_id, name=name)
@@ -59,7 +76,8 @@ def setup():
         telegram = telegram or FakeTelegram()
         db = db or FakeDb()
         orchestrator = Orchestrator(
-            db, conversations or InMemoryConversationStore(), telegram.service(), burst_wait=0
+            db, conversations or InMemoryConversationStore(), telegram.service(), EchoLLM(),
+            burst_wait=0,
         )
         app.dependency_overrides[get_db] = lambda: db
         app.dependency_overrides[get_orchestrator] = lambda: orchestrator
@@ -122,11 +140,11 @@ def test_database_down_asks_telegram_to_retry(setup):
     assert telegram.calls == []
 
 
-def test_non_text_gets_a_polite_reply(setup):
+def test_non_text_is_described_to_the_ai(setup):
     client, telegram = setup()
     sticker = {"file_id": "s", "file_unique_id": "u"}
     assert _post(client, _update(sticker=sticker)).status_code == 200
-    assert telegram.calls[0][1]["text"].startswith("Sorry, I can only read text")
+    assert telegram.calls[0][1]["text"] == "You said: [The customer sent a sticker]"
 
 
 @pytest.mark.parametrize("body", [

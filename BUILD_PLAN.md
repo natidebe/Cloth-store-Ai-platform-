@@ -319,7 +319,7 @@ check with the team" instead of invented hours.
 
 ---
 
-### Phase 8 — The agent
+### Phase 8 — The agent ✅ Done
 
 **Goal:** the bot actually helps customers and takes orders.
 
@@ -436,7 +436,7 @@ the dashboard asks the backend to do each step.
 - Only platform admins (D15) can see it.
 
 **What to build:**
-- Migration `005_store_onboarding.sql` (I approve it first):
+- Migration `006_store_onboarding.sql` (I approve it first):
   - a way to mark platform admins
   - store status: pending, active, suspended
   - one store per bot (no two stores with the same bot)
@@ -525,7 +525,7 @@ Answer each before the phase listed, and record the answer here.
 | D16 | Which plans exist (e.g. basic, pro), and does a plan limit anything (products, staff, messages)? | Phase 9b | |
 | D17 | Can an owner change the store's bot token later, and what happens to open conversations? | Phase 9b | |
 | D18 | Can one person own or work in several stores? | Phase 9b | |
-| D19 | Last-item risk: keep D3 and re-check stock before sending payment instructions, or reserve stock for a short time (how long?) after ordering? | Phase 8 | |
+| D19 | Last-item risk: keep D3 and re-check stock before sending payment instructions, or reserve stock for a short time (how long?) after ordering? | Phase 8 | Reserve: a placed order holds its items for 5 minutes (migration 005). Stock still goes down at payment (D3). Payment text is each store's own (`stores.payment_instructions`); customers see "in stock" / "only a few left" (3 or fewer) / "sold out", never exact numbers |
 | D20 | How long to wait for more quick messages before replying (e.g. 2 seconds)? | Phase 7 | 2 seconds |
 | D21 | Daily AI budget per store (e.g. $1), and what happens when it's reached? | Phase 10 | |
 | D22 | Which store profile fields? (suggested: opening hours, location, delivery areas and fees, pickup instructions, payment instructions, return policy) | Phase 7b | The suggested fields: opening hours, location, delivery areas and fees, pickup instructions, payment instructions, return policy |
@@ -535,5 +535,5 @@ Answer each before the phase listed, and record the answer here.
 
 ## 7. Where to start
 
-Phase 7b is done (migration 004 applied and tested on Supabase). Next is
-**Phase 8** (the agent; needs D19 first) — no coding until I say "continue".
+Phase 8 is done (migration 005 applied, checked in Telegram). Next is
+**Phase 9** (handing over to staff; needs D9 first) — no coding until I say "continue".

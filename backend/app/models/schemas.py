@@ -145,6 +145,7 @@ class Order(DbModel):
     contact_phone: str | None = None
     delivery_address: str | None = None
     idempotency_key: str | None = None
+    reserved_until: datetime | None = None  # holds its items until then (D19)
     created_at: datetime | None = None
 
 
@@ -208,11 +209,17 @@ class VariantMatch(BaseModel):
     color: str | None = None
     size: str | None = None
     stock_quantity: int
+    held: int = 0  # held by other customers' recent orders (D19)
     price: Decimal | None  # price_override, otherwise base_price
 
     @property
+    def available(self) -> int:
+        """What a customer can order right now."""
+        return max(self.stock_quantity - self.held, 0)
+
+    @property
     def in_stock(self) -> bool:
-        return self.stock_quantity > 0
+        return self.available > 0
 
 
 class OrderItemDetail(OrderItem):
@@ -352,6 +359,18 @@ class OrderDraft(BaseModel):
     fulfillment_method: FulfillmentMethod | None = None
     delivery_address: str | None = None
     customer_confirmed: bool = False
+
+    # Bookkeeping set by our code, never by the AI:
+    # revision goes up on every change to the draft. It never goes back
+    # down (not even for a new draft), because the order's idempotency key
+    # is built from it.
+    revision: int = Field(default=0, ge=0)
+    # The revision the customer was shown in the order summary, and the
+    # Telegram message id of that summary. A "yes" only counts if it came
+    # after that message and the draft is still at that revision.
+    summary_revision: int | None = None
+    summary_message_id: int | None = None
+    last_order_id: UUID | None = None  # the order placed from the previous draft
 
     @field_validator("contact_name", "delivery_address")
     @classmethod

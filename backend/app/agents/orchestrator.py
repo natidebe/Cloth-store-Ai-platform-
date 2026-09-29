@@ -4,8 +4,9 @@ The flow for one customer (docs/backend-architecture.md, section 4):
 
     lock this customer -> wait 2 s for quick follow-ups -> claim their
     waiting inbox rows -> save the messages to history -> bot paused? stop
-    -> load recent history -> build the reply -> save the conversation
-    (version check) -> save the reply -> send it -> mark the rows done
+    -> load recent history -> the agent loop (ask the AI, run the tools it
+    asks for, repeat) -> save the conversation (version check) -> save the
+    replies -> alert staff -> send the replies -> mark the rows done
 
 Any failure puts the rows back for a retry; after MAX_ATTEMPTS the customer
 gets a polite message and staff are alerted.
@@ -13,14 +14,27 @@ gets a polite message and staff are alerted.
 The recovery sweep (at startup and every minute) picks up rows left behind
 by a crash or restart.
 
-Phase 7: the reply is still an echo, now showing the bot remembers the chat.
-Phase 8 replaces build_reply with the AI tool-calling loop.
+The agent loop: the AI gets the instructions, the recent history, and the
+tools. It either answers, or asks for tools; we run them and send the
+results back, up to MAX_TOOL_ROUNDS times. If it still hasn't answered, the
+chat is handed to staff.
 """
 import asyncio
 import logging
+from dataclasses import dataclass, field
 from datetime import timedelta
 
-from app.models.schemas import ChatMessage, IncomingMessage, InboxItem, OrderDraft, Store, TelegramUpdate
+from app.agents.prompts import build_system_prompt
+from app.agents.tools import TOOL_DEFINITIONS, EscalateArgs, ToolContext, escalate_to_staff, run_tool
+from app.models.schemas import (
+    ChatMessage,
+    Customer,
+    IncomingMessage,
+    InboxItem,
+    OrderDraft,
+    Store,
+    TelegramUpdate,
+)
 from app.services.conversation_service import (
     BURST_WAIT_SECONDS,
     HISTORY_LIMIT,
@@ -31,13 +45,13 @@ from app.services.conversation_service import (
     is_expired,
     utc_now,
 )
+from app.services.llm_service import LLMError, LLMMessage, LLMProvider
 from app.services.supabase_service import SupabaseService, VersionConflictError
 from app.services.telegram_service import TelegramError, TelegramService, parse_update
 from app.utils.logging import log_context
 
 logger = logging.getLogger(__name__)
 
-NON_TEXT_REPLY = "Sorry, I can only read text messages for now. Please type your question."
 FALLBACK_REPLY = (
     "Sorry, something went wrong on our side. Our team has been notified "
     "and will reply to you soon."
@@ -60,18 +74,29 @@ STARTUP_MARGIN = timedelta(minutes=1)
 # How many times to redo a run when the conversation was changed under us.
 MAX_VERSION_RETRIES = 3
 
+# Safety limit on AI calls per run (each round: one AI call + its tools),
+# so a confused AI can't run up costs.
+MAX_TOOL_ROUNDS = 5
+STUCK_REPLY = "Let me get a team member to help you with this. They'll reply here soon."
+EMPTY_REPLY = "Sorry, could you say that again?"
 
-def build_reply(new_messages: list[IncomingMessage], history: list[ChatMessage]) -> str:
-    """Phase 7 echo. `history` already includes the new messages."""
-    texts = [m.text for m in new_messages if m.text]
-    if not texts:
-        return NON_TEXT_REPLY
-    reply = "You said: " + " / ".join(texts)
-    new_updates = {m.update_id for m in new_messages}
-    earlier = sum(1 for m in history if m.update_id not in new_updates)
-    if earlier:
-        reply += f"\n(I remember {earlier} earlier messages in our chat.)"
-    return reply
+
+@dataclass
+class RunResult:
+    replies: list[str] = field(default_factory=list)  # to send to the customer, in order
+    staff_alerts: list[str] = field(default_factory=list)
+
+
+def to_llm_message(message: ChatMessage) -> LLMMessage:
+    """A saved history message, as the AI sees it."""
+    if message.role == "customer":
+        if message.kind == "text":
+            return LLMMessage(role="user", content=message.content or "")
+        note = f"[The customer sent a {message.kind}]"
+        return LLMMessage(role="user", content=f"{note} {message.content}" if message.content else note)
+    if message.role == "staff":
+        return LLMMessage(role="assistant", content=f"(Written by our staff) {message.content or ''}")
+    return LLMMessage(role="assistant", content=message.content or "")
 
 
 def _to_chat_message(message: IncomingMessage) -> ChatMessage:
@@ -98,6 +123,7 @@ class Orchestrator:
         db: SupabaseService,
         conversations: ConversationStore,
         telegram: TelegramService,
+        llm: LLMProvider | None,
         *,
         locks: CustomerLocks | None = None,
         burst_wait: float = BURST_WAIT_SECONDS,
@@ -105,6 +131,7 @@ class Orchestrator:
         self.db = db
         self.conversations = conversations
         self.telegram = telegram
+        self.llm = llm
         self.locks = locks or CustomerLocks()
         self.burst_wait = burst_wait
         self._tasks: set[asyncio.Task] = set()
@@ -153,9 +180,13 @@ class Orchestrator:
         logger.info("handling messages", extra={"count": len(messages),
                                                 "update_ids": ",".join(str(m.update_id) for m in messages)})
         try:
-            await self.db.get_or_create_customer(store.id, telegram_id, messages[-1].customer_name)
-            reply = await self._run(store, telegram_id, messages)
-            if reply is not None:
+            customer = await self.db.get_or_create_customer(store.id, telegram_id, messages[-1].customer_name)
+            result = await self._run(store, customer, chat_id, messages)
+            # Staff first: if a reply to the customer then fails and the run
+            # is retried, the retry won't alert staff a second time.
+            for alert in result.staff_alerts:
+                await self._alert_staff(store, alert)
+            for reply in result.replies:
                 await self._send(store, chat_id, reply)
             await self.conversations.finish_inbox(store.id, ids)
         except TelegramError as error:
@@ -168,10 +199,14 @@ class Orchestrator:
             logger.exception("handling failed")
             await self._fail(store, items, chat_id, f"{type(error).__name__}: {error}")
 
-    async def _run(self, store: Store, telegram_id: int, messages: list[IncomingMessage]) -> str | None:
-        """Save the messages, build the reply, save the conversation.
-        Returns the reply to send, or None if the bot must stay silent."""
+    async def _run(
+        self, store: Store, customer: Customer, chat_id: int, messages: list[IncomingMessage]
+    ) -> RunResult:
+        """Save the messages, run the agent, save the conversation.
+        Returns the replies to send (none if the bot must stay silent)."""
+        telegram_id = customer.telegram_id
         conversation = await self.conversations.get_or_create_conversation(store.id, telegram_id)
+        products = await self.db.list_products(store.id)  # for the AI's product-name list
         # Saved before anything else, so they're never lost even if the run
         # fails. Saving them again on a retry does nothing.
         await self.conversations.add_messages(
@@ -183,16 +218,20 @@ class Orchestrator:
                 conversation = await self.conversations.get_or_create_conversation(store.id, telegram_id)
             if conversation.bot_paused:
                 logger.info("bot paused; staff handle this chat")
-                return None
+                return RunResult()
 
             now = utc_now()
             if is_expired(conversation, now):
                 logger.info("conversation expired; starting fresh")
-                conversation.order_draft = OrderDraft()
+                # The revision keeps counting up (order idempotency keys use it).
+                conversation.order_draft = OrderDraft(revision=conversation.order_draft.revision + 1)
             history = await self.conversations.get_recent_messages(
                 store.id, conversation.id, HISTORY_LIMIT, since=history_since(now)
             )
-            reply = build_reply(messages, history)
+            ctx = ToolContext(store=store, customer=customer, conversation=conversation,
+                              new_messages=messages, chat_id=chat_id, db=self.db,
+                              telegram=self.telegram, products=products)
+            reply = await self._agent_reply(ctx, history)
             conversation.last_message_at = now
 
             try:
@@ -203,16 +242,54 @@ class Orchestrator:
                 logger.info("conversation changed during run; retrying", extra={"attempt": attempt + 1})
                 continue
 
+            replies = ([reply] if reply else []) + ctx.after_reply
+            if not replies and not ctx.sent:
+                replies = [EMPTY_REPLY]
             await self.conversations.add_messages(
-                store.id, conversation.id, [ChatMessage(role="assistant", content=reply)]
+                store.id, conversation.id,
+                [ChatMessage(role="assistant", content=text) for text in ctx.sent + replies],
             )
-            return reply
+            return RunResult(replies=replies, staff_alerts=ctx.staff_alerts)
 
         raise VersionConflictError("version_conflict", "conversation kept changing")
+
+    async def _agent_reply(self, ctx: ToolContext, history: list[ChatMessage]) -> str | None:
+        """The agent loop. Returns the AI's final text (None if it had nothing to add)."""
+        if self.llm is None:
+            raise LLMError("AI provider not configured (check LLM_PROVIDER / LLM_API_KEY)")
+        messages = [to_llm_message(m) for m in history]
+        for _ in range(MAX_TOOL_ROUNDS):
+            # Rebuilt every round: it shows the order draft, which tools change.
+            system_prompt = build_system_prompt(ctx.store, ctx.customer, ctx.conversation.order_draft,
+                                                ctx.products)
+            response = await self.llm.complete(system_prompt, messages, TOOL_DEFINITIONS)
+            if not response.tool_calls:
+                return (response.text or "").strip() or None
+            messages.append(LLMMessage(role="assistant", content=response.text,
+                                       tool_calls=response.tool_calls))
+            for call in response.tool_calls:
+                result = await run_tool(call, ctx)
+                messages.append(LLMMessage(role="tool", tool_call_id=call.id, content=result))
+
+        # Still asking for tools after the limit: let a person take over.
+        logger.warning("agent reached the round limit; handing over to staff")
+        last_text = next((m.text for m in reversed(ctx.new_messages) if m.text), "(no text)")
+        await escalate_to_staff(EscalateArgs(
+            reason="the assistant could not finish answering",
+            summary=f"Last customer message: {last_text[:500]}",
+        ), ctx)
+        return STUCK_REPLY
 
     async def _send(self, store: Store, chat_id: int, text: str) -> None:
         await self.telegram.send_message(store.telegram_bot_token.get_secret_value(), chat_id, text)
         logger.info("reply sent")
+
+    async def _alert_staff(self, store: Store, text: str) -> None:
+        """Best effort: a failed staff alert is logged, not retried."""
+        try:
+            await self.telegram.notify_staff(store, text)
+        except TelegramError as error:
+            logger.error("staff alert not delivered", extra={"error": error.description})
 
     async def _fail(self, store: Store, items: list[InboxItem], chat_id: int, error: str) -> None:
         """Put the rows back for a retry, or give up after MAX_ATTEMPTS."""

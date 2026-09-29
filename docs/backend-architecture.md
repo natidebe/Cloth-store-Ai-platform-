@@ -201,9 +201,9 @@ a polite fallback message and staff get an alert. The bot never goes silent.
 
 | Tool | What it does | Rules enforced in code |
 |------|--------------|------------------------|
-| `check_stock(query, color, size)` | Finds matching variants with stock and price | Only this store's products |
+| `check_stock(query, color, size)` | Finds matching variants with price and availability | Only this store's products; availability is "in stock" / "only a few left" / "sold out" (stock held by other orders doesn't count), never exact numbers |
 | `update_order_draft(fields)` | Saves item, size, color, name, phone, address as they're collected | Validates formats (e.g. phone); raises the draft version |
-| `confirm_order()` | Creates the order from the draft (through the `place_order` database function) | All required fields present; confirmation checked by code (a real "yes" after the summary, draft unchanged since); stock re-checked at this moment; prices read from the database; idempotency key fixed per draft (conversation + draft version), so repeating it returns the same order; status = pending, payment = unpaid |
+| `confirm_order()` | First call: code sends the customer an order summary (prices from the database). Second call, after the customer's "yes": creates the order (through the `place_order` database function); code then sends the store's payment instructions and alerts staff | All required fields present; confirmation checked by code (a real "yes" after the summary, draft unchanged since); stock re-checked at this moment; prices read from the database; idempotency key fixed per draft (conversation + draft version), so repeating it returns the same order; status = pending, payment = unpaid |
 | `check_order_status()` | Returns this customer's recent orders | Only this customer, only this store |
 | `escalate_to_staff(reason, summary)` | Alerts the staff group and pauses the assistant for this customer | Sets handoff state; does nothing if already handed over (no duplicate alerts) |
 
@@ -417,7 +417,14 @@ new numbered migrations (see `BUILD_PLAN.md`, Phases 2 and 7).
 - `products.search_keywords`: nicknames customers use (D23), e.g.
   `AF1, air force, ኤር ፎርስ`; the product search also looks here
 
-**`005_store_onboarding.sql`** (Phase 9b):
+**`005_orders_agent.sql`** (Phase 8):
+- `orders.reserved_until` — a placed order holds its items for 5 minutes
+  (D19); other customers can only order stock that isn't held
+- `place_order` checks stock minus held items (locking the variant row) and
+  sets the hold; `confirm_payment` can't use stock held by other orders
+- `held_quantities` — held amounts for search results
+
+**`006_store_onboarding.sql`** (Phase 9b):
 - A way to mark platform admins (D15)
 - Store status: `pending`, `active`, `suspended` (the bot answers only when
   active)

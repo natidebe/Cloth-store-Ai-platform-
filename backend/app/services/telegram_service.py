@@ -101,10 +101,12 @@ class TelegramService:
 
     # --- Messages -----------------------------------------------------------
 
-    async def send_message(self, bot_token: str, chat_id: int, text: str) -> None:
+    async def send_message(self, bot_token: str, chat_id: int, text: str) -> int | None:
+        """Send a text message. Returns its Telegram message id."""
         if len(text) > MAX_MESSAGE_LENGTH:
             text = text[: MAX_MESSAGE_LENGTH - 1] + "…"
-        await self._call(bot_token, "sendMessage", {"chat_id": chat_id, "text": text})
+        result = await self._call(bot_token, "sendMessage", {"chat_id": chat_id, "text": text})
+        return result.get("message_id") if isinstance(result, dict) else None
 
     async def notify_staff(self, store: Store, text: str) -> bool:
         """Send a message to the store's staff group.
