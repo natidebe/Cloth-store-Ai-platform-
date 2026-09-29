@@ -387,6 +387,28 @@ one order; ask for a discount and see it passed to staff, not granted.
 
 ---
 
+### Phase 8b — Messages in the customer's language
+
+**Goal:** everything the customer receives is in their language.
+
+The AI already replies in Amharic or English, but the messages written by
+our code are English only: the order summary, the payment message ("Order
+#… is placed … How to pay"), and fixed replies. Found in real testing: an
+Amharic conversation got an English summary and payment message.
+
+- Detect the customer's language from their recent messages (Amharic
+  script, or Telegram's language setting) and store it on the conversation.
+- Amharic and English versions of every fixed message (summary, payment
+  message, photo reply, fallback, "already placed", …), written and checked
+  by a person who speaks Amharic.
+- The store's own texts (payment instructions, return policy) stay as the
+  store wrote them.
+
+**Check:** a full order in Amharic gets the summary and payment message in
+Amharic; the same order in English gets them in English.
+
+---
+
 ### Phase 9 — Handing over to staff
 
 **Goal:** staff can take over smoothly when the bot can't help.
@@ -397,6 +419,19 @@ one order; ask for a discount and see it passed to staff, not granted.
   How it resumes is decision D9.
 - Staff endpoints in `admin.py`: resolve a handover, confirm a payment,
   resume the bot. Only logged-in staff of that store can use them.
+- **Forward customer photos to the staff group.** When a customer sends a
+  photo (usually a payment screenshot), forward the photo itself to the
+  staff group together with the alert (customer, order number, caption).
+  Today staff only get a text alert and never see the screenshot, so a
+  paying customer can wait with nobody noticing. (Phase 8 already answers
+  photos with a fixed reply from our code and hands over to staff; this
+  adds the photo itself.)
+- Staff alerts need `staff_chat_id` on the store: until Phase 9b's `/link`,
+  I set it by hand for the test store.
+
+**Check:** send a payment screenshot to the bot and see the photo arrive in
+the staff group with the order number; staff confirm the payment and the
+customer is told.
 
 ---
 
@@ -530,6 +565,7 @@ Answer each before the phase listed, and record the answer here.
 | D21 | Daily AI budget per store (e.g. $1), and what happens when it's reached? | Phase 10 | |
 | D22 | Which store profile fields? (suggested: opening hours, location, delivery areas and fees, pickup instructions, payment instructions, return policy) | Phase 7b | The suggested fields: opening hours, location, delivery areas and fees, pickup instructions, payment instructions, return policy |
 | D23 | Add product nicknames ("search keywords") now in 7b, or rely only on the product-name list in the AI's instructions for now? | Phase 7b | Now, in 7b (plus the product-name list in Phase 8) |
+| D24 | Delivery fee: added to the order total automatically, shown as text next to the total, or adjusted by staff? | Phase 8 | Staff adjust it by hand: the order total covers the items only, and staff tell the customer the delivery fee |
 
 ---
 

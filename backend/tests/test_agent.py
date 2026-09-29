@@ -11,9 +11,9 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 
-from app.agents.orchestrator import MAX_TOOL_ROUNDS, STUCK_REPLY, Orchestrator
+from app.agents.orchestrator import MAX_TOOL_ROUNDS, PHOTO_REPLY, STUCK_REPLY, Orchestrator
 from app.agents.prompts import build_system_prompt
-from app.agents.tools import availability, looks_like_yes
+from app.agents.tools import availability, looks_like_yes, order_number
 from app.models.schemas import (
     Customer,
     OrderDraft,
@@ -164,6 +164,21 @@ class World:
             "from": {"id": CUSTOMER, "is_bot": False, "first_name": "Abebe"},
             "text": text,
         }}
+        await self.store.save_to_inbox(STORE.id, self._update_id, CUSTOMER, update)
+        await self.orchestrator.process_customer(STORE, CUSTOMER)
+
+    async def send_photo(self, caption=None):
+        """The customer sends a photo (e.g. a payment screenshot)."""
+        self._update_id += 1
+        message = {
+            "message_id": 5000 + self._update_id, "date": 1790000000,
+            "chat": {"id": CUSTOMER, "type": "private"},
+            "from": {"id": CUSTOMER, "is_bot": False, "first_name": "Abebe"},
+            "photo": [{"file_id": "screenshot", "file_unique_id": "s1", "width": 800, "height": 1600}],
+        }
+        if caption:
+            message["caption"] = caption
+        update = {"update_id": self._update_id, "message": message}
         await self.store.save_to_inbox(STORE.id, self._update_id, CUSTOMER, update)
         await self.orchestrator.process_customer(STORE, CUSTOMER)
 
@@ -395,6 +410,46 @@ async def test_discount_request_goes_to_staff_once():
     await world.say("hello?")
     assert len(world.llm.requests) == calls_before
     assert len(world.telegram.to(CUSTOMER)) == 1
+
+
+# --- Photos (e.g. payment screenshots) ---------------------------------------
+
+async def test_payment_screenshot_gets_a_fixed_reply_and_goes_to_staff():
+    world = World()
+    await _up_to_summary(world)
+    world.script(call("confirm_order"), text("Thank you!"))
+    await world.say("yes")
+    [order] = world.db.orders.values()
+    calls_before = len(world.llm.requests)
+
+    await world.send_photo(caption="paid")
+
+    # Our code answers, not the AI (it can't see the photo).
+    assert len(world.llm.requests) == calls_before
+    reply = world.telegram.to(CUSTOMER)[-1]
+    assert reply == PHOTO_REPLY
+    # It must never claim the payment arrived or is confirmed.
+    for claim in ("ክፍያዎ ደርሷል", "payment received", "payment was received", "confirmed"):
+        assert claim not in reply.lower()
+    # Staff are told, with the order number and the caption.
+    alert = world.telegram.to(STAFF_CHAT)[-1]
+    assert f"#{order_number(order.id)}" in alert and "paid" in alert
+    assert world.conversation.bot_paused
+
+
+async def test_photo_without_an_order_also_goes_to_staff():
+    world = World()
+    await world.send_photo()
+    assert world.llm.requests == []
+    assert world.telegram.to(CUSTOMER) == [PHOTO_REPLY]
+    assert "sent a photo" in world.telegram.to(STAFF_CHAT)[0]
+    assert world.conversation.bot_paused
+
+
+def test_prompt_forbids_saying_payment_was_received():
+    prompt = build_system_prompt(STORE, Customer(id=uuid4(), store_id=STORE.id, telegram_id=CUSTOMER),
+                                 OrderDraft(), [])
+    assert "Never say a payment was received" in prompt
 
 
 async def test_order_status_shows_only_this_customers_orders():

@@ -25,7 +25,14 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 from app.agents.prompts import build_system_prompt
-from app.agents.tools import TOOL_DEFINITIONS, EscalateArgs, ToolContext, escalate_to_staff, run_tool
+from app.agents.tools import (
+    TOOL_DEFINITIONS,
+    EscalateArgs,
+    ToolContext,
+    escalate_to_staff,
+    order_number,
+    run_tool,
+)
 from app.models.schemas import (
     ChatMessage,
     Customer,
@@ -78,6 +85,12 @@ MAX_VERSION_RETRIES = 3
 # so a confused AI can't run up costs.
 MAX_TOOL_ROUNDS = 5
 STUCK_REPLY = "Let me get a team member to help you with this. They'll reply here soon."
+# Sent (by our code, not the AI) when a customer sends a photo. Deliberately
+# says nothing about the payment: only staff can confirm a payment.
+PHOTO_REPLY = (
+    "ፎቶዎን ተቀብለናል 🙏 የቡድናችን አባል አይቶ በቅርቡ እዚህ ይመልስልዎታል።\n"
+    "We received your photo 🙏 A team member will check it and reply here soon."
+)
 EMPTY_REPLY = "Sorry, could you say that again?"
 
 
@@ -231,7 +244,10 @@ class Orchestrator:
             ctx = ToolContext(store=store, customer=customer, conversation=conversation,
                               new_messages=messages, chat_id=chat_id, db=self.db,
                               telegram=self.telegram, products=products)
-            reply = await self._agent_reply(ctx, history)
+            if any(m.kind == "photo" for m in messages):
+                reply = await self._photo_reply(ctx)
+            else:
+                reply = await self._agent_reply(ctx, history)
             conversation.last_message_at = now
 
             try:
@@ -252,6 +268,22 @@ class Orchestrator:
             return RunResult(replies=replies, staff_alerts=ctx.staff_alerts)
 
         raise VersionConflictError("version_conflict", "conversation kept changing")
+
+    async def _photo_reply(self, ctx: ToolContext) -> str:
+        """A photo (often a payment screenshot) goes straight to staff, with a
+        fixed reply written by us, not the AI: the AI can't see the photo and
+        must never say a payment was received. Only staff confirm payments."""
+        last_order = ctx.conversation.order_draft.last_order_id
+        captions = [m.text for m in ctx.new_messages if m.kind == "photo" and m.text]
+        summary = "The customer sent a photo"
+        if last_order:
+            summary += f" after order #{order_number(last_order)} (maybe a payment screenshot)"
+        if captions:
+            summary += f". Caption: {' / '.join(captions)[:300]}"
+        await escalate_to_staff(EscalateArgs(
+            reason="customer sent a photo (check it, e.g. a payment screenshot)", summary=summary,
+        ), ctx)
+        return PHOTO_REPLY
 
     async def _agent_reply(self, ctx: ToolContext, history: list[ChatMessage]) -> str | None:
         """The agent loop. Returns the AI's final text (None if it had nothing to add)."""
