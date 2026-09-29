@@ -120,6 +120,49 @@ async def test_tool_calls_are_parsed():
     assert bad.arguments == {} and bad.arguments_error  # invalid JSON is reported, not crashed on
 
 
+async def test_gemini_thought_signature_is_sent_back_unchanged():
+    # Gemini 3 attaches a "thought signature" to each tool call and refuses
+    # the next request (HTTP 400) if it isn't returned with the call.
+    signature = {"google": {"thought_signature": "EmAKXgFp-signature"}}
+    fake = FakeOpenAI(
+        (200, _completion({"tool_calls": [{
+            "id": "call_1", "type": "function", "extra_content": signature,
+            "function": {"name": "check_stock", "arguments": '{"query": "Air Force 1"}'},
+        }]}, finish_reason="tool_calls")),
+        (200, _completion({"content": "Yes, we have it."})),
+    )
+    llm = fake.provider()
+    history = [LLMMessage(role="user", content="AF1?")]
+    first = await llm.complete("sys", history, [CHECK_STOCK])
+    assert first.tool_calls[0].provider_extra == {"extra_content": signature}
+
+    history += [LLMMessage(role="assistant", tool_calls=first.tool_calls),
+                LLMMessage(role="tool", tool_call_id="call_1", content='{"results": []}')]
+    await llm.complete("sys", history, [CHECK_STOCK])
+    sent_call = fake.requests[1]["messages"][2]["tool_calls"][0]
+    assert sent_call["extra_content"] == signature
+    assert sent_call["function"]["name"] == "check_stock"
+
+
+async def test_openai_tool_calls_have_no_extras():
+    fake = FakeOpenAI((200, _completion({"tool_calls": [{
+        "id": "call_1", "type": "function",
+        "function": {"name": "check_stock", "arguments": "{}"},
+    }]}, finish_reason="tool_calls")))
+    response = await fake.provider().complete("sys", [LLMMessage(role="user", content="x")], [CHECK_STOCK])
+    assert response.tool_calls[0].provider_extra is None
+
+
+async def test_bad_request_error_includes_the_providers_reason():
+    gemini_style = [{"error": {"code": 400, "status": "INVALID_ARGUMENT",
+                               "message": "Function call is missing a thought_signature"}}]
+    fake = FakeOpenAI((400, gemini_style))
+    with pytest.raises(LLMError) as error:
+        await fake.provider().complete("sys", [LLMMessage(role="user", content="hi")])
+    assert error.value.reason == "HTTP 400: Function call is missing a thought_signature"
+    assert not error.value.retryable
+
+
 async def test_wrong_api_key_fails_fast_without_leaking_it():
     fake = FakeOpenAI((401, {"error": {"message": f"Incorrect API key provided: {API_KEY}", "type": "invalid_request_error"}}))
     with pytest.raises(LLMError) as error:
@@ -153,7 +196,7 @@ async def test_gives_up_after_retries():
     fake = FakeOpenAI((503, {"error": {"message": "down"}}))
     with pytest.raises(LLMError) as error:
         await fake.provider().complete("sys", [LLMMessage(role="user", content="hi")])
-    assert error.value.reason == "HTTP 503" and error.value.retryable
+    assert error.value.reason == "HTTP 503: down" and error.value.retryable
     assert len(fake.requests) == 3  # first try + 2 retries
 
 

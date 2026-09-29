@@ -171,19 +171,33 @@ _YES_WORDS = {
 _YES_PHRASES = ("go ahead", "sounds good", "place the order", "place it", "👍", "✅")
 _NO_WORDS = {
     "no", "not", "dont", "don't", "cancel", "wait", "change", "stop",
+    # "yes, but ..." / "ok, instead ...": the customer wants something different
+    "but", "instead", "however", "except", "rather", "different", "another",
+    "edit", "modify", "replace", "switch",
     "አይ", "አይደለም", "አልፈልግም", "ይቅር",
 }
+# Amharic adds endings to words (ቀይሩ, ቀይረው, ቀይሩልኝ...), so these are
+# matched anywhere in the message, not as whole words.
+_NO_STEMS = (
+    "ግን",      # but
+    "ቀይር", "ቀይሩ", "ቀይረ", "ቀይሪ",  # change (not ቀይ = red)
+    "ለውጥ", "ለውጡ", "ለውጠ",  # change
+    "ሌላ",      # other / another
+    "በምትኩ",    # instead
+    "ሳይሆን",    # rather than
+)
 _WORD = re.compile(r"[\w']+", re.UNICODE)
 
 
 def looks_like_yes(text: str | None) -> bool:
     """A short, clear confirmation like "yes", "ok go ahead", "አዎ".
-    Anything with a "no"/"change"/"wait" in it doesn't count."""
+    Anything with a "no", "wait", "change", or "but" in it doesn't count:
+    "yes, but size 43" means the customer wants a change, not this order."""
     if not text:
         return False
     lowered = text.lower()
     words = set(_WORD.findall(lowered))
-    if words & _NO_WORDS:
+    if words & _NO_WORDS or any(stem in lowered for stem in _NO_STEMS):
         return False
     return bool(words & _YES_WORDS) or any(p in lowered for p in _YES_PHRASES)
 

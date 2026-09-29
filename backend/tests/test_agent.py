@@ -292,6 +292,15 @@ async def test_changing_the_draft_needs_a_new_summary():
     ("yes", True), ("Yes please, go ahead!", True), ("ok", True), ("አዎ", True), ("እሺ", True),
     ("no", False), ("yes but change the size", False), ("wait", False), ("what colors?", False),
     ("", False), (None, False),
+    # "yes, but ..." asks for a change: not a confirmation
+    ("yes but make it size 43", False), ("ok but black instead", False),
+    ("yes, a different color please", False), ("sure, another size", False),
+    ("አዎ ግን ቁጥሩን 43 አድርገው", False),  # yes, but make the size 43
+    ("እሺ ግን ጥቁር ይሁን", False),          # ok, but make it black
+    ("አዎ ቀለሙን ቀይሩልኝ", False),          # yes, change the colour for me
+    ("አዎ ሌላ ቁጥር", False),               # yes, another size
+    # plain confirmations still work, including ones mentioning red (ቀይ)
+    ("አዎን ትክክል ነው", True), ("እሺ ቀይ ጥሩ ነው", True), ("ok 👍", True),
 ])
 async def test_looks_like_yes(message, expected):
     assert looks_like_yes(message) is expected

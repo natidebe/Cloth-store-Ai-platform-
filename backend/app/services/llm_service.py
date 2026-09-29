@@ -61,6 +61,10 @@ class ToolCall(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
     # Set when the AI sent arguments that weren't valid JSON.
     arguments_error: str | None = None
+    # Provider data that must be sent back unchanged with this call, e.g.
+    # Gemini 3's "thought signature" (without it Gemini refuses the next
+    # request with HTTP 400).
+    provider_extra: dict[str, Any] | None = None
 
 
 class LLMMessage(BaseModel):
@@ -92,6 +96,18 @@ class LLMError(Exception):
         super().__init__(reason)
         self.reason = reason
         self.retryable = retryable
+
+
+def _provider_message(body: Any) -> str | None:
+    """The error message in a provider's error response, if there is one.
+    (OpenAI sends {"error": {...}}; Gemini sends a list of those.)"""
+    if isinstance(body, list) and body:
+        body = body[0]
+    if isinstance(body, dict):
+        error = body.get("error", body)
+        if isinstance(error, dict) and isinstance(error.get("message"), str):
+            return error["message"]
+    return None
 
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -208,6 +224,7 @@ class OpenAIProvider(LLMProvider):
                         "id": call.id,
                         "type": "function",
                         "function": {"name": call.name, "arguments": json.dumps(call.arguments)},
+                        **(call.provider_extra or {}),
                     } for call in message.tool_calls],
                 })
             else:
@@ -221,15 +238,23 @@ class OpenAIProvider(LLMProvider):
             "function": {"name": t.name, "description": t.description, "parameters": t.parameters},
         } for t in tools]
 
-    @staticmethod
-    def _parse_tool_call(raw: Any) -> ToolCall:
+    # Fields on a tool call that aren't part of OpenAI's format but must be
+    # echoed back (Gemini 3 puts its thought signature in "extra_content").
+    _PASSTHROUGH_FIELDS = ("extra_content",)
+
+    @classmethod
+    def _parse_tool_call(cls, raw: Any) -> ToolCall:
+        dumped = raw.model_dump() if hasattr(raw, "model_dump") else {}
+        extra = {k: dumped[k] for k in cls._PASSTHROUGH_FIELDS if dumped.get(k) is not None} or None
         try:
             arguments = json.loads(raw.function.arguments or "{}")
             if not isinstance(arguments, dict):
                 raise ValueError("arguments are not an object")
-            return ToolCall(id=raw.id, name=raw.function.name, arguments=arguments)
+            return ToolCall(id=raw.id, name=raw.function.name, arguments=arguments,
+                            provider_extra=extra)
         except ValueError as error:
-            return ToolCall(id=raw.id, name=raw.function.name, arguments_error=str(error))
+            return ToolCall(id=raw.id, name=raw.function.name, arguments_error=str(error),
+                            provider_extra=extra)
 
     async def _complete(self, system_prompt, messages, tools) -> LLMResponse:
         request: dict[str, Any] = {
@@ -257,7 +282,11 @@ class OpenAIProvider(LLMProvider):
         except openai.AuthenticationError:
             raise LLMError("invalid API key") from None
         except openai.APIStatusError as error:
-            raise LLMError(f"HTTP {error.status_code}", retryable=error.status_code >= 500) from None
+            reason = f"HTTP {error.status_code}"
+            detail = _provider_message(error.body)
+            if detail:  # the provider's own explanation, e.g. what was wrong with the request
+                reason += f": {detail[:300]}"
+            raise LLMError(reason, retryable=error.status_code >= 500) from None
 
         choice = completion.choices[0]
         usage = completion.usage
