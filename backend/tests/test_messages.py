@@ -34,9 +34,23 @@ def test_amharic_texts_are_really_amharic():
     ("Do you have white Air Force 1?", "en"),
     ("I want new shoes", "en"),                 # "new" is English here
     ("yes", None), ("ok 👍", None), ("0911223344", None), ("", None), (None, None),
+    # Single English words, names and places don't make a customer "English"
+    ("delivery", None), ("pickup please", None), ("Addis Ababa", None), ("abdi", None),
+    ("yes please go ahead", None),
 ])
 def test_message_language(text, expected):
     assert message_language(text) == expected
+
+
+def test_amharic_chat_with_english_words_stays_amharic():
+    # The real Telegram test (newest first): the customer chatted in Amharic,
+    # then typed "delivery", an address, a phone number, and a name.
+    history = ["delivery", "Addis Ababa", "0936362556", "abdi", "ነጭ ኤር ፎርስ 1 ቁጥር 42 እፈልጋለሁ"]
+    assert detect_language(history) == "am"
+
+
+def test_real_english_sentence_switches_to_english():
+    assert detect_language(["Actually I'd prefer the black ones", "ሰላም"]) == "en"
 
 
 def test_short_replies_keep_the_earlier_language():

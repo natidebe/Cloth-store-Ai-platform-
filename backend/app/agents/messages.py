@@ -121,19 +121,24 @@ _ROMANIZED_AMHARIC = {
 }
 
 
+# A Latin-letter message counts as English only if it's a real sentence:
+# Amharic speakers often type single English words ("delivery", "pickup"),
+# names ("abdi"), and places ("Addis Ababa") in the middle of an Amharic chat.
+_MIN_ENGLISH_WORDS = 3
+
+
 def message_language(text: str | None) -> Language | None:
     """The language of one message, or None if it doesn't tell (e.g. "yes",
-    "0911223344", "👍")."""
+    "0911223344", "👍", "delivery", "Addis Ababa")."""
     if not text:
         return None
     if _ETHIOPIC.search(text):
         return "am"
     words = _LATIN_WORD.findall(text.lower())
-    if not words:
-        return None
     if any(word in _ROMANIZED_AMHARIC for word in words):
         return "am"
-    if all(word in _NEUTRAL_WORDS for word in words):
+    english_words = [word for word in words if word not in _NEUTRAL_WORDS]
+    if len(english_words) < _MIN_ENGLISH_WORDS:
         return None
     return "en"
 
