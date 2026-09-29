@@ -387,7 +387,7 @@ one order; ask for a discount and see it passed to staff, not granted.
 
 ---
 
-### Phase 8b — Messages in the customer's language 🟡 Built; waiting for my Amharic review and a Telegram check
+### Phase 8b — Messages in the customer's language ✅ Done
 
 **Goal:** everything the customer receives is in their language.
 
@@ -576,5 +576,5 @@ Answer each before the phase listed, and record the answer here.
 
 ## 7. Where to start
 
-Phase 8 is done (migration 005 applied, checked in Telegram). Next is
-**Phase 9** (handing over to staff; needs D9 first) — no coding until I say "continue".
+Phases 8 and 8b are done (checked in Telegram). Next is **Phase 9**
+(handing over to staff; needs D9 first) — no coding until I say "continue".
