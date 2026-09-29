@@ -11,7 +11,8 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 
-from app.agents.orchestrator import MAX_TOOL_ROUNDS, PHOTO_REPLY, STUCK_REPLY, Orchestrator
+from app.agents.messages import t
+from app.agents.orchestrator import MAX_TOOL_ROUNDS, Orchestrator
 from app.agents.prompts import build_system_prompt
 from app.agents.tools import availability, looks_like_yes, order_number
 from app.models.schemas import (
@@ -259,6 +260,39 @@ async def test_full_order_conversation():
     assert len(world.telegram.to(STAFF_CHAT)) == 1
 
 
+async def test_amharic_order_gets_amharic_summary_and_payment_message():
+    world = World()
+    world.script(call("update_order_draft", **ORDER_DETAILS), call("confirm_order"),
+                 text("እባክዎ \"አዎ\" ብለው ያረጋግጡ።"))
+    await world.say("ነጩን ቁጥር 42 እወስዳለሁ። አበበ ከበደ፣ 0911223344፣ ከሱቁ እወስዳለሁ")
+
+    summary = world.telegram.to(CUSTOMER)[0]
+    assert summary.startswith(t("summary_title", "am"))
+    assert "White, ቁጥር 42 × 1 — 5,000 ብር" in summary
+    assert t("summary_total", "am", total="5,000 ብር") in summary
+    assert t("summary_pickup", "am") in summary
+    assert t("summary_confirm", "am") in summary
+
+    # "yes" typed in English letters doesn't switch the language.
+    world.script(call("confirm_order"), text("እናመሰግናለን!"))
+    await world.say("yes")
+    payment = world.telegram.to(CUSTOMER)[-1]
+    assert payment.startswith("✅ ትዕዛዝ #")
+    assert t("order_holding", "am", minutes=5) in payment
+    assert t("how_to_pay", "am") in payment and PAYMENT_TEXT in payment  # store's own text as written
+    assert t("after_paying", "am") in payment
+    # Staff alerts stay in English.
+    assert world.telegram.to(STAFF_CHAT)[0].startswith("🛒 New order")
+
+
+async def test_amharic_photo_reply():
+    world = World()
+    world.script(text("ሰላም! ምን ልርዳዎት?"))
+    await world.say("ሰላም")
+    await world.send_photo()
+    assert world.telegram.to(CUSTOMER)[-1] == t("photo_reply", "am")
+
+
 async def test_the_same_draft_always_gives_the_same_order():
     world = World()
     await _up_to_summary(world)
@@ -427,7 +461,7 @@ async def test_payment_screenshot_gets_a_fixed_reply_and_goes_to_staff():
     # Our code answers, not the AI (it can't see the photo).
     assert len(world.llm.requests) == calls_before
     reply = world.telegram.to(CUSTOMER)[-1]
-    assert reply == PHOTO_REPLY
+    assert reply == t("photo_reply", "en")
     # It must never claim the payment arrived or is confirmed.
     for claim in ("ክፍያዎ ደርሷል", "payment received", "payment was received", "confirmed"):
         assert claim not in reply.lower()
@@ -441,7 +475,7 @@ async def test_photo_without_an_order_also_goes_to_staff():
     world = World()
     await world.send_photo()
     assert world.llm.requests == []
-    assert world.telegram.to(CUSTOMER) == [PHOTO_REPLY]
+    assert world.telegram.to(CUSTOMER) == [t("photo_reply", "en")]
     assert "sent a photo" in world.telegram.to(STAFF_CHAT)[0]
     assert world.conversation.bot_paused
 
@@ -469,7 +503,7 @@ async def test_round_limit_hands_over_to_staff():
     world.script(*[call("check_stock", f"c{i}", query="shoes") for i in range(MAX_TOOL_ROUNDS + 3)])
     await world.say("hi")
     assert len(world.llm.requests) == MAX_TOOL_ROUNDS
-    assert world.telegram.to(CUSTOMER) == [STUCK_REPLY]
+    assert world.telegram.to(CUSTOMER) == [t("stuck_reply", "en")]
     assert "could not finish" in world.telegram.to(STAFF_CHAT)[0]
     assert world.conversation.bot_paused
 

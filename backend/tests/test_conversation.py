@@ -12,7 +12,8 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.agents.orchestrator import FALLBACK_REPLY, Orchestrator
+from app.agents.messages import both, t
+from app.agents.orchestrator import Orchestrator
 from app.api.v1.webhook import SECRET_HEADER, get_db, get_orchestrator
 from app.main import app
 from app.models.schemas import ChatMessage, Customer, DraftItem, OrderDraft, Store
@@ -330,7 +331,8 @@ async def test_failure_is_retried_then_customer_and_staff_told():
     item = next(iter(store.inbox.values()))
     assert (item.status, item.attempts) == ("failed", MAX_ATTEMPTS)
     assert "DatabaseUnavailableError" in item.last_error
-    assert telegram.texts_to(CUSTOMER) == [FALLBACK_REPLY]
+    # "hi" doesn't tell the language, so the apology comes in both.
+    assert telegram.texts_to(CUSTOMER) == [both("fallback_reply")]
     assert "could not answer a customer" in telegram.texts_to(STAFF_CHAT)[0]
 
 
@@ -451,3 +453,12 @@ def test_webhook_does_not_store_ignored_updates(client):
     group = _update(8, "hi", chat={"id": -100123, "type": "supergroup"})
     assert _post(http, group).status_code == 200
     assert store.inbox == {}
+
+
+async def test_failure_apology_is_in_the_customers_language():
+    db = FakeDb(customer_error=DatabaseUnavailableError("database_unavailable"))
+    orchestrator, store, telegram = _world(db=db)
+    await _message(orchestrator, _update(1, "ጫማ አላችሁ?"))
+    for _ in range(MAX_ATTEMPTS - 1):
+        await orchestrator.process_customer(STORE, CUSTOMER)
+    assert telegram.texts_to(CUSTOMER) == [t("fallback_reply", "am")]

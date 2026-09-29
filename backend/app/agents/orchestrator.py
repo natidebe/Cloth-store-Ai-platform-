@@ -24,6 +24,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
 
+from app.agents.messages import Language, both, detect_language, message_language, t
 from app.agents.prompts import build_system_prompt
 from app.agents.tools import (
     TOOL_DEFINITIONS,
@@ -59,11 +60,6 @@ from app.utils.logging import log_context
 
 logger = logging.getLogger(__name__)
 
-FALLBACK_REPLY = (
-    "Sorry, something went wrong on our side. Our team has been notified "
-    "and will reply to you soon."
-)
-
 # Recovery sweep timing.
 RECOVERY_INTERVAL_SECONDS = 60
 # A waiting row older than this was missed (or is due for a retry). Normal
@@ -84,14 +80,8 @@ MAX_VERSION_RETRIES = 3
 # Safety limit on AI calls per run (each round: one AI call + its tools),
 # so a confused AI can't run up costs.
 MAX_TOOL_ROUNDS = 5
-STUCK_REPLY = "Let me get a team member to help you with this. They'll reply here soon."
-# Sent (by our code, not the AI) when a customer sends a photo. Deliberately
-# says nothing about the payment: only staff can confirm a payment.
-PHOTO_REPLY = (
-    "ፎቶዎን ተቀብለናል 🙏 የቡድናችን አባል አይቶ በቅርቡ እዚህ ይመልስልዎታል።\n"
-    "We received your photo 🙏 A team member will check it and reply here soon."
-)
-EMPTY_REPLY = "Sorry, could you say that again?"
+# The fixed replies (photo, stuck, empty, fallback) are in messages.py, in
+# Amharic and English.
 
 
 @dataclass
@@ -190,6 +180,9 @@ class Orchestrator:
             return
 
         telegram_id, chat_id = messages[-1].telegram_id, messages[-1].chat_id
+        # For the fallback message only; the run itself also looks at history.
+        fallback_language = next(
+            (lang for lang in (message_language(m.text) for m in reversed(messages)) if lang), None)
         logger.info("handling messages", extra={"count": len(messages),
                                                 "update_ids": ",".join(str(m.update_id) for m in messages)})
         try:
@@ -207,10 +200,11 @@ class Orchestrator:
                 logger.warning("reply not delivered", extra={"error": error.description, "status": error.status})
                 await self.conversations.finish_inbox(store.id, ids)
             else:
-                await self._fail(store, items, chat_id, f"telegram: {error.description}")
+                await self._fail(store, items, chat_id, f"telegram: {error.description}", fallback_language)
         except Exception as error:
             logger.exception("handling failed")
-            await self._fail(store, items, chat_id, f"{type(error).__name__}: {error}")
+            await self._fail(store, items, chat_id, f"{type(error).__name__}: {error}",
+                             fallback_language)
 
     async def _run(
         self, store: Store, customer: Customer, chat_id: int, messages: list[IncomingMessage]
@@ -241,9 +235,13 @@ class Orchestrator:
             history = await self.conversations.get_recent_messages(
                 store.id, conversation.id, HISTORY_LIMIT, since=history_since(now)
             )
+            language = detect_language(
+                (m.content for m in reversed(history) if m.role == "customer"),
+                messages[-1].language_code,
+            )
             ctx = ToolContext(store=store, customer=customer, conversation=conversation,
                               new_messages=messages, chat_id=chat_id, db=self.db,
-                              telegram=self.telegram, products=products)
+                              telegram=self.telegram, products=products, language=language)
             if any(m.kind == "photo" for m in messages):
                 reply = await self._photo_reply(ctx)
             else:
@@ -260,7 +258,7 @@ class Orchestrator:
 
             replies = ([reply] if reply else []) + ctx.after_reply
             if not replies and not ctx.sent:
-                replies = [EMPTY_REPLY]
+                replies = [t("empty_reply", ctx.language)]
             await self.conversations.add_messages(
                 store.id, conversation.id,
                 [ChatMessage(role="assistant", content=text) for text in ctx.sent + replies],
@@ -283,7 +281,7 @@ class Orchestrator:
         await escalate_to_staff(EscalateArgs(
             reason="customer sent a photo (check it, e.g. a payment screenshot)", summary=summary,
         ), ctx)
-        return PHOTO_REPLY
+        return t("photo_reply", ctx.language)
 
     async def _agent_reply(self, ctx: ToolContext, history: list[ChatMessage]) -> str | None:
         """The agent loop. Returns the AI's final text (None if it had nothing to add)."""
@@ -310,7 +308,7 @@ class Orchestrator:
             reason="the assistant could not finish answering",
             summary=f"Last customer message: {last_text[:500]}",
         ), ctx)
-        return STUCK_REPLY
+        return t("stuck_reply", ctx.language)
 
     async def _send(self, store: Store, chat_id: int, text: str) -> None:
         await self.telegram.send_message(store.telegram_bot_token.get_secret_value(), chat_id, text)
@@ -323,7 +321,8 @@ class Orchestrator:
         except TelegramError as error:
             logger.error("staff alert not delivered", extra={"error": error.description})
 
-    async def _fail(self, store: Store, items: list[InboxItem], chat_id: int, error: str) -> None:
+    async def _fail(self, store: Store, items: list[InboxItem], chat_id: int, error: str,
+                    language: Language | None = None) -> None:
         """Put the rows back for a retry, or give up after MAX_ATTEMPTS."""
         try:
             released = await self.conversations.release_inbox(
@@ -341,7 +340,8 @@ class Orchestrator:
 
         logger.error("giving up on messages", extra={"error": error, "attempts": failed[0].attempts})
         try:
-            await self._send(store, chat_id, FALLBACK_REPLY)
+            await self._send(store, chat_id, t("fallback_reply", language) if language
+                             else both("fallback_reply"))
         except TelegramError as send_error:
             logger.error("fallback not delivered", extra={"error": send_error.description})
         try:

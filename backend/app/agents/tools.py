@@ -38,6 +38,7 @@ from app.models.schemas import (
     Store,
     VariantMatch,
 )
+from app.agents.messages import Language, format_price, t
 from app.services.conversation_service import utc_now
 from app.services.llm_service import ToolCall, ToolDefinition
 from app.services.supabase_service import (
@@ -57,8 +58,6 @@ LOW_STOCK_THRESHOLD = 3
 MAX_QUANTITY_PER_ITEM = 10
 MAX_SEARCH_RESULTS = 10
 
-DEFAULT_PAYMENT_TEXT = "Our team will send you the payment details shortly."
-
 
 # ---------------------------------------------------------------------------
 # What a tool can see and change during one run
@@ -74,6 +73,7 @@ class ToolContext:
     db: SupabaseService
     telegram: TelegramService
     products: list[Product] = field(default_factory=list)  # the store's product names
+    language: Language = "en"  # the customer's language, for messages our code writes
     # Filled in by tools, used by the orchestrator:
     sent: list[str] = field(default_factory=list)  # already sent to the customer (the summary)
     after_reply: list[str] = field(default_factory=list)  # to send after the AI's reply
@@ -84,14 +84,6 @@ class ToolContext:
 # Formatting
 # ---------------------------------------------------------------------------
 
-def format_price(price: Decimal | None) -> str:
-    if price is None:
-        return "price not set"
-    if price == price.to_integral_value():
-        return f"{price:,.0f} ETB"
-    return f"{price:,.2f} ETB"
-
-
 def availability(variant: VariantMatch) -> str:
     if variant.available <= 0:
         return "sold out"
@@ -100,14 +92,15 @@ def availability(variant: VariantMatch) -> str:
     return "in stock"
 
 
-def describe(variant: VariantMatch) -> str:
-    """E.g. "Air Force 1 (Nike), White, size 42"."""
+def describe(variant: VariantMatch, language: Language = "en") -> str:
+    """E.g. "Air Force 1 (Nike), White, size 42" / "…, White, ቁጥር 42".
+    Product names and colors are shown as the store wrote them."""
     name = variant.product_name + (f" ({variant.brand})" if variant.brand else "")
     parts = [name]
     if variant.color:
         parts.append(variant.color)
     if variant.size:
-        parts.append(f"size {variant.size}")
+        parts.append(t("size", language, size=variant.size))
     return ", ".join(parts)
 
 
@@ -116,31 +109,36 @@ def order_number(order_id: UUID) -> str:
     return str(order_id)[:8].upper()
 
 
-def build_summary(draft: OrderDraft, variants: dict[UUID, VariantMatch]) -> str:
-    lines = ["🧾 Order summary"]
+def build_summary(draft: OrderDraft, variants: dict[UUID, VariantMatch],
+                  language: Language = "en") -> str:
+    lines = [t("summary_title", language)]
     total = Decimal(0)
     for item in draft.items:
-        price = variants[item.variant_id].price or Decimal(0)
+        variant = variants[item.variant_id]
+        price = variant.price or Decimal(0)
         total += price * item.quantity
-        lines.append(f"• {item.description} × {item.quantity} — {format_price(price * item.quantity)}")
-    lines.append(f"Total: {format_price(total)}")
-    lines.append(f"Name: {draft.contact_name}")
-    lines.append(f"Phone: {draft.contact_phone}")
+        lines.append(f"• {describe(variant, language)} × {item.quantity} — "
+                     f"{format_price(price * item.quantity, language)}")
+    lines.append(t("summary_total", language, total=format_price(total, language)))
+    lines.append(t("summary_name", language, name=draft.contact_name))
+    lines.append(t("summary_phone", language, phone=draft.contact_phone))
     if draft.fulfillment_method == "delivery":
-        lines.append(f"Delivery to: {draft.delivery_address}")
+        lines.append(t("summary_delivery", language, address=draft.delivery_address))
     else:
-        lines.append("Pickup at the store")
+        lines.append(t("summary_pickup", language))
     lines.append("")
-    lines.append('Reply "yes" (አዎ) to confirm, or tell me what to change.')
+    lines.append(t("summary_confirm", language))
     return "\n".join(lines)
 
 
-def payment_message(store: Store, order: OrderWithItems) -> str:
+def payment_message(store: Store, order: OrderWithItems, language: Language = "en") -> str:
+    total = format_price(order.total_price, language)
     return (
-        f"✅ Order #{order_number(order.id)} is placed. Total: {format_price(order.total_price)}.\n"
-        f"We're holding your items for {ORDER_HOLD_MINUTES} minutes.\n\n"
-        f"How to pay:\n{store.payment_instructions or DEFAULT_PAYMENT_TEXT}\n\n"
-        "After paying, please send a screenshot of the payment here."
+        f"{t('order_placed', language, number=order_number(order.id), total=total)}\n"
+        f"{t('order_holding', language, minutes=ORDER_HOLD_MINUTES)}\n\n"
+        f"{t('how_to_pay', language)}\n"
+        f"{store.payment_instructions or t('payment_default', language)}\n\n"
+        f"{t('after_paying', language)}"
     )
 
 
@@ -374,7 +372,7 @@ async def confirm_order(args: NoArgs, ctx: ToolContext) -> dict[str, Any]:
         return {"error": "The order can't be placed as it is.", "problems": problems,
                 "instruction": "Tell the customer and offer alternatives (use check_stock)."}
 
-    summary = build_summary(draft, variants)
+    summary = build_summary(draft, variants, ctx.language)
     message_id = await ctx.telegram.send_message(
         ctx.store.telegram_bot_token.get_secret_value(), ctx.chat_id, summary
     )
@@ -412,7 +410,7 @@ async def _place_order(ctx: ToolContext) -> dict[str, Any]:
     # Start a fresh draft. The revision keeps counting up so the next
     # order's idempotency key is different.
     ctx.conversation.order_draft = OrderDraft(revision=draft.revision + 1, last_order_id=order_id)
-    ctx.after_reply.append(payment_message(ctx.store, order))
+    ctx.after_reply.append(payment_message(ctx.store, order, ctx.language))
     ctx.staff_alerts.append(new_order_alert(ctx.customer, order))
     try:  # remember the contact details for next time
         await ctx.db.update_customer(ctx.store.id, ctx.customer.id, name=draft.contact_name,

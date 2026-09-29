@@ -387,7 +387,7 @@ one order; ask for a discount and see it passed to staff, not granted.
 
 ---
 
-### Phase 8b — Messages in the customer's language
+### Phase 8b — Messages in the customer's language 🟡 Built; waiting for my Amharic review and a Telegram check
 
 **Goal:** everything the customer receives is in their language.
 
@@ -397,7 +397,12 @@ our code are English only: the order summary, the payment message ("Order
 Amharic conversation got an English summary and payment message.
 
 - Detect the customer's language from their recent messages (Amharic
-  script, or Telegram's language setting) and store it on the conversation.
+  script, common Amharic words in Latin letters, or Telegram's language
+  setting). Worked out from the conversation history on every message
+  instead of stored, so no migration is needed. Short neutral replies
+  ("yes", "ok", a phone number) keep the earlier language.
+- All fixed texts are in one file, `backend/app/agents/messages.py`, so
+  translations are easy to correct.
 - Amharic and English versions of every fixed message (summary, payment
   message, photo reply, fallback, "already placed", …), written and checked
   by a person who speaks Amharic.
