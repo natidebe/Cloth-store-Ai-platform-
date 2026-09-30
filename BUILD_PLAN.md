@@ -781,8 +781,8 @@ Supabase (store row + bot token + my user in `store_staff` as owner).
 2. Restart the server and run `python -m scripts.connect_store "Selam Shoes"`
    once (saves the bot's id: one store per bot).
 3. Test through `http://localhost:8000/docs`: get a login token with
-   `python -m scripts.login_token you@example.com` and put `Bearer <token>`
-   in the `authorization` field.
+   `python -m scripts.login_token you@example.com`, click "Authorize" in
+   `/docs` and paste it.
 
 ---
 

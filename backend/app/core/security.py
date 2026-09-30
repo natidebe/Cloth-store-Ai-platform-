@@ -5,8 +5,20 @@
 - Dashboard (admin endpoints): the staff member's Supabase login token in
   `Authorization: Bearer <token>`. It is checked with Supabase, and the user
   must be staff of the store in the URL (see api/v1/admin.py).
+
+The login is declared as a Bearer security scheme, so /docs has an
+"Authorize" button. (Swagger UI never sends a header *parameter* named
+Authorization, so a plain Header(...) can't be tried there.)
 """
 import hmac
+
+from fastapi import Depends
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+_bearer = HTTPBearer(
+    auto_error=False,  # we answer 401 ourselves, with a clear message
+    description="The dashboard user's Supabase login token (scripts/login_token.py prints one).",
+)
 
 
 def verify_telegram_secret(received: str | None, expected: str | None) -> bool:
@@ -15,11 +27,9 @@ def verify_telegram_secret(received: str | None, expected: str | None) -> bool:
     return hmac.compare_digest(received, expected)
 
 
-def bearer_token(authorization: str | None) -> str | None:
+async def login_token(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> str | None:
     """The token from an "Authorization: Bearer <token>" header, if any."""
-    if not authorization:
-        return None
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token.strip():
-        return None
-    return token.strip()
+    token = credentials.credentials.strip() if credentials else ""
+    return token or None

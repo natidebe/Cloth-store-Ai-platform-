@@ -8,14 +8,14 @@ in the URL: a staff member of another store is refused.
 from decimal import Decimal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.agents.catalog import Catalog
 from app.agents.orchestrator import Orchestrator
 from app.api.v1.catalog import get_catalog
 from app.api.v1.webhook import get_db, get_orchestrator
-from app.core.security import bearer_token
+from app.core.security import login_token
 from app.models.schemas import Store
 from app.services.supabase_service import SupabaseService
 
@@ -24,12 +24,11 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 async def require_staff(
     store_id: UUID,
-    authorization: str | None = Header(default=None),
+    token: str | None = Depends(login_token),
     db: SupabaseService = Depends(get_db),
 ) -> UUID:
     """The logged-in staff member's user id. 401 without a valid login,
     403 if the user isn't staff of this store."""
-    token = bearer_token(authorization)
     if token is None:
         raise HTTPException(status_code=401, detail="login required (Authorization: Bearer <token>)")
     user_id = await db.verify_staff(store_id, token)

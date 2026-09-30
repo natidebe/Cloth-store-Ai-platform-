@@ -5,9 +5,9 @@ Run from the backend folder, with the virtual environment active:
     python -m scripts.login_token you@example.com
 
 It asks for the password (not shown while typing) and prints a Supabase
-access token. In http://localhost:8000/docs, open an endpoint, click
-"Try it out", and fill the `authorization` field with:  Bearer <token>
-It expires after about an hour.
+access token. In http://localhost:8000/docs, click "Authorize" (top right),
+paste the token (without "Bearer"), and click Authorize. It expires after
+about an hour: then run this again.
 
 No account yet? Create one in Supabase: Authentication -> Users -> Add user
 (tick "Auto Confirm User").

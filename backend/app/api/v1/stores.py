@@ -15,14 +15,14 @@ only need a login; the rest need the user to be the store's OWNER.
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
 from app.agents.onboarding import LINK_COMMAND, BotConnection, Onboarding, OnboardingError
 from app.agents.orchestrator import Orchestrator
 from app.api.v1.webhook import get_db, get_orchestrator
 from app.core.config import get_settings
-from app.core.security import bearer_token
+from app.core.security import login_token
 from app.models.schemas import AuthUser, Store, StoreMembership
 from app.services.supabase_service import SupabaseService
 
@@ -32,11 +32,10 @@ router = APIRouter(tags=["stores"])
 # --- Who is calling ----------------------------------------------------------------
 
 async def current_user(
-    authorization: str | None = Header(default=None),
+    token: str | None = Depends(login_token),
     db: SupabaseService = Depends(get_db),
 ) -> AuthUser:
     """The logged-in user. 401 without a valid login."""
-    token = bearer_token(authorization)
     user = await db.get_user(token) if token else None
     if user is None:
         raise HTTPException(status_code=401, detail="login required (Authorization: Bearer <token>)")
