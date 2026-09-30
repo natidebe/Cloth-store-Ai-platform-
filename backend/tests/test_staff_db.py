@@ -13,7 +13,7 @@ import pytest
 from app.core.config import get_settings
 from app.models.schemas import DraftItem, OrderDraft, StaffMessage
 from app.services.conversation_service import utc_now
-from app.services.supabase_service import DatabaseError, SupabaseService
+from app.services.supabase_service import DatabaseError, DatabaseUnavailableError, SupabaseService
 
 _settings = get_settings()
 _configured = bool(
@@ -47,6 +47,9 @@ async def world(anyio_backend):
                                        _settings.supabase_service_role_key.get_secret_value())
     try:
         await db._run(db._db.table("staff_messages").select("id").limit(1))
+    except DatabaseUnavailableError:
+        await db.close()
+        raise  # Supabase unreachable: a real failure, not "not migrated"
     except DatabaseError:
         await db.close()
         pytest.skip("migration 006_staff_handover.sql has not been run yet")

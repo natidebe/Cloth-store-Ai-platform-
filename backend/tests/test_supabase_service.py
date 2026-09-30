@@ -152,6 +152,26 @@ async def test_search_by_color_and_size_uses_database_price(world):
     assert not hasattr(match, "cost_price")
 
 
+async def test_catalog_for_the_order_flow(world):
+    # Phase 8c: category buttons, product buttons, and a product's sizes/colors.
+    service = world["service"]
+    assert await service.list_categories(world["store_a"]) == ["sneakers"]
+    products = await service.list_products_in_stock(world["store_a"], "sneakers")
+    assert [p.name for p in products] == ["Air Force 1"]
+    assert await service.list_products_in_stock(world["store_a"], "clothing") == []
+
+    variants = await service.get_product_variants(world["store_a"], products[0].id)
+    assert len(variants) == 5  # all of them, sold-out ones included (the flow filters)
+    sold_out = next(v for v in variants if (v.color, v.size) == ("White", "43"))
+    assert sold_out.available == 0
+    assert all(v.price is not None for v in variants)
+
+    # Store B has its own "Air Force 1": it never shows up for store A, and
+    # store A's product can't be read through store B.
+    assert [p.name for p in await service.list_products_in_stock(world["store_b"])] == ["Air Force 1"]
+    assert await service.get_product_variants(world["store_b"], products[0].id) == []
+
+
 async def test_search_shows_sold_out_and_base_price(world):
     results = await world["service"].search_variants(world["store_a"], "sneakers", color="white", size="43")
     assert len(results) == 1

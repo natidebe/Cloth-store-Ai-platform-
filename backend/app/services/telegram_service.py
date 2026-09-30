@@ -26,9 +26,15 @@ def _cut(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def _keyboard(buttons: list[tuple[str, str]]) -> dict[str, Any]:
-    """Buttons under a message, one per row."""
-    return {"inline_keyboard": [[{"text": label, "callback_data": data}] for label, data in buttons]}
+Button = tuple[str, str]  # (label, data)
+
+
+def _keyboard(buttons: list[Button | list[Button]]) -> dict[str, Any]:
+    """Buttons under a message. A (label, data) pair gets its own row; a
+    list of pairs is one row (e.g. sizes side by side)."""
+    rows = [row if isinstance(row, list) else [row] for row in buttons]
+    return {"inline_keyboard": [[{"text": label, "callback_data": data} for label, data in row]
+                                for row in rows]}
 
 
 class TelegramError(Exception):
@@ -46,7 +52,28 @@ def parse_update(store_id: UUID, update: TelegramUpdate) -> IncomingMessage | No
 
     Returns None for anything the bot should ignore: edited messages,
     messages from groups or channels, and messages from other bots.
+    A customer tapping one of the bot's buttons becomes kind "button".
     """
+    press = update.callback_query
+    if press is not None:
+        chat_message = press.message
+        if chat_message is None or chat_message.chat.type != "private" or not press.data:
+            return None  # staff-group buttons are handled by staff.py
+        return IncomingMessage(
+            store_id=store_id,
+            update_id=update.update_id,
+            chat_id=chat_message.chat.id,
+            message_id=chat_message.message_id,
+            telegram_id=press.from_user.id,
+            customer_name=press.from_user.full_name,
+            customer_username=press.from_user.username,
+            language_code=press.from_user.language_code,
+            kind="button",
+            button_data=press.data,
+            callback_id=press.id,
+            sent_at=chat_message.date,
+        )
+
     message = update.message
     if message is None or message.chat.type != "private":
         return None
@@ -74,6 +101,7 @@ def parse_update(store_id: UUID, update: TelegramUpdate) -> IncomingMessage | No
         message_id=message.message_id,
         telegram_id=sender.id,
         customer_name=sender.full_name,
+        customer_username=sender.username,
         language_code=sender.language_code,
         kind=kind,
         text=text,
@@ -117,7 +145,7 @@ class TelegramService:
         chat_id: int,
         text: str,
         *,
-        buttons: list[tuple[str, str]] | None = None,
+        buttons: list[Button | list[Button]] | None = None,
         reply_to: int | None = None,
     ) -> int | None:
         """Send a text message. Returns its Telegram message id.

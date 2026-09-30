@@ -15,8 +15,12 @@ sends a message, this is what happens:
    the background so Telegram isn't kept waiting.
 3. **We load the conversation** so far and check live stock and prices in
    Supabase.
-4. **We ask the AI model** what to do. It can reply, save an order, or pass
-   the customer to the store's staff.
+4. **The scripted order flow** (Phase 8c, D28/D29) asks the next fixed
+   question with buttons, in the language the customer chose: product,
+   color, size, quantity, delivery or pickup, contact, confirm. Delivery
+   orders then go to the store's staff, who arrange address and payment.
+   The AI only helps when the customer goes off script (several answers at
+   once, a side question); haggling and complaints go to the store's staff.
 5. **We send the reply** back to the customer on Telegram.
 
 One backend serves many stores, so keeping each store's data separate is
@@ -414,6 +418,153 @@ Amharic; the same order in English gets them in English.
 
 ---
 
+### Phase 8c — Scripted order flow ✅ Built (decision D28); waiting for my Telegram test
+
+**Goal:** a predictable, button-driven order conversation instead of the AI
+driving the whole chat. Cheaper (most messages need no AI call), and the
+customer always knows what to answer.
+
+**The steps** (a per-chat state machine; the step is saved in
+`conversations.order_draft` together with the answers, under the version
+check, so no migration was needed). Updated by D29:
+
+0. `choose_language` — asked the first time only: [አማርኛ] [English]. The
+   choice is remembered and used for everything the bot says; a
+   🌐 ቋንቋ / Language button on the first question switches it.
+1. `ask_product` — category buttons (categories with stock), then product
+   buttons if a category or search has several products; or the customer
+   types a name or nickname. Photos of products aren't read (D28).
+2. `ask_color` — only colors in stock, with the price from the database.
+3. `ask_size` — only sizes in stock for that color (minus other orders'
+   holds, D19).
+4. `ask_quantity` — 1 up to what's available (at most 5 buttons).
+5. `ask_delivery` — delivery or pickup (no address question: for delivery,
+   staff arrange the address by phone).
+6. `ask_name`, `ask_phone` — skipped for a customer we already know.
+7. `confirm` — summary (prices from the database) with ✅ Confirm and
+   ✏️ Edit; Edit goes back to any step and keeps the other answers.
+8. **Pickup:** the order is placed (D3, D19, D24), the store's payment
+   instructions are sent, and a screenshot goes to staff (Phase 9).
+   **Delivery (D29):** the order is placed with the address "to be
+   arranged" (5-minute hold like pickup), the customer is told staff will
+   call on their phone, and the chat is handed to staff with the order,
+   phone and @username, and the Confirm payment / Hand back buttons.
+
+The next step is always "the first answer still missing", so skipping ahead
+and editing need no special cases. A step with only one possible answer (one
+size, one color) is filled in automatically. Every step has 🔄 Start over.
+
+**Free text and the AI:** typed text that answers the current step ("42",
+"ጥቁር", "2", "pickup", a phone number) is used directly by code. Otherwise one
+AI call (`interpreter.py`) says what the customer meant: several answers at
+once (then the flow skips to the first missing step), a side question
+(answered briefly, then the step's question again), "where is my order?"
+(answered from the database), start over, or a hand-over to staff
+(haggling, complaints, "I paid", anything unclear). Everything the AI
+extracts is checked against the database; prices and stock never come
+from the AI.
+
+**What changed:** new `app/agents/flow.py` (the state machine) and
+`app/agents/interpreter.py`; the old agent loop and the AI's tools were
+removed (`tools.py` keeps the shared helpers: summary, payment message,
+placing the order, hand-over). Every question and button label is in
+`app/agents/messages.py` (English and Amharic), with a hook for per-store
+texts later. Customer button taps go through the inbox like messages.
+
+**Check:** a full order in Telegram with only buttons; the same with typed
+answers; "AF1 size 42 black" jumps to the quantity; "does it run small?"
+gets an answer and the question again; "last price 4000?" goes to staff;
+Edit at the summary; Start over; the whole chat in Amharic.
+
+---
+
+### Phase 8d — Channel catalog and dashboard publishing (planned; D30–D34)
+
+**Goal:** customers see real products (photos, colors, sizes, description)
+in the store's Telegram channel and order with one tap. Especially for
+clothing, where a name alone isn't enough to choose.
+
+**Why:** shoes are easy to picture from a name ("Air Force 1, white");
+clothes aren't ("Basic T-Shirt"). Ethiopian shops already sell through
+Telegram channels, so the channel becomes the catalog and the bot takes the
+order.
+
+**How products get in (D30): the dashboard, not a chatbot.**
+- The store owner or staff (D35) add a product in the dashboard (my
+  teammate's web app): name, category, brand, price, description, one photo
+  (D36, uploaded to Supabase Storage), and a color × size grid with the
+  stock of each. The product code is generated automatically (D40).
+- Saving a new product posts it to the channel automatically (D37): the
+  dashboard asks the backend to post it. Only the backend holds the bot
+  token, so the dashboard never talks to Telegram itself:
+
+      dashboard -> POST /api/v1/admin/stores/{store}/products/{product}/publish
+                -> backend checks the staff login (Phase 9)
+                -> the store's bot posts photo(s) + caption + [🛒 Order]
+                -> the post's message id is saved on the product
+
+- Later, optionally: open the dashboard's product screens as a Telegram
+  Mini App (the same web app inside Telegram), and a few quick chat
+  commands for the owner (e.g. mark something sold at the counter).
+
+**The channel (D31):** one channel per store; the store's sales bot is
+added as an admin (post and edit messages); the channel id is saved on the
+store. Works with a new channel or one the store already has; old
+hand-made posts are left as they are (D38).
+
+**Keeping posts honest (D39):** when stock or the price changes, the
+backend edits the post ("XL sold out", new price, "SOLD OUT"). Supabase
+database webhooks tell the backend about every product or variant change,
+whoever made it (dashboard, payments, Table Editor); quick changes are
+grouped into one post edit, and 5-minute holds are ignored so posts don't
+flicker. The minute sweep also compares posts with the database and fixes
+any that are out of date, in case a webhook was missed (they aren't
+retried).
+
+**Ordering from the channel:**
+- The **[🛒 Order]** button is a link to the sales bot that carries the
+  product code: `https://t.me/<store bot>?start=p_<code>`. The bot gets
+  `/start p_<code>` and opens the scripted flow (Phase 8c) directly on that
+  product, at the color step, showing the product's photo.
+- A customer who hasn't chosen a language yet is asked first; the product
+  is remembered and the flow continues with it afterwards.
+- **Forwarding a channel post** to the bot works the same way (Telegram says
+  which channel and which post it came from). Typing the product code works
+  too. A screenshot still goes to staff (the bot doesn't read images).
+- **Cart (D32):** tapping Order while an order is in progress **adds the
+  product to the same order**. Items already chosen stay in the cart; an
+  unfinished pick (e.g. a color chosen but no size yet) is replaced by the
+  new product. The order holds several items (D10): after the quantity step
+  the bot asks **[➕ Add another item] [➡️ Continue]**; the summary lists all
+  items with their database prices and a total; Edit can change or remove
+  one item. `place_order` already accepts several items.
+- **A handed-over chat (D33):** tapping Order while staff have the chat
+  takes it back: the bot starts the order, and the staff group gets a note
+  ("the customer started an order from the channel; the bot is answering
+  again").
+- **Sold out (D34):** a post for a product that's sold out gets "Sorry, X
+  is sold out" plus buttons for similar products (same category, in stock),
+  and Start over.
+
+**What to build (backend):**
+- Migration (next number): `products.code` (unique per store),
+  photos per product and per color (Supabase Storage paths), `stores.channel_id`,
+  and a `product_posts` table (product, channel, message id) so forwarded
+  posts can be recognised and posts edited later.
+- Endpoints (staff login): publish a product, update its post, remove it.
+- The sales bot: `/start p_<code>`, forwarded posts, product codes, the
+  cart, and "similar products" when sold out.
+- For the dashboard (my teammate): the product form with the color × size
+  stock grid, photo upload, and the Publish button.
+
+**Check:** add a product with two colors and three sizes in the dashboard,
+publish it, see the post in the channel with photos and [🛒 Order]; tap it
+and finish an order; tap Order on a second post mid-order and get both
+items in one summary; sell out a size and see the post update; tap Order on
+a sold-out post and get similar products.
+
+---
+
 ### Phase 9 — Handing over to staff 🟡 Built; waiting for migration 006 and my Telegram test
 
 **Goal:** staff can take over smoothly when the bot can't help.
@@ -591,11 +742,26 @@ Answer each before the phase listed, and record the answer here.
 | D25 | How do staff reply to a customer during a handover? | Phase 9 | With Telegram's Reply on the bot's message about that customer in the staff group; the bot sends it to the customer and it's saved in the history |
 | D26 | How do staff confirm a payment before the dashboard exists? | Phase 9 | A "Confirm payment" button in the staff group (plus the login-protected endpoint for the dashboard) |
 | D27 | Who in the staff group may press the buttons and reply? | Phase 9 | Anyone in the staff group; we record who did it |
+| D28 | How should the bot chat: AI-driven, or a scripted step-by-step flow? | Phase 8c | A scripted flow with fixed questions and buttons (product → size → color → quantity → delivery/pickup (+ address) → name and phone (skipped if known) → confirm with Edit → payment). Typed answers to the current step are accepted; several answers at once are extracted by the AI and the flow skips ahead; side questions get a short AI answer and the question again; haggling, complaints and anything unclear go to staff. Every step has Start over. Questions live in one config (English and Amharic), shared by all stores for now, with a per-store override hook. Quantity is its own step. Photos of products aren't read (a photo after an order still goes to staff as a payment screenshot). Prices and stock always come from the database |
+| D29 | Language choice, step order, and delivery in Ethiopia | Phase 8c | (1) The customer chooses the language first (አማርኛ / English), once; it's remembered and used for every reply, with a button to change it. (2) Color is asked before size; sizes shown are those in stock for the chosen color. (3) Delivery orders are paid on delivery or half before, so after the summary the order is created (address to be arranged, 5-minute hold) and the chat is handed to staff, who call the customer (phone and @username in the alert). Pickup keeps the payment instructions and screenshot |
+| D30 | How do stores add products and post them? | Phase 8d | In the dashboard (web app): product form with photos and a color × size stock grid, and a Publish button that asks the backend to post it to the store's channel with the store's bot. No separate manager chatbot for now; the dashboard may later open inside Telegram as a Mini App |
+| D31 | Channel setup? | Phase 8d | One channel per store, with the store's sales bot as an admin (post and edit); the channel id is saved on the store |
+| D32 | Customer taps Order on a post while another order is in progress? | Phase 8d | Add it to the same order (a cart with several items). Items already chosen stay; an unfinished pick is replaced. After each item: Add another item / Continue |
+| D33 | Customer taps Order while staff have the chat (bot paused)? | Phase 8d | The bot takes the chat back and starts the order; the staff group is told |
+| D34 | Customer taps Order on a sold-out product? | Phase 8d | Say it's sold out and suggest similar products (same category, in stock) as buttons |
+| D35 | Who can add and edit products: only the owner, or staff too? | Phase 8d | Both owner and staff |
+| D36 | Photos: one per product, or one per color? | Phase 8d | One per product |
+| D37 | Does every new product post to the channel automatically, or does the owner choose (Publish / Save only)? | Phase 8d | Auto-post: every new product is posted to the channel |
+| D38 | Stores with an existing channel: leave old hand-made posts as they are (forwarded old posts go to staff), or ask owners to re-add products still in stock? | Phase 8d | Leave old posts as they are; only new bot posts are orderable (a forwarded old post goes to staff) |
+| D39 | Updating posts when stock or price changes: the dashboard calls the backend after saving, or Supabase database webhooks? | Phase 8d | Supabase database webhooks (they catch changes from anywhere: dashboard, payments, Table Editor, future tools), plus a periodic check in the minute sweep that fixes any post out of date (webhooks aren't retried). Changes are grouped into one post edit; 5-minute holds don't change posts |
+| D40 | Product code format (e.g. D12), chosen by the owner or generated? | Phase 8d | Generated automatically |
 
 ---
 
 ## 7. Where to start
 
-Phase 9 is built and tested. Next: I run `006_staff_handover.sql` in
-Supabase and test the staff group in Telegram, then **Phase 9b** (store
-onboarding; needs D14–D18) or **Phase 10** — no coding until I say "continue".
+Phase 8c (scripted order flow, D28/D29) is built and tested. Phase 8d
+(channel catalog and dashboard publishing) is planned and all its
+decisions (D30–D40) are made. Next: agree the dashboard side (product form,
+photo upload, colour × size stock grid) with my teammate — no coding until I
+say "continue".

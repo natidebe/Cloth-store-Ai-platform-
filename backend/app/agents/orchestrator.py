@@ -4,9 +4,9 @@ The flow for one customer (docs/backend-architecture.md, section 4):
 
     lock this customer -> wait 2 s for quick follow-ups -> claim their
     waiting inbox rows -> save the messages to history -> bot paused? stop
-    -> load recent history -> the agent loop (ask the AI, run the tools it
-    asks for, repeat) -> save the conversation (version check) -> save the
-    replies -> alert staff -> send the replies -> mark the rows done
+    -> load recent history -> the scripted order flow (flow.py) -> save the
+    conversation (version check) -> save the replies -> alert staff -> send
+    the replies -> mark the rows done
 
 Any failure puts the rows back for a retry; after MAX_ATTEMPTS the customer
 gets a polite message and staff are alerted.
@@ -14,28 +14,18 @@ gets a polite message and staff are alerted.
 The recovery sweep (at startup and every minute) picks up rows left behind
 by a crash or restart.
 
-The agent loop: the AI gets the instructions, the recent history, and the
-tools. It either answers, or asks for tools; we run them and send the
-results back, up to MAX_TOOL_ROUNDS times. If it still hasn't answered, the
-chat is handed to staff.
+The order flow (Phase 8c, D28) asks fixed questions step by step, with
+buttons; the AI only interprets messages that go off script.
 """
 import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
 
+from app.agents.flow import OrderFlow, Reply
 from app.agents.messages import Language, both, detect_language, message_language, t
-from app.agents.prompts import build_system_prompt
 from app.agents.staff import StaffDesk
-from app.agents.tools import (
-    TOOL_DEFINITIONS,
-    EscalateArgs,
-    StaffAlert,
-    ToolContext,
-    escalate_to_staff,
-    order_number,
-    run_tool,
-)
+from app.agents.tools import StaffAlert, ToolContext
 from app.models.schemas import (
     ChatMessage,
     Customer,
@@ -55,7 +45,7 @@ from app.services.conversation_service import (
     is_expired,
     utc_now,
 )
-from app.services.llm_service import LLMError, LLMMessage, LLMProvider
+from app.services.llm_service import LLMProvider
 from app.services.supabase_service import SupabaseService, VersionConflictError
 from app.services.telegram_service import TelegramError, TelegramService, parse_update
 from app.utils.logging import log_context
@@ -79,32 +69,21 @@ STARTUP_MARGIN = timedelta(minutes=1)
 # How many times to redo a run when the conversation was changed under us.
 MAX_VERSION_RETRIES = 3
 
-# Safety limit on AI calls per run (each round: one AI call + its tools),
-# so a confused AI can't run up costs.
-MAX_TOOL_ROUNDS = 5
-# The fixed replies (photo, stuck, empty, fallback) are in messages.py, in
-# Amharic and English.
+# Every text sent to customers is in messages.py, in Amharic and English.
 
 
 @dataclass
 class RunResult:
-    replies: list[str] = field(default_factory=list)  # to send to the customer, in order
+    replies: list[Reply] = field(default_factory=list)  # to send to the customer, in order
     staff_alerts: list[StaffAlert] = field(default_factory=list)
 
 
-def to_llm_message(message: ChatMessage) -> LLMMessage:
-    """A saved history message, as the AI sees it."""
-    if message.role == "customer":
-        if message.kind == "text":
-            return LLMMessage(role="user", content=message.content or "")
-        note = f"[The customer sent a {message.kind}]"
-        return LLMMessage(role="user", content=f"{note} {message.content}" if message.content else note)
-    if message.role == "staff":
-        return LLMMessage(role="assistant", content=f"(Written by our staff) {message.content or ''}")
-    return LLMMessage(role="assistant", content=message.content or "")
-
-
 def _to_chat_message(message: IncomingMessage) -> ChatMessage:
+    if message.kind == "button":
+        # History keeps which button was tapped (the messages table has no
+        # "button" kind). Short, so it never changes the detected language.
+        return ChatMessage(role="customer", kind="other", content=f"button {message.button_data}",
+                           update_id=message.update_id, telegram_message_id=message.message_id)
     return ChatMessage(
         role="customer",
         kind=message.kind,
@@ -133,6 +112,7 @@ class Orchestrator:
         locks: CustomerLocks | None = None,
         burst_wait: float = BURST_WAIT_SECONDS,
         staff: StaffDesk | None = None,
+        flow: OrderFlow | None = None,  # tests of the plumbing pass a simpler one
     ):
         self.db = db
         self.conversations = conversations
@@ -141,6 +121,7 @@ class Orchestrator:
         self.locks = locks or CustomerLocks()
         self.burst_wait = burst_wait
         self.staff = staff or StaffDesk(db, conversations, telegram)
+        self.flow = flow or OrderFlow(db, llm)
         self._tasks: set[asyncio.Task] = set()
 
     # --- Handling one customer ----------------------------------------------
@@ -189,6 +170,7 @@ class Orchestrator:
             (lang for lang in (message_language(m.text) for m in reversed(messages)) if lang), None)
         logger.info("handling messages", extra={"count": len(messages),
                                                 "update_ids": ",".join(str(m.update_id) for m in messages)})
+        await self._answer_taps(store, messages)
         try:
             customer = await self.db.get_or_create_customer(store.id, telegram_id, messages[-1].customer_name)
             result = await self._run(store, customer, chat_id, messages)
@@ -217,7 +199,6 @@ class Orchestrator:
         Returns the replies to send (none if the bot must stay silent)."""
         telegram_id = customer.telegram_id
         conversation = await self.conversations.get_or_create_conversation(store.id, telegram_id)
-        products = await self.db.list_products(store.id)  # for the AI's product-name list
         # Saved before anything else, so they're never lost even if the run
         # fails. Saving them again on a retry does nothing.
         await self.conversations.add_messages(
@@ -235,7 +216,7 @@ class Orchestrator:
                 return RunResult(staff_alerts=[
                     StaffAlert(
                         text=(f"💬 {customer.name or 'Customer'} (Telegram id {customer.telegram_id}):\n"
-                              f"{m.text or f'[{m.kind}]'}"),
+                              f"{m.text or f'[{m.kind}]' if m.kind != 'button' else '[tapped a button]'}"),
                         telegram_id=customer.telegram_id,
                         order_id=last_order if m.kind == "photo" else None,  # a screenshot?
                         photo_file_id=m.photo_file_id,
@@ -247,21 +228,20 @@ class Orchestrator:
             if is_expired(conversation, now):
                 logger.info("conversation expired; starting fresh")
                 # The revision keeps counting up (order idempotency keys use it).
-                conversation.order_draft = OrderDraft(revision=conversation.order_draft.revision + 1)
+                old = conversation.order_draft
+                conversation.order_draft = OrderDraft(revision=old.revision + 1, language=old.language)
             history = await self.conversations.get_recent_messages(
                 store.id, conversation.id, HISTORY_LIMIT, since=history_since(now)
             )
             language = detect_language(
-                (m.content for m in reversed(history) if m.role == "customer"),
+                # Button taps (kind "other") say nothing about the language.
+                (m.content for m in reversed(history) if m.role == "customer" and m.kind != "other"),
                 messages[-1].language_code,
             )
             ctx = ToolContext(store=store, customer=customer, conversation=conversation,
                               new_messages=messages, chat_id=chat_id, db=self.db,
-                              telegram=self.telegram, products=products, language=language)
-            if any(m.kind == "photo" for m in messages):
-                reply = await self._photo_reply(ctx)
-            else:
-                reply = await self._agent_reply(ctx, history)
+                              telegram=self.telegram, language=language)
+            replies = await self.flow.handle(ctx, history)
             conversation.last_message_at = now
 
             try:
@@ -272,63 +252,33 @@ class Orchestrator:
                 logger.info("conversation changed during run; retrying", extra={"attempt": attempt + 1})
                 continue
 
-            replies = ([reply] if reply else []) + ctx.after_reply
-            if not replies and not ctx.sent:
-                replies = [t("empty_reply", ctx.language)]
+            if not replies:
+                replies = [Reply(t("empty_reply", ctx.language, store))]
             await self.conversations.add_messages(
                 store.id, conversation.id,
-                [ChatMessage(role="assistant", content=text) for text in ctx.sent + replies],
+                [ChatMessage(role="assistant", content=reply.text) for reply in replies],
             )
             return RunResult(replies=replies, staff_alerts=ctx.staff_alerts)
 
         raise VersionConflictError("version_conflict", "conversation kept changing")
 
-    async def _photo_reply(self, ctx: ToolContext) -> str:
-        """A photo (often a payment screenshot) goes straight to staff, with a
-        fixed reply written by us, not the AI: the AI can't see the photo and
-        must never say a payment was received. Only staff confirm payments."""
-        last_order = ctx.conversation.order_draft.last_order_id
-        captions = [m.text for m in ctx.new_messages if m.kind == "photo" and m.text]
-        summary = "The customer sent a photo"
-        if last_order:
-            summary += f" after order #{order_number(last_order)} (maybe a payment screenshot)"
-        if captions:
-            summary += f". Caption: {' / '.join(captions)[:300]}"
-        await escalate_to_staff(EscalateArgs(
-            reason="customer sent a photo (check it, e.g. a payment screenshot)", summary=summary,
-        ), ctx)
-        return t("photo_reply", ctx.language)
-
-    async def _agent_reply(self, ctx: ToolContext, history: list[ChatMessage]) -> str | None:
-        """The agent loop. Returns the AI's final text (None if it had nothing to add)."""
-        if self.llm is None:
-            raise LLMError("AI provider not configured (check LLM_PROVIDER / LLM_API_KEY)")
-        messages = [to_llm_message(m) for m in history]
-        for _ in range(MAX_TOOL_ROUNDS):
-            # Rebuilt every round: it shows the order draft, which tools change.
-            system_prompt = build_system_prompt(ctx.store, ctx.customer, ctx.conversation.order_draft,
-                                                ctx.products)
-            response = await self.llm.complete(system_prompt, messages, TOOL_DEFINITIONS)
-            if not response.tool_calls:
-                return (response.text or "").strip() or None
-            messages.append(LLMMessage(role="assistant", content=response.text,
-                                       tool_calls=response.tool_calls))
-            for call in response.tool_calls:
-                result = await run_tool(call, ctx)
-                messages.append(LLMMessage(role="tool", tool_call_id=call.id, content=result))
-
-        # Still asking for tools after the limit: let a person take over.
-        logger.warning("agent reached the round limit; handing over to staff")
-        last_text = next((m.text for m in reversed(ctx.new_messages) if m.text), "(no text)")
-        await escalate_to_staff(EscalateArgs(
-            reason="the assistant could not finish answering",
-            summary=f"Last customer message: {last_text[:500]}",
-        ), ctx)
-        return t("stuck_reply", ctx.language)
-
-    async def _send(self, store: Store, chat_id: int, text: str) -> None:
-        await self.telegram.send_message(store.telegram_bot_token.get_secret_value(), chat_id, text)
+    async def _send(self, store: Store, chat_id: int, reply: Reply | str) -> None:
+        if isinstance(reply, str):
+            reply = Reply(reply)
+        await self.telegram.send_message(store.telegram_bot_token.get_secret_value(), chat_id,
+                                         reply.text, buttons=reply.buttons or None)
         logger.info("reply sent")
+
+    async def _answer_taps(self, store: Store, messages: list[IncomingMessage]) -> None:
+        """Answer the customer's button taps (Telegram shows a spinner on the
+        button until then). Best effort."""
+        token = store.telegram_bot_token.get_secret_value()
+        for message in messages:
+            if message.callback_id:
+                try:
+                    await self.telegram.answer_button(token, message.callback_id, "")
+                except TelegramError:
+                    pass  # an old tap can't be answered any more; that's fine
 
     async def _alert_staff(self, store: Store, alert: StaffAlert) -> None:
         """Best effort: a failed staff alert is logged, not retried."""

@@ -15,15 +15,14 @@ from app.api.v1.webhook import SECRET_HEADER, get_db, get_orchestrator
 from app.main import app
 from app.models.schemas import TelegramUpdate
 from app.services.conversation_service import utc_now
-from tests.test_agent import (
+from tests.test_flow import (
     AF1_WHITE_42,
     CUSTOMER,
     STAFF_CHAT,
     STORE,
     World,
-    _up_to_summary,
-    call,
-    text,
+    interp,
+    placed_order,
 )
 
 pytestmark = pytest.mark.anyio
@@ -71,11 +70,7 @@ def _button_answers(world: World):
 
 
 async def _placed_order(world: World):
-    await _up_to_summary(world)
-    world.script(call("confirm_order"), text("Thank you!"))
-    await world.say("yes")
-    [order] = world.db.orders.values()
-    return order
+    return await placed_order(world)
 
 
 # --- The payment screenshot ---------------------------------------------------
@@ -140,13 +135,15 @@ async def test_sold_out_payment_is_refused_and_nothing_changes():
 
 
 async def test_amharic_customer_gets_amharic_payment_confirmation():
-    world = World()
-    world.script(call("update_order_draft", items=[{"variant_id": str(AF1_WHITE_42), "quantity": 1}],
-                      contact_name="Abebe", contact_phone="0911223344", fulfillment_method="pickup"),
-                 call("confirm_order"), text("ያረጋግጡ።"))
-    await world.say("ነጩን ቁጥር 42 እወስዳለሁ፣ አበበ 0911223344 ከሱቁ")
-    world.script(call("confirm_order"), text("እናመሰግናለን!"))
-    await world.say("yes")
+    world = World(language="am")  # the customer chose Amharic (D29)
+    await world.say("ኤር ፎርስ")
+    await world.tap("White")
+    await world.tap("42")
+    await world.tap("1")
+    await world.tap(t("btn_pickup", "am"))
+    await world.say("አበበ")
+    await world.say("0911223344")
+    await world.tap(t("btn_confirm", "am"))
     [order] = world.db.orders.values()
     await world.send_photo()
     await _staff(world, _press(f"pay:{order.id}", world.telegram.last_message_id(STAFF_CHAT)))
@@ -157,8 +154,7 @@ async def test_amharic_customer_gets_amharic_payment_confirmation():
 
 async def test_staff_reply_reaches_the_customer():
     world = World()
-    world.script(call("escalate_to_staff", reason="asks for a discount", summary="Wants AF1 cheaper"),
-                 text("A team member will reply soon."))
+    world.script(interp(intent="handover", reason="asks for a discount"))
     await world.say("Can I get a discount?")
     alert_id = world.telegram.last_message_id(STAFF_CHAT)
 
@@ -173,8 +169,7 @@ async def test_staff_reply_reaches_the_customer():
 
 async def test_customer_messages_during_handover_reach_staff_and_can_be_answered():
     world = World()
-    world.script(call("escalate_to_staff", reason="complaint", summary="Wrong size delivered"),
-                 text("A team member will reply soon."))
+    world.script(interp(intent="handover", reason="complaint: wrong size delivered"))
     await world.say("You sent the wrong size!")
     calls_before = len(world.llm.requests)
 
@@ -216,8 +211,7 @@ async def test_ordinary_staff_chat_is_ignored():
 
 async def test_hand_back_button_resumes_the_bot():
     world = World()
-    world.script(call("escalate_to_staff", reason="asks for a person", summary="-"),
-                 text("A team member will reply soon."))
+    world.script(interp(intent="handover", reason="asks for a person"))
     await world.say("I want to talk to a person")
     alert_id = world.telegram.last_message_id(STAFF_CHAT)
 
@@ -226,9 +220,8 @@ async def test_hand_back_button_resumes_the_bot():
     assert _button_answers(world)[-1] == ("▶️ The bot is answering this customer again.", False)
     assert "Handed back to the bot by Sara" in world.telegram.to(STAFF_CHAT)[-1]
 
-    world.script(text("How can I help?"))
-    await world.say("hi again")
-    assert world.telegram.to(CUSTOMER)[-1] == "How can I help?"
+    await world.say("/start")
+    assert world.telegram.to(CUSTOMER)[-1] == t("ask_product", "en")  # the bot answers again
 
     await _staff(world, _press(f"resume:{CUSTOMER}", alert_id))  # pressed twice
     assert _button_answers(world)[-1] == ("The bot was already answering this customer.", False)
@@ -244,7 +237,7 @@ async def test_buttons_only_work_in_the_staff_group():
 
 async def test_bot_takes_idle_chats_back_after_two_hours():
     world = World()
-    world.script(call("escalate_to_staff", reason="complaint", summary="-"), text("Someone will reply."))
+    world.script(interp(intent="handover", reason="complaint"))
     await world.say("This is broken")
     staff = world.orchestrator.staff
 

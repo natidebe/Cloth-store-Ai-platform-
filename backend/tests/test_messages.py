@@ -22,8 +22,8 @@ def test_every_text_has_both_languages_with_the_same_placeholders(key):
 
 def test_amharic_texts_are_really_amharic():
     for key, versions in TEXTS.items():
-        if key in ("currency",):
-            continue
+        if versions["am"] == versions["en"]:
+            continue  # the same on purpose, e.g. the "English" language button
         assert message_language(versions["am"]) == "am", key
 
 

@@ -1,11 +1,16 @@
 """Every fixed message our code sends to customers, in Amharic and English.
 
-The AI writes its own replies in the customer's language. These are the
-messages written by our code instead (the order summary, the payment
-message, fixed replies), so they need both languages here.
+This is the ONE config for the scripted order flow (D28): every question,
+button label, and fixed reply lives here, never hard-coded in the handlers.
+The AI only writes short answers to side questions.
 
 To correct a translation, change the text in TEXTS below. Keep the
 {placeholders} exactly as they are.
+
+Per-store texts: for now all stores share TEXTS. t() already looks for a
+store's own version first (store.text_overrides, {key: {language: text}}),
+so a store can later replace any text by adding that field (a migration and
+a dashboard form), without changing the flow.
 
 The store's own texts (payment instructions, return policy) are sent as the
 store wrote them. Staff alerts stay in English.
@@ -18,6 +23,124 @@ from typing import Literal
 Language = Literal["am", "en"]
 
 TEXTS: dict[str, dict[Language, str]] = {
+    # --- The scripted order flow (D28): one question per step ----------------
+    "ask_product": {
+        "en": "What are you looking for? Pick a category, or type the product name.",
+        "am": "ምን እየፈለጉ ነው? ምድብ ይምረጡ፣ ወይም የምርቱን ስም ይጻፉ።",
+    },
+    "ask_product_no_categories": {
+        "en": "What are you looking for? Type the product name.",
+        "am": "ምን እየፈለጉ ነው? የምርቱን ስም ይጻፉ።",
+    },
+    "choose_language": {
+        # Shown before the language is known, so it's in both languages.
+        "en": "ቋንቋ ይምረጡ / Please choose your language",
+        "am": "ቋንቋ ይምረጡ / Please choose your language",
+    },
+    "btn_lang_am": {"en": "አማርኛ", "am": "አማርኛ"},
+    "btn_lang_en": {"en": "English", "am": "English"},
+    "btn_change_language": {"en": "🌐 ቋንቋ / Language", "am": "🌐 ቋንቋ / Language"},
+    "ask_product_pick": {"en": "Which one?", "am": "የትኛውን?"},
+    "ask_color": {
+        "en": "{product} — {price}. Which color?",
+        "am": "{product} — {price}። የትኛው ቀለም?",
+    },
+    "price_from": {"en": "from {price}", "am": "ከ{price} ጀምሮ"},
+    "ask_size": {"en": "Which size?", "am": "ቁጥር ስንት?"},
+    "ask_quantity": {"en": "How many?", "am": "ስንት ይፈልጋሉ?"},
+    "ask_delivery": {
+        "en": "Delivery or pickup?",
+        "am": "እናድርስልዎት ወይስ ከሱቁ ይወስዳሉ?",
+    },
+    "ask_address": {"en": "What's the delivery address?", "am": "የሚደርስበት አድራሻ የት ነው?"},
+    "ask_name": {"en": "Your name, please?", "am": "ስምዎን ይንገሩኝ?"},
+    "ask_phone": {"en": "Your phone number?", "am": "ስልክ ቁጥርዎ ስንት ነው?"},
+    "ask_edit": {"en": "What would you like to change?", "am": "ምን መቀየር ይፈልጋሉ?"},
+    "summary_buttons": {
+        "en": "Tap ✅ Confirm to place the order, or ✏️ Edit to change something.",
+        "am": "ለማዘዝ ✅ አረጋግጥ ይጫኑ፤ ለመቀየር ✏️ አስተካክል ይጫኑ።",
+    },
+    "payment_waiting": {
+        "en": "When you've paid, please send the payment screenshot here.",
+        "am": "ከከፈሉ በኋላ እባክዎ የክፍያውን ስክሪንሾት እዚህ ይላኩ።",
+    },
+
+    # Buttons
+    "btn_delivery": {"en": "🚚 Delivery", "am": "🚚 ይድረስልኝ"},
+    "btn_pickup": {"en": "🏪 Pickup", "am": "🏪 ከሱቁ እወስዳለሁ"},
+    "btn_use": {"en": "Use: {value}", "am": "ይሄን ይጠቀሙ: {value}"},
+    "btn_confirm": {"en": "✅ Confirm", "am": "✅ አረጋግጥ"},
+    "btn_edit": {"en": "✏️ Edit", "am": "✏️ አስተካክል"},
+    "btn_start_over": {"en": "🔄 Start over", "am": "🔄 እንደገና ጀምር"},
+    "btn_edit_product": {"en": "Product", "am": "ምርት"},
+    "btn_edit_size": {"en": "Size", "am": "ቁጥር"},
+    "btn_edit_color": {"en": "Color", "am": "ቀለም"},
+    "btn_edit_quantity": {"en": "Quantity", "am": "ብዛት"},
+    "btn_edit_delivery": {"en": "Delivery / pickup", "am": "አደራረስ"},
+    "btn_edit_contact": {"en": "Name & phone", "am": "ስም እና ስልክ"},
+    "btn_back_to_summary": {"en": "↩️ Back to summary", "am": "↩️ ወደ ማጠቃለያው ተመለስ"},
+
+    # Notes shown above the question
+    "started_over": {"en": "OK, let's start again.", "am": "እሺ፣ እንደገና እንጀምር።"},
+    "no_match": {
+        "en": "Sorry, I couldn't find \"{query}\".",
+        "am": "ይቅርታ፣ \"{query}\" አላገኘሁም።",
+    },
+    "size_unavailable": {
+        "en": "Sorry, size {size} isn't available in that color.",
+        "am": "ይቅርታ፣ ቁጥር {size} በዚህ ቀለም የለም።",
+    },
+    "color_unavailable": {
+        "en": "Sorry, {color} isn't available.",
+        "am": "ይቅርታ፣ {color} የለም።",
+    },
+    # Delivery (D29): staff arrange the address and payment by phone.
+    "summary_delivery_arranged": {
+        "en": "Delivery: our team will call you to arrange the address and payment",
+        "am": "ማድረስ፦ አድራሻውንና ክፍያውን ለማመቻቸት ቡድናችን ይደውልልዎታል",
+    },
+    "delivery_handoff": {
+        "en": "✅ Order #{number} is placed. Total: {total}.\n"
+              "Our team will call you on {phone} to arrange the delivery address and payment.",
+        "am": "✅ ትዕዛዝ #{number} ተመዝግቧል። ጠቅላላ ዋጋ: {total}።\n"
+              "የማድረሻ አድራሻውንና ክፍያውን ለማመቻቸት ቡድናችን በ{phone} ይደውልልዎታል።",
+    },
+    "too_many": {
+        "en": "Sorry, we don't have that many. Please pick a smaller number.",
+        "am": "ይቅርታ፣ ያን ያህል የለንም። እባክዎ ትንሽ ቁጥር ይምረጡ።",
+    },
+    "invalid_phone": {
+        "en": "That doesn't look like a phone number. Please send it again (digits only).",
+        "am": "ይህ ስልክ ቁጥር አይመስልም። እባክዎ እንደገና ይላኩ (ቁጥሮችን ብቻ)።",
+    },
+    "sold_out_now": {
+        "en": "Sorry, {item} just sold out. Please pick another option.",
+        "am": "ይቅርታ፣ {item} አሁን አልቋል። እባክዎ ሌላ ይምረጡ።",
+    },
+    "option_gone": {
+        "en": "That option is no longer available.",
+        "am": "ያ አማራጭ አሁን የለም።",
+    },
+    "photo_not_product": {
+        "en": "I can't look at product photos. Please type the product name or pick a category.",
+        "am": "የምርት ፎቶ ማየት አልችልም። እባክዎ የምርቱን ስም ይጻፉ ወይም ምድብ ይምረጡ።",
+    },
+    "please_type": {
+        "en": "Please type your answer or use the buttons.",
+        "am": "እባክዎ መልስዎን ይጻፉ ወይም ቁልፎቹን ይጠቀሙ።",
+    },
+    "handover_reply": {
+        "en": "I'll get a team member to help you. They'll reply here soon.",
+        "am": "የቡድናችን አባል እንዲረዳዎት አደርጋለሁ። በቅርቡ እዚህ ይመልሱልዎታል።",
+    },
+    "no_orders": {"en": "You don't have any orders yet.", "am": "እስካሁን ምንም ትዕዛዝ የለዎትም።"},
+    "order_status_line": {"en": "Order #{number}: {status}", "am": "ትዕዛዝ #{number}: {status}"},
+    "status_pending": {"en": "waiting for payment", "am": "ክፍያ በመጠባበቅ ላይ"},
+    "status_confirmed": {"en": "paid, being prepared", "am": "ተከፍሏል፣ እየተዘጋጀ ነው"},
+    "status_out_for_delivery": {"en": "on the way", "am": "በመንገድ ላይ ነው"},
+    "status_delivered": {"en": "delivered", "am": "ደርሷል"},
+    "status_cancelled": {"en": "cancelled", "am": "ተሰርዟል"},
+
     # --- Order summary ------------------------------------------------------
     "summary_title": {
         "en": "🧾 Order summary",
@@ -85,9 +208,15 @@ TEXTS: dict[str, dict[Language, str]] = {
 }
 
 
-def t(key: str, language: Language, **values: object) -> str:
-    """The text for `key` in `language`, with {placeholders} filled in."""
-    return TEXTS[key][language].format(**values)
+def t(key: str, language: Language, store: object | None = None, **values: object) -> str:
+    """The text for `key` in `language`, with {placeholders} filled in.
+
+    If the store has its own version of this text (a future
+    store.text_overrides field: {key: {language: text}}), that one is used.
+    """
+    overrides = getattr(store, "text_overrides", None) or {}
+    template = (overrides.get(key) or {}).get(language) or TEXTS[key][language]
+    return template.format(**values)
 
 
 def both(key: str, **values: object) -> str:

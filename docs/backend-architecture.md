@@ -197,6 +197,62 @@ a polite fallback message and staff get an alert. The bot never goes silent.
 
 ---
 
+## 4b. The scripted order flow (Phase 8c, D28)
+
+Since Phase 8c the chat is a scripted, button-driven flow instead of the AI
+driving the conversation with tools (the tools in section 5 below describe
+the old design; their safe parts live on in `agents/tools.py` as helpers).
+
+- `agents/flow.py` — a per-chat state machine: choose_language (first time
+  only) → ask_product → ask_color → ask_size → ask_quantity → ask_delivery →
+  ask_name → ask_phone → confirm (→ edit) → payment (pickup), or a hand-over
+  to staff for delivery orders, who arrange address and payment by phone
+  (D29). The step and the answers are saved
+  in `conversations.order_draft` under the version check. The next step is
+  always the first missing answer; single options are picked automatically;
+  known customers skip the contact steps; every step has Start over.
+- Button taps from customers (data like `f:size:42`) go through the inbox
+  like messages and are always re-checked against the database.
+- `agents/interpreter.py` — the AI's only job: one call that interprets an
+  off-script message (several answers, a side question, order status,
+  start over, or a hand-over to staff). Every extracted detail is checked
+  against the database; prices and stock never come from the AI.
+- `agents/messages.py` — the one config for every question and button
+  label (English and Amharic); `t()` looks for a store's own text first
+  (future `stores.text_overrides`).
+
+## 4c. Channel catalog and ordering from a post (Phase 8d, planned: D30–D34)
+
+```
+Dashboard ──(Publish)──► Backend ──► store's bot posts to the channel
+   photos (Storage),                  photo(s) + caption + [🛒 Order]
+   color × size stock                 post id saved (product_posts)
+
+Customer in the channel ──(🛒 Order = t.me/<bot>?start=p_<code>)──► sales bot
+   /start p_<code> ─► (language first if needed) ─► order flow at the color step
+   forwarded post / typed code ─► same product
+```
+
+- **Posting:** only the backend talks to Telegram (it holds the bot token).
+  The dashboard calls `POST /api/v1/admin/stores/{store}/products/{product}/publish`
+  (staff login, Phase 9). Photos come from Supabase Storage by URL.
+- **Keeping posts honest (D39):** Supabase database webhooks tell the backend
+  about every product or variant change (dashboard, payments, Table Editor);
+  the backend groups quick changes into one post edit (sold-out sizes, SOLD
+  OUT, new price) and ignores 5-minute holds. The minute sweep also fixes
+  any post that's out of date, in case a webhook was missed.
+- **Products (D35–D37, D40):** added by owner or staff in the dashboard, one
+  photo per product, posted to the channel automatically, with a generated
+  product code. Old hand-made channel posts are left as they are (D38).
+- **Cart (D32):** Order on a second post adds the item to the same order;
+  after each item the flow asks Add another item / Continue; the summary
+  lists all items; `place_order` already takes several items.
+- **Handed-over chat (D33):** Order takes the chat back from staff (they're
+  told). **Sold out (D34):** similar in-stock products from the same
+  category are offered.
+- **Database (planned migration):** `products.code`, photos per product /
+  color, `stores.channel_id`, `product_posts` (product, channel, message id).
+
 ## 5. Tools
 
 | Tool | What it does | Rules enforced in code |
@@ -525,6 +581,8 @@ caller is a platform admin; being a store owner is not enough.
 ## 12. Open decisions
 
 All decisions are tracked in the Decisions table in `BUILD_PLAN.md`:
+
+- **Channel catalog** (D35–D40): decided; see BUILD_PLAN.md.
 
 - **Stock** goes down when staff confirm payment (D3, decided). Because
   nothing is reserved, unpaid orders don't need to expire.

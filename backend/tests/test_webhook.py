@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from app.agents.orchestrator import Orchestrator
 from app.api.v1.webhook import SECRET_HEADER, get_db, get_orchestrator
 from app.main import app
+from tests.test_conversation import EchoFlow
 from app.models.schemas import Customer, Store, TelegramUpdate
 from app.services.conversation_service import InMemoryConversationStore
 from app.services.llm_service import LLMProvider, LLMResponse
@@ -76,8 +77,8 @@ def setup():
         telegram = telegram or FakeTelegram()
         db = db or FakeDb()
         orchestrator = Orchestrator(
-            db, conversations or InMemoryConversationStore(), telegram.service(), EchoLLM(),
-            burst_wait=0,
+            db, conversations or InMemoryConversationStore(), telegram.service(), None,
+            burst_wait=0, flow=EchoFlow(),  # routing tests: the reply just echoes
         )
         app.dependency_overrides[get_db] = lambda: db
         app.dependency_overrides[get_orchestrator] = lambda: orchestrator
@@ -140,7 +141,7 @@ def test_database_down_asks_telegram_to_retry(setup):
     assert telegram.calls == []
 
 
-def test_non_text_is_described_to_the_ai(setup):
+def test_non_text_reaches_the_flow(setup):
     client, telegram = setup()
     sticker = {"file_id": "s", "file_unique_id": "u"}
     assert _post(client, _update(sticker=sticker)).status_code == 200

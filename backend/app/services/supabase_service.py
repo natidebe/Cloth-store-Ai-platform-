@@ -264,6 +264,48 @@ class SupabaseService:
         )
         return [Product.model_validate(row) for row in rows]
 
+    # --- For the scripted order flow (Phase 8c) -----------------------------
+
+    async def list_categories(self, store_id: UUID) -> list[str]:
+        """This store's product categories that have something in stock."""
+        rows = await self._run(
+            self._db.table("products")
+            .select("category, product_variants!inner(stock_quantity)")
+            .eq("store_id", str(store_id))
+            .gt("product_variants.stock_quantity", 0)
+            .limit(500)
+        )
+        return sorted({row["category"] for row in rows if row.get("category")}, key=str.lower)
+
+    async def list_products_in_stock(
+        self, store_id: UUID, category: str | None = None, limit: int = 20
+    ) -> list[Product]:
+        """This store's products with at least one variant in stock, by name
+        (optionally only one category)."""
+        request = (
+            self._db.table("products")
+            .select("id, store_id, name, brand, category, base_price, search_keywords, "
+                    "product_variants!inner(stock_quantity)")
+            .eq("store_id", str(store_id))
+            .gt("product_variants.stock_quantity", 0)
+        )
+        if category is not None:
+            request = request.eq("category", category)
+        rows = await self._run(request.order("name").limit(limit))
+        return [Product.model_validate({k: v for k, v in row.items() if k != "product_variants"})
+                for row in rows]
+
+    async def get_product_variants(self, store_id: UUID, product_id: UUID) -> list[VariantMatch]:
+        """All variants of one product of this store, with price and what's
+        available (stock minus what other customers' orders hold, D19)."""
+        rows = await self._run(
+            self._db.table("product_variants")
+            .select(_VARIANT_COLUMNS)
+            .eq("store_id", str(store_id))
+            .eq("product_id", str(product_id))
+        )
+        return await self._with_holds(store_id, [_to_variant_match(row) for row in rows])
+
     async def get_variants(self, store_id: UUID, variant_ids: list[UUID]) -> list[VariantMatch]:
         """These variants of this store, with current price and stock.
         Ids that don't exist or belong to another store are left out."""

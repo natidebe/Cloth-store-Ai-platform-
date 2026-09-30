@@ -10,7 +10,7 @@ from uuid import UUID
 import pytest
 
 from app.core.config import get_settings
-from app.services.supabase_service import DatabaseError, SupabaseService
+from app.services.supabase_service import DatabaseError, DatabaseUnavailableError, SupabaseService
 
 _settings = get_settings()
 _configured = bool(
@@ -47,6 +47,9 @@ async def world(anyio_backend):
     )
     try:
         await service._run(service._db.table("products").select("search_keywords").limit(1))
+    except DatabaseUnavailableError:
+        await service.close()
+        raise  # Supabase unreachable: a real failure, not "not migrated"
     except DatabaseError:
         await service.close()
         pytest.skip("migration 004_store_profile.sql has not been run yet")

@@ -134,9 +134,13 @@ class StaffDesk:
 
     @staticmethod
     def is_staff_update(store: Store, update: TelegramUpdate) -> bool:
-        """A button press, or a message in this store's staff group."""
-        if update.callback_query is not None:
-            return True
+        """A button pressed in a group (the staff group's buttons), or a
+        message in this store's staff group. A customer tapping buttons in
+        their private chat is NOT a staff update: it goes through the inbox
+        like any customer message (the order flow's buttons)."""
+        press = update.callback_query
+        if press is not None:
+            return press.message is not None and press.message.chat.type != "private"
         message = update.message
         return (message is not None and store.staff_chat_id is not None
                 and message.chat.id == store.staff_chat_id)
@@ -278,7 +282,9 @@ class StaffDesk:
     async def _tell_customer_paid(self, store: Store, telegram_id: int, number: str) -> None:
         conversation = await self.conversations.get_or_create_conversation(store.id, telegram_id)
         history = await self.conversations.get_recent_messages(store.id, conversation.id, HISTORY_LIMIT)
-        language = detect_language(m.content for m in reversed(history) if m.role == "customer")
+        # The language the customer chose (D29), otherwise a guess from the chat.
+        language = conversation.order_draft.language or detect_language(
+            m.content for m in reversed(history) if m.role == "customer" and m.kind != "other")
         text = t("payment_confirmed", language, number=number)
         try:
             await self.telegram.send_message(store.telegram_bot_token.get_secret_value(), telegram_id, text)

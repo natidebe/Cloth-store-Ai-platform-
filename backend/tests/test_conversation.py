@@ -4,6 +4,7 @@ Everything is faked: the in-memory conversation store, a fake database for
 stores/customers, and a fake Telegram. No network, no cost.
 """
 import asyncio
+from types import SimpleNamespace
 import json
 from datetime import timedelta
 from uuid import uuid4
@@ -23,7 +24,7 @@ from app.services.conversation_service import (
     InMemoryConversationStore,
     utc_now,
 )
-from app.services.llm_service import LLMProvider, LLMResponse
+from app.agents.flow import Reply
 from app.services.supabase_service import DatabaseUnavailableError, VersionConflictError
 from app.services.telegram_service import TELEGRAM_API, TelegramService
 
@@ -39,17 +40,28 @@ OTHER_STORE = Store(id=uuid4(), name="Other Store", telegram_bot_token="999:OTHE
 CUSTOMER = 42
 
 
-class EchoLLM(LLMProvider):
-    """Stands in for the AI: repeats the customer's last message."""
-    model = "echo"
+class EchoFlow:
+    """Stands in for the order flow: repeats the customer's last message.
+    These tests are about the plumbing (memory, bursts, locks, retries,
+    recovery), not about what the reply says. `requests` records the history
+    each run saw, the way the AI would see it."""
 
     def __init__(self):
-        self.requests = []  # the messages the AI was shown, per call
+        self.requests = []
 
-    async def _complete(self, system_prompt, messages, tools):
-        self.requests.append(list(messages))
-        last = next(m.content for m in reversed(messages) if m.role == "user")
-        return LLMResponse(text=f"You said: {last}", model=self.model, stop_reason="stop")
+    async def handle(self, ctx, history):
+        seen = []
+        for m in history:
+            if m.role == "customer":
+                content = m.content if m.kind == "text" else (
+                    f"[The customer sent a {m.kind}] {m.content}" if m.content
+                    else f"[The customer sent a {m.kind}]")
+                seen.append(SimpleNamespace(role="user", content=content))
+            else:
+                seen.append(SimpleNamespace(role="assistant", content=m.content))
+        self.requests.append(seen)
+        last = next(m.content for m in reversed(seen) if m.role == "user")
+        return [Reply(f"You said: {last}")]
 
 
 @pytest.fixture
@@ -109,8 +121,8 @@ def _update(update_id, text=None, customer=CUSTOMER, **fields):
 def _world(db=None, telegram=None, store=None, burst_wait=0.0):
     store = store or InMemoryConversationStore()
     telegram = telegram or FakeTelegram()
-    orchestrator = Orchestrator(db or FakeDb(), store, telegram.service(), EchoLLM(),
-                                burst_wait=burst_wait)
+    orchestrator = Orchestrator(db or FakeDb(), store, telegram.service(), None,
+                                burst_wait=burst_wait, flow=EchoFlow())
     return orchestrator, store, telegram
 
 
@@ -138,7 +150,7 @@ async def test_bot_remembers_the_conversation():
 
     assert telegram.texts_to(CUSTOMER) == ["You said: hi", "You said: white AF1?"]
     # The second time, the AI saw the whole chat so far.
-    assert [(m.role, m.content) for m in orchestrator.llm.requests[1]] == [
+    assert [(m.role, m.content) for m in orchestrator.flow.requests[1]] == [
         ("user", "hi"), ("assistant", "You said: hi"), ("user", "white AF1?"),
     ]
     conversation = store.conversations[(STORE.id, CUSTOMER)]
@@ -158,7 +170,7 @@ async def test_only_recent_messages_are_used():
                              [ChatMessage(role="customer", content=f"old {i}") for i in range(30)])
     await _message(orchestrator, _update(1, "hi"))
     # Only the 20 most recent (including the new one) go to the AI.
-    shown = orchestrator.llm.requests[0]
+    shown = orchestrator.flow.requests[0]
     assert len(shown) == 20
     assert (shown[0].content, shown[-1].content) == ("old 11", "hi")
 
@@ -175,7 +187,7 @@ async def test_expired_conversation_starts_fresh():
 
     await _message(orchestrator, _update(1, "hello again"))
 
-    assert [m.content for m in orchestrator.llm.requests[0]] == ["hello again"]  # nothing remembered
+    assert [m.content for m in orchestrator.flow.requests[0]] == ["hello again"]  # nothing remembered
     saved = store.conversations[(STORE.id, CUSTOMER)]
     assert saved.order_draft.items == []  # draft cleared
     assert saved.order_draft.revision == 1  # but its revision keeps counting
@@ -214,7 +226,7 @@ async def test_quick_burst_gets_one_reply():
     await asyncio.gather(arrive(1, "white", 0), arrive(2, "size 42", 0.01), arrive(3, "0911223344", 0.02))
 
     assert telegram.texts_to(CUSTOMER) == ["You said: 0911223344"]  # one reply
-    assert [m.content for m in orchestrator.llm.requests[0]] == ["white", "size 42", "0911223344"]
+    assert [m.content for m in orchestrator.flow.requests[0]] == ["white", "size 42", "0911223344"]
     assert _statuses(store) == ["done", "done", "done"]
 
 
@@ -235,7 +247,7 @@ async def test_burst_waits_only_once():
     elapsed = loop.time() - started
 
     assert telegram.texts_to(CUSTOMER) == ["You said: msg 5"]  # one reply
-    assert [m.content for m in orchestrator.llm.requests[0]] == [f"msg {i}" for i in range(1, 6)]
+    assert [m.content for m in orchestrator.flow.requests[0]] == [f"msg {i}" for i in range(1, 6)]
     assert elapsed < 2 * wait  # was about 5 x wait before the fix
 
 
@@ -421,7 +433,7 @@ def client():
     def _client(conversations=None):
         telegram = FakeTelegram()
         orchestrator = Orchestrator(FakeDb(), conversations or InMemoryConversationStore(),
-                                    telegram.service(), EchoLLM(), burst_wait=0)
+                                    telegram.service(), None, burst_wait=0, flow=EchoFlow())
         app.dependency_overrides[get_db] = lambda: orchestrator.db
         app.dependency_overrides[get_orchestrator] = lambda: orchestrator
         return TestClient(app), telegram, orchestrator.conversations

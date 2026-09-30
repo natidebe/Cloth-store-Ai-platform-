@@ -321,10 +321,14 @@ class IncomingMessage(BaseModel):
     message_id: int
     telegram_id: int  # the customer's Telegram user id
     customer_name: str | None = None
+    customer_username: str | None = None  # @username, if they have one (for staff)
     language_code: str | None = None
-    kind: MessageKind
+    kind: MessageKind | Literal["button"]
     text: str | None = None  # the text, or a photo's caption
     photo_file_id: str | None = None  # largest size, when kind == "photo"
+    # kind == "button": the customer tapped one of the bot's buttons.
+    button_data: str | None = None  # what we put in the button, e.g. "f:size:42"
+    callback_id: str | None = None  # to answer the tap (stops Telegram's spinner)
     sent_at: datetime
 
     @model_validator(mode="after")
@@ -333,6 +337,8 @@ class IncomingMessage(BaseModel):
             raise ValueError("a text message needs text")
         if self.kind == "photo" and not self.photo_file_id:
             raise ValueError("a photo message needs photo_file_id")
+        if self.kind == "button" and not self.button_data:
+            raise ValueError("a button tap needs button_data")
         return self
 
 
@@ -358,13 +364,38 @@ class DraftItem(BaseModel):
     description: str = Field(min_length=1)
 
 
-class OrderDraft(BaseModel):
-    """An order still being filled in during the conversation.
+FlowStep = Literal[
+    "choose_language", "ask_product", "ask_color", "ask_size", "ask_quantity", "ask_delivery",
+    "ask_address", "ask_name", "ask_phone", "confirm", "edit", "payment",
+]
 
-    Every field starts empty. The AI fills them in as the customer answers,
+
+class OrderDraft(BaseModel):
+    """An order still being filled in, and where the scripted chat is (D28).
+
+    Saved in conversations.order_draft (JSON), together with the flow's
+    step, under the conversation's version check. Every field starts empty;
+    the order flow (agents/flow.py) fills them in as the customer answers,
     and the order can be placed only when missing_fields() is empty and the
     customer has confirmed.
     """
+    # --- The scripted flow (Phase 8c, D28) ---------------------------------
+    step: FlowStep = "ask_product"
+    # The language the customer chose (D29). Kept for every new order in the
+    # chat, and used for everything the bot says instead of guessing.
+    language: Literal["am", "en"] | None = None
+    category: str | None = None
+    category_options: list[str] = Field(default_factory=list)  # category buttons shown
+    product_id: UUID | None = None
+    product_name: str | None = None
+    color: str | None = None  # "" for a product that has no colors
+    size: str | None = None
+    variant_id: UUID | None = None  # product + color + size
+    quantity: int | None = Field(default=None, ge=1)
+    # Set when the customer edits the contact at CONFIRM: don't refill it
+    # from the saved customer details.
+    ask_contact_again: bool = False
+
     items: list[DraftItem] = Field(default_factory=list)
     contact_name: str | None = None
     contact_phone: str | None = None
