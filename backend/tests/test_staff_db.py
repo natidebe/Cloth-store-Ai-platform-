@@ -55,8 +55,8 @@ async def world(anyio_backend):
         pytest.skip("migration 006_staff_handover.sql has not been run yet")
 
     await db._db.table("stores").delete().like("name", f"{PREFIX}%").execute()
-    a = await _insert(db, "stores", {"name": f"{PREFIX}a", "staff_chat_id": STAFF_CHAT})
-    b = await _insert(db, "stores", {"name": f"{PREFIX}b"})
+    a = await _insert(db, "stores", {"name": f"{PREFIX}a", "status": "active", "staff_chat_id": STAFF_CHAT})
+    b = await _insert(db, "stores", {"name": f"{PREFIX}b", "status": "active"})
     product = await _insert(db, "products", {"store_id": a["id"], "name": "Air Force 1", "base_price": 4500})
     variant = await _insert(db, "product_variants", {"product_id": product["id"], "color": "White",
                                                      "size": "42", "stock_quantity": 3})

@@ -58,9 +58,9 @@ async def world(anyio_backend):
     )
     await _delete_test_stores(service)  # leftovers from an interrupted run
 
-    store_a = await _insert(service, "stores", {"name": f"{TEST_PREFIX}selam_shoes"})
-    store_b = await _insert(service, "stores", {"name": f"{TEST_PREFIX}other_store"})
-    store_off = await _insert(service, "stores", {"name": f"{TEST_PREFIX}inactive", "is_active": False})
+    store_a = await _insert(service, "stores", {"name": f"{TEST_PREFIX}selam_shoes", "status": "active"})
+    store_b = await _insert(service, "stores", {"name": f"{TEST_PREFIX}other_store", "status": "active"})
+    store_off = await _insert(service, "stores", {"name": f"{TEST_PREFIX}inactive", "status": "suspended"})
 
     af1 = await _insert(service, "products", {
         "store_id": store_a["id"], "name": "Air Force 1", "brand": "Nike",

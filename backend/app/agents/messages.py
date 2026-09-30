@@ -221,6 +221,11 @@ TEXTS: dict[str, dict[Language, str]] = {
         "en": "Let me get a team member to help you with this. They'll reply here soon.",
         "am": "በዚህ ጉዳይ የቡድናችን አባል እንዲረዳዎት አደርጋለሁ። በቅርቡ እዚህ ይመልሱልዎታል።",
     },
+    # A store waiting for approval (D14) or suspended: no orders yet.
+    "store_not_open": {
+        "en": "Sorry, this shop isn't taking orders yet. Please check back soon.",
+        "am": "ይቅርታ፣ ይህ ሱቅ ገና ትዕዛዝ አይቀበልም። እባክዎ ቆይተው ይሞክሩ።",
+    },
     "empty_reply": {
         "en": "Sorry, could you say that again?",
         "am": "ይቅርታ፣ እባክዎ እንደገና ይጻፉልኝ?",

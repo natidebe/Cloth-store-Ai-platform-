@@ -676,7 +676,7 @@ customer is told.
 
 ---
 
-### Phase 9b — Store onboarding
+### Phase 9b — Store onboarding ✅ Built (D14–D18, migration 008 run); waiting for my test through `/docs`
 
 **Goal:** new stores join the platform through the dashboard, without
 anyone touching code or Supabase.
@@ -735,6 +735,54 @@ Prove a staff member can't approve stores and can't see another store.
 
 **Until this phase:** Phases 5–9 use one test store created by hand in
 Supabase (store row + bot token + my user in `store_staff` as owner).
+
+**How it was built:**
+- Migration `008_store_onboarding.sql`: `stores.status` (pending / active /
+  suspended; `is_active` follows it by trigger), plans free / basic / pro,
+  `telegram_bot_id` + `telegram_bot_username` (unique: one store per bot,
+  even with a regenerated token), a one-time `link_code` (30 minutes,
+  backend-only), `platform_admins`, `store_invites`, and the functions
+  `create_store` (store + owner in one step) and `accept_store_invites`.
+- `backend/app/agents/onboarding.py`: checking a bot token (`getMe`),
+  creating a store, connecting the bot (webhook + profile), link codes and
+  `/link`, changing the token, approve / suspend.
+- The bot is connected when the store is created, not at approval: the
+  owner can `/link` the staff group and the channel while waiting. Until
+  the store is active, customers get "this shop isn't taking orders yet"
+  (both languages). `/link` in a channel deletes the command post so
+  subscribers don't see it. Approve / suspend post a note in the staff group.
+- Endpoints (Supabase login; `/docs` lists them):
+  - `POST /api/v1/stores` (any logged-in user; becomes owner),
+    `GET /api/v1/me/stores`, `POST /api/v1/me/accept-invites`
+  - owner only: `POST /stores/{id}/link-code`, `POST /stores/{id}/invites`,
+    `DELETE /stores/{id}/staff/{user}`, `PUT /stores/{id}/bot-token`
+  - platform admins only: `GET /platform/stores`,
+    `POST /platform/stores/{id}/approve` and `/suspend`,
+    `PUT /platform/stores/{id}/plan`
+- `connect_store` now also saves the bot's id and username (run it once for
+  Selam Shoes).
+- Tests: `test_onboarding.py` (endpoints, webhook, permissions) and
+  `test_onboarding_db.py` (the migration's rules in the real database).
+
+**For the dashboard (my teammate):**
+- After login, call `POST /me/accept-invites`, then `GET /me/stores`. No
+  store: show "Create your store" (name + bot token, with a short
+  @BotFather guide). Pending: show "Waiting for approval".
+- "Connect staff group / channel": a button that calls `link-code` and
+  shows the instructions it returns.
+- Staff page: invite by email, list `store_staff` and `store_invites`
+  (readable by staff), remove staff.
+- Store settings: "Payment methods" (`payment_instructions`) and the other
+  profile fields; "Change bot" (`bot-token`).
+- Platform admin page (only if `GET /platform/stores` answers 200).
+
+**Manual steps:**
+1. ✅ Run migration 008 and add yourself to `platform_admins`.
+2. Restart the server and run `python -m scripts.connect_store "Selam Shoes"`
+   once (saves the bot's id: one store per bot).
+3. Test through `http://localhost:8000/docs`: get a login token with
+   `python -m scripts.login_token you@example.com` and put `Bearer <token>`
+   in the `authorization` field.
 
 ---
 
@@ -796,11 +844,11 @@ Answer each before the phase listed, and record the answer here.
 | D11 | Staff roles? | Phase 2 | owner and staff |
 | D12 | Which phone numbers are accepted? | Phase 3 | Any number: optional +, 7–15 digits (spaces, dashes, brackets removed) |
 | D13 | Is the customer's name required to place an order? | Phase 3 | Yes |
-| D14 | Do new stores need my approval before their bot goes live, or are they live immediately? | Phase 9b | |
-| D15 | Who is a platform admin (only me, or a list of emails)? How are they marked? | Phase 9b | |
-| D16 | Which plans exist (e.g. basic, pro), and does a plan limit anything (products, staff, messages)? | Phase 9b | |
-| D17 | Can an owner change the store's bot token later, and what happens to open conversations? | Phase 9b | |
-| D18 | Can one person own or work in several stores? | Phase 9b | |
+| D14 | Do new stores need my approval before their bot goes live, or are they live immediately? | Phase 9b | Approval: new stores are `pending`; the bot is connected but tells customers the shop isn't taking orders yet, while the owner links the group and channel and adds products |
+| D15 | Who is a platform admin (only me, or a list of emails)? How are they marked? | Phase 9b | The `platform_admins` table (user ids), added by SQL; backend-only |
+| D16 | Which plans exist (e.g. basic, pro), and does a plan limit anything (products, staff, messages)? | Phase 9b | free / basic / pro (new stores: free); a name only for now, nothing is limited. Limits later (e.g. the AI budget, Phase 10) |
+| D17 | Can an owner change the store's bot token later, and what happens to open conversations? | Phase 9b | Yes, owner only. The token is checked like a new one; a regenerated token of the same bot just reconnects. A different bot: the old one is disconnected, customers chat with the new bot, the owner re-adds it to the channel and staff group; orders stay; old posts can't be edited by the new bot |
+| D18 | Can one person own or work in several stores? | Phase 9b | Yes (store_staff allows it; `GET /me/stores` lists them with the role in each) |
 | D19 | Last-item risk: keep D3 and re-check stock before sending payment instructions, or reserve stock for a short time (how long?) after ordering? | Phase 8 | Reserve: a placed order holds its items for 5 minutes (migration 005). Kept short on purpose: a longer hold blocks real sales to other customers while an order may never be paid. Stock still goes down at payment (D3). Payment text is each store's own (`stores.payment_instructions`); customers see "in stock" / "only a few left" (3 or fewer) / "sold out", never exact numbers |
 | D20 | How long to wait for more quick messages before replying (e.g. 2 seconds)? | Phase 7 | 2 seconds |
 | D21 | Daily AI budget per store (e.g. $1), and what happens when it's reached? | Phase 10 | |

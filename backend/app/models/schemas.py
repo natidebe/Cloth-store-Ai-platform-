@@ -21,6 +21,8 @@ OrderStatus = Literal["pending", "confirmed", "out_for_delivery", "delivered", "
 PaymentStatus = Literal["unpaid", "paid", "refunded"]
 FulfillmentMethod = Literal["delivery", "pickup"]
 StaffRole = Literal["owner", "staff"]
+StoreStatus = Literal["pending", "active", "suspended"]  # D14 (migration 008)
+StorePlan = Literal["free", "basic", "pro"]  # D16: a name only for now
 
 
 # ---------------------------------------------------------------------------
@@ -82,10 +84,43 @@ class Store(DbModel):
     payment_instructions: str | None = None
     return_policy: str | None = None
     channel_id: int | None = None  # the store's Telegram channel (migration 007, D31)
+    # Onboarding (migration 008): only 'active' stores serve customers
+    # (is_active follows status); the bot's Telegram id is unique per store.
+    status: StoreStatus = "active"
+    telegram_bot_id: int | None = None
+    telegram_bot_username: str | None = None
 
     @property
     def profile(self) -> StoreProfile:
         return StoreProfile(**{name: getattr(self, name) for name in PROFILE_FIELDS})
+
+
+class AuthUser(DbModel):
+    """A logged-in dashboard user (from their Supabase login token)."""
+    id: UUID
+    email: str | None = None
+    email_confirmed: bool = False
+
+
+class StoreMembership(DbModel):
+    """A store the user belongs to, and their role there."""
+    store_id: UUID
+    name: str
+    role: StaffRole
+    status: StoreStatus
+    plan: str
+    telegram_bot_username: str | None = None
+
+
+class StoreSummary(DbModel):
+    """A store in the platform admin's list."""
+    id: UUID
+    name: str
+    status: StoreStatus
+    plan: str
+    telegram_bot_username: str | None = None
+    created_at: datetime | None = None
+    orders: int = 0
 
 
 class StoreStaff(DbModel):

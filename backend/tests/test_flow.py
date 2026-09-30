@@ -88,6 +88,9 @@ class FakeDb:
     async def get_store(self, store_id):
         return STORE if store_id == STORE.id else None
 
+    async def get_store_any_status(self, store_id):  # the webhook: any status (Phase 9b)
+        return await self.get_store(store_id)
+
     async def get_or_create_customer(self, store_id, telegram_id, name=None):
         assert store_id == STORE.id
         return self.customer

@@ -48,6 +48,9 @@ class FakeDb:
             raise self.error
         return self.store if self.store and store_id == self.store.id else None
 
+    async def get_store_any_status(self, store_id):  # the webhook: any status (Phase 9b)
+        return await self.get_store(store_id)
+
     async def list_products(self, store_id, limit=100):
         return []
 

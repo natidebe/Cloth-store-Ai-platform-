@@ -551,25 +551,26 @@ login (see `core/security.py`).
 ## 10. Store onboarding
 
 New stores join without anyone touching code or Supabase (BUILD_PLAN.md,
-Phase 9b). Until that phase, the one test store is created by hand.
+Phase 9b, D14–D18). Code: `agents/onboarding.py`, `api/v1/stores.py`
+(owners), `api/v1/platform.py` (platform admins); migration 008.
 
 ### The store owner's journey
 
 | Step | Owner does (in the dashboard) | Backend does |
 |------|-------------------------------|--------------|
 | 1. Sign up | Creates an account (email + password) | Nothing: Supabase login, handled by the dashboard |
-| 2. Create store | Enters the store name, pastes the bot token from @BotFather | Checks the token with Telegram (`getMe`); refuses a bot another store uses; saves the store with a generated `webhook_secret`; makes the user `owner` |
-| 3. Approval | Sees "under review" (if D14 requires approval) | Store stays `pending`, so the bot answers no one |
-| 4. Link staff group | Adds the bot to the staff Telegram group, sends `/link <code>` shown in the dashboard | Webhook receives the group message, checks the code (right store, not expired, not used), saves the group as `staff_chat_id` |
+| 2. Create store | Enters the store name, pastes the bot token from @BotFather | Checks the token with Telegram (`getMe`); refuses a bot another store uses (by bot id); saves the store as `pending` with a generated `webhook_secret`; makes the user `owner`; connects the bot (`setWebhook`, description, /start and /help) |
+| 3. Approval | Sees "waiting for approval" (D14) | Store stays `pending`: the bot tells customers the shop isn't taking orders yet |
+| 4. Link staff group and channel | Adds the bot to the staff group (and as channel admin), sends `/link <code>` shown in the dashboard | Webhook checks the code (this store, not expired, not used), saves the group as `staff_chat_id` or the channel as `channel_id`; works while pending |
 | 5. Add products | Fills in products, colors, sizes, stock, prices | Nothing: dashboard writes directly, allowed by the security rules |
-| 6. Invite staff | Enters a staff member's email | Sends a Supabase invitation; adds them to `store_staff` as `staff` |
-| 7. Go live | Nothing | When the store becomes `active`, registers the webhook with Telegram (`setWebhook` with the store's secret) |
+| 6. Invite staff | Enters a staff member's email | Saves the invitation and sends a Supabase invitation email; when they log in with that (confirmed) email, `accept-invites` adds them as `staff` |
+| 7. Go live | Nothing | A platform admin approves: status `active`, the bot takes orders, the staff group is told |
 
 ### Platform admin
 
 A platform admin (D15) sees every store with its status, plan, and number of
-orders, and can **approve**, **suspend** (the bot stops answering and the
-webhook is removed), and **change plan**. Platform admin endpoints check the
+orders, and can **approve**, **suspend** (the bot stays connected but tells
+customers the shop isn't taking orders), and **change plan**. Platform admin endpoints check the
 caller is a platform admin; being a store owner is not enough.
 
 ### Onboarding rules (enforced in code)
@@ -611,10 +612,7 @@ All decisions are tracked in the Decisions table in `BUILD_PLAN.md`:
 - **How do staff hand a conversation back** to the assistant? (D9) A button
   in the dashboard, a command in the staff group, or automatically after a
   period of time.
-- **Store onboarding** (D14–D18): do new stores need approval before going
-  live? Who is a platform admin? Which plans exist and what do they limit?
-  Can an owner change the bot token later? Can one person be in several
-  stores?
+- **Store onboarding** (D14–D18): decided; see BUILD_PLAN.md.
 - **Last item** (D19): keep D3 and re-check stock before sending payment
   instructions, or reserve stock for a short time after ordering?
 - **Quick bursts** (D20): how long to wait for more messages before

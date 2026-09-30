@@ -58,8 +58,8 @@ async def world(anyio_backend):
         pytest.skip("migration 003_conversations.sql has not been run yet")
 
     await _delete_test_stores(service)
-    store_a = UUID((await _insert(service, "stores", {"name": f"{TEST_PREFIX}conv_a"}))["id"])
-    store_b = UUID((await _insert(service, "stores", {"name": f"{TEST_PREFIX}conv_b"}))["id"])
+    store_a = UUID((await _insert(service, "stores", {"name": f"{TEST_PREFIX}conv_a", "status": "active"}))["id"])
+    store_b = UUID((await _insert(service, "stores", {"name": f"{TEST_PREFIX}conv_b", "status": "active"}))["id"])
     for store in (store_a, store_b):
         await service.get_or_create_customer(store, CUSTOMER, "Abebe")
 

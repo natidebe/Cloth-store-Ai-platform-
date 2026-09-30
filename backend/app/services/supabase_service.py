@@ -21,6 +21,7 @@ from supabase import AsyncClient, acreate_client
 from supabase.lib.client_options import AsyncClientOptions
 
 from app.models.schemas import (
+    AuthUser,
     ChatMessage,
     Conversation,
     Customer,
@@ -32,6 +33,8 @@ from app.models.schemas import (
     ProductPost,
     StaffMessage,
     Store,
+    StoreMembership,
+    StoreSummary,
     VariantMatch,
     normalize_phone,
 )
@@ -211,6 +214,162 @@ class SupabaseService:
         rows = await self._run(
             self._db.table("stores").update({"webhook_secret": secret}).eq("id", str(store_id))
         )
+        if not rows:
+            raise NotFoundError("store_not_found", str(store_id))
+
+    # --- Onboarding (Phase 9b, migration 008) -------------------------------
+
+    async def get_store_any_status(self, store_id: UUID) -> Store | None:
+        """The store even if it's pending or suspended: the webhook still
+        handles /link and /chatid for them, and the platform admin and the
+        owner manage them. Everything that serves customers uses get_store()."""
+        rows = await self._run(self._db.table("stores").select("*").eq("id", str(store_id)).limit(1))
+        return Store.model_validate(rows[0]) if rows else None
+
+    async def get_user(self, access_token: str) -> AuthUser | None:
+        """The user behind a Supabase login token, or None if it's invalid or expired."""
+        try:
+            response = await self._db.auth.get_user(access_token)
+        except Exception:
+            return None
+        user = getattr(response, "user", None)
+        if user is None:
+            return None
+        return AuthUser(id=UUID(str(user.id)), email=(user.email or "").lower() or None,
+                        email_confirmed=bool(getattr(user, "email_confirmed_at", None)))
+
+    async def is_platform_admin(self, user_id: UUID) -> bool:
+        rows = await self._run(
+            self._db.table("platform_admins").select("user_id").eq("user_id", str(user_id)).limit(1)
+        )
+        return bool(rows)
+
+    async def staff_role(self, store_id: UUID, user_id: UUID) -> str | None:
+        """'owner' or 'staff' if the user belongs to this store, else None."""
+        rows = await self._run(
+            self._db.table("store_staff").select("role")
+            .eq("store_id", str(store_id)).eq("user_id", str(user_id)).limit(1)
+        )
+        return rows[0]["role"] if rows else None
+
+    async def list_user_stores(self, user_id: UUID) -> list[StoreMembership]:
+        rows = await self._run(
+            self._db.table("store_staff")
+            .select("role, stores(id, name, status, plan, telegram_bot_username)")
+            .eq("user_id", str(user_id))
+        )
+        return [StoreMembership(store_id=row["stores"]["id"], role=row["role"],
+                                **{k: v for k, v in row["stores"].items() if k != "id"})
+                for row in rows if row.get("stores")]
+
+    async def create_store(self, name: str, bot_token: str, bot_id: int, bot_username: str,
+                           webhook_secret: str, owner: UUID) -> UUID:
+        """The store (pending, D14) and its owner, in one step. Raises
+        DuplicateError if another store already uses this bot."""
+        store_id = await self._run(self._db.rpc("create_store", {
+            "p_name": name, "p_bot_token": bot_token, "p_bot_id": bot_id,
+            "p_bot_username": bot_username, "p_webhook_secret": webhook_secret, "p_owner": str(owner),
+        }))
+        return UUID(str(store_id))
+
+    async def find_store_by_bot(self, bot_id: int) -> Store | None:
+        """The store (any status) that uses this bot."""
+        rows = await self._run(
+            self._db.table("stores").select("*").eq("telegram_bot_id", bot_id).limit(1)
+        )
+        return Store.model_validate(rows[0]) if rows else None
+
+    async def set_bot(self, store_id: UUID, *, bot_id: int, bot_username: str,
+                      bot_token: str | None = None, webhook_secret: str | None = None) -> None:
+        """Save the bot's identity (and a new token and secret, D17). Raises
+        DuplicateError if another store already uses this bot."""
+        changes: dict[str, Any] = {"telegram_bot_id": bot_id, "telegram_bot_username": bot_username}
+        if bot_token is not None:
+            changes["telegram_bot_token"] = bot_token
+        if webhook_secret is not None:
+            changes["webhook_secret"] = webhook_secret
+        rows = await self._run(self._db.table("stores").update(changes).eq("id", str(store_id)))
+        if not rows:
+            raise NotFoundError("store_not_found", str(store_id))
+
+    async def set_link_code(self, store_id: UUID, code: str, expires_at: datetime) -> None:
+        """The store's one /link code (a new one replaces the old one)."""
+        rows = await self._run(
+            self._db.table("stores")
+            .update({"link_code": code, "link_code_expires_at": expires_at.isoformat()})
+            .eq("id", str(store_id))
+        )
+        if not rows:
+            raise NotFoundError("store_not_found", str(store_id))
+
+    async def use_link_code(self, store_id: UUID, code: str, field: str, chat_id: int) -> bool:
+        """/link <code>: if the code is this store's and still valid, save the
+        chat as its staff group or channel and use the code up. One update,
+        so a code can't be used twice."""
+        if field not in ("staff_chat_id", "channel_id"):
+            raise ValueError(field)
+        rows = await self._run(
+            self._db.table("stores")
+            .update({field: chat_id, "link_code": None, "link_code_expires_at": None})
+            .eq("id", str(store_id)).eq("link_code", code)
+            .gt("link_code_expires_at", datetime.now(timezone.utc).isoformat())
+        )
+        return bool(rows)
+
+    async def invite_staff(self, store_id: UUID, email: str, invited_by: UUID) -> None:
+        """Invite someone as staff (inviting the same email again is fine)."""
+        await self._run(
+            self._db.table("store_invites").upsert(
+                {"store_id": str(store_id), "email": email.strip().lower(), "invited_by": str(invited_by)},
+                on_conflict="store_id,email",
+            )
+        )
+
+    async def send_invite_email(self, email: str) -> bool:
+        """Supabase's invitation email, so a new person can set a password.
+        False if it wasn't sent (e.g. they already have an account: they just
+        log in, and their invitation is waiting)."""
+        try:
+            await self._db.auth.admin.invite_user_by_email(email)
+        except Exception as error:
+            logger.info("invite email not sent", extra={"reason": type(error).__name__})
+            return False
+        return True
+
+    async def accept_invites(self, user_id: UUID, email: str) -> int:
+        """Join every store that invited this email. Returns how many."""
+        count = await self._run(self._db.rpc("accept_store_invites",
+                                             {"p_user": str(user_id), "p_email": email}))
+        return int(count or 0)
+
+    async def remove_staff(self, store_id: UUID, user_id: UUID) -> bool:
+        """Remove a staff member (never an owner). False if there was none."""
+        rows = await self._run(
+            self._db.table("store_staff").delete()
+            .eq("store_id", str(store_id)).eq("user_id", str(user_id)).eq("role", "staff")
+        )
+        return bool(rows)
+
+    async def list_all_stores(self) -> list[StoreSummary]:
+        """Every store with its number of orders (platform admin only)."""
+        rows = await self._run(
+            self._db.table("stores")
+            .select("id, name, status, plan, telegram_bot_username, created_at, orders(count)")
+            .order("created_at", desc=True)
+        )
+        return [StoreSummary(**{k: v for k, v in row.items() if k != "orders"},
+                             orders=(row.get("orders") or [{"count": 0}])[0]["count"])
+                for row in rows]
+
+    async def set_store_status(self, store_id: UUID, status: str) -> None:
+        rows = await self._run(
+            self._db.table("stores").update({"status": status}).eq("id", str(store_id))
+        )
+        if not rows:
+            raise NotFoundError("store_not_found", str(store_id))
+
+    async def set_store_plan(self, store_id: UUID, plan: str) -> None:
+        rows = await self._run(self._db.table("stores").update({"plan": plan}).eq("id", str(store_id)))
         if not rows:
             raise NotFoundError("store_not_found", str(store_id))
 

@@ -12,11 +12,14 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from pydantic import ValidationError
 
+from app.agents.messages import both
+from app.agents.onboarding import Onboarding, link_command
 from app.agents.orchestrator import Orchestrator
+from app.core.config import get_settings
 from app.core.security import verify_telegram_secret
-from app.models.schemas import TelegramUpdate
+from app.models.schemas import Store, TelegramUpdate
 from app.services.supabase_service import DatabaseError, SupabaseService
-from app.services.telegram_service import parse_update
+from app.services.telegram_service import TelegramError, TelegramService, parse_update
 from app.utils.logging import log_context
 
 logger = logging.getLogger(__name__)
@@ -51,9 +54,9 @@ async def telegram_webhook(
     db: SupabaseService = Depends(get_db),
     orchestrator: Orchestrator = Depends(get_orchestrator),
 ) -> dict[str, bool]:
-    # 1. Find the store (switched-off stores count as not found).
+    # 1. Find the store (also pending or suspended ones: see step 4).
     try:
-        store = await db.get_store(store_id)
+        store = await db.get_store_any_status(store_id)
     except DatabaseError:
         logger.exception("store lookup failed", extra={"store_id": str(store_id)})
         # Telegram will retry later, so the message isn't lost.
@@ -75,11 +78,24 @@ async def telegram_webhook(
         logger.warning("unreadable update ignored", extra={"store_id": str(store_id)})
         return {"ok": True}
 
-    # 4. The staff group (button presses, staff replying to a customer) is
-    #    handled separately, in the background (Phase 9).
+    # 4. Setup commands work for every store, even one waiting for approval:
+    #    /link <code> (Phase 9b) and /chatid. Otherwise a store that isn't
+    #    active (D14) only tells customers it isn't taking orders yet.
+    if link_command(update) is not None:
+        onboarding = Onboarding(db, orchestrator.telegram, get_settings().public_base_url)
+        background.add_task(onboarding.link, store, update)
+        return {"ok": True}
     if orchestrator.staff.is_chat_id_request(update):
         background.add_task(orchestrator.staff.send_chat_id, store, update)
         return {"ok": True}
+    if store.status != "active":
+        message = parse_update(store.id, update)
+        if message is not None and message.kind != "button":
+            background.add_task(_say_not_open, orchestrator.telegram, store, message.telegram_id)
+        return {"ok": True}
+
+    #    The staff group (button presses, staff replying to a customer) is
+    #    handled separately, in the background (Phase 9).
     if orchestrator.staff.is_staff_update(store, update):
         background.add_task(orchestrator.staff.handle, store, update)
         return {"ok": True}
@@ -109,3 +125,11 @@ async def telegram_webhook(
         # 7. Handle it after responding.
         background.add_task(orchestrator.process_customer, store, message.telegram_id)
         return {"ok": True}
+
+
+async def _say_not_open(telegram: TelegramService, store: Store, chat_id: int) -> None:
+    try:
+        await telegram.send_message(store.telegram_bot_token.get_secret_value(), chat_id,
+                                    both("store_not_open"))
+    except TelegramError as error:
+        logger.warning("not-open reply not sent", extra={"error": error.description})

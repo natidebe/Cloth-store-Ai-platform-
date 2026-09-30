@@ -6,7 +6,7 @@ from fastapi import FastAPI
 
 from app.agents.catalog import Catalog
 from app.agents.orchestrator import Orchestrator
-from app.api.v1 import admin, catalog, health, webhook
+from app.api.v1 import admin, catalog, health, platform, stores, webhook
 from app.core.config import get_settings
 from app.services.conversation_service import DatabaseConversationStore
 from app.services.llm_service import create_provider
@@ -85,3 +85,5 @@ app.include_router(health.router, prefix="/api/v1")
 app.include_router(webhook.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(catalog.router, prefix="/api/v1")
+app.include_router(stores.router, prefix="/api/v1")
+app.include_router(platform.router, prefix="/api/v1")

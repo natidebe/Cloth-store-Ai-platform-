@@ -115,9 +115,9 @@ class StaffDesk:
 
     @staticmethod
     def is_chat_id_request(update: TelegramUpdate) -> bool:
-        """/chatid sent in a group or channel: until Phase 9b's /link, this is
-        how the owner finds the id to put in stores.staff_chat_id (the staff
-        group) or stores.channel_id (the store's channel, Phase 8d)."""
+        """/chatid sent in a group or channel: replies with its id (for
+        stores.staff_chat_id or stores.channel_id by hand). The dashboard way
+        is /link <code> (Phase 9b, agents/onboarding.py)."""
         message = update.message or update.channel_post
         return (message is not None and message.chat.type in ("group", "supergroup", "channel")
                 and (message.text or "").split("@")[0].strip().lower() == "/chatid")

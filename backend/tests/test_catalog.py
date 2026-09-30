@@ -48,6 +48,9 @@ class FakeDb:
     async def get_store(self, store_id):
         return {STORE.id: STORE, NO_CHANNEL.id: NO_CHANNEL}.get(store_id)
 
+    async def get_store_any_status(self, store_id):  # the webhook: any status (Phase 9b)
+        return await self.get_store(store_id)
+
     async def stores_with_channel(self):
         return [STORE]
 

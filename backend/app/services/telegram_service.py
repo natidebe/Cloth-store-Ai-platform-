@@ -223,6 +223,9 @@ class TelegramService:
             if "message is not modified" not in error.description:
                 raise  # "not modified" means it already says this: fine
 
+    async def delete_message(self, bot_token: str, chat_id: int, message_id: int) -> None:
+        await self._call(bot_token, "deleteMessage", {"chat_id": chat_id, "message_id": message_id})
+
     async def remove_buttons(self, bot_token: str, chat_id: int, message_id: int) -> None:
         """Remove the buttons under a message (once they've been used)."""
         await self._call(bot_token, "editMessageReplyMarkup", {

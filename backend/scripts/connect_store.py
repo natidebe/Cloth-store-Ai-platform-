@@ -13,9 +13,11 @@ public https address of this server (e.g. your ngrok URL).
 
 Connecting also sets the bot's profile: the "What can this bot do?" text
 customers see before pressing Start, its short description, and the
-/start and /help menu (in Amharic and English, with the store's name).
+/start and /help menu (in Amharic and English, with the store's name),
+and saves the bot's Telegram id and username on the store (one store per bot).
 
-Creating stores properly comes in Phase 9b; this is for the test store.
+New stores are created in the dashboard (POST /api/v1/stores, Phase 9b). This
+script reconnects a bot, e.g. after the ngrok address changed.
 """
 import argparse
 import asyncio
@@ -23,7 +25,9 @@ import secrets
 import sys
 from uuid import UUID
 
-from app.agents.messages import bot_profile
+from pydantic import SecretStr
+
+from app.agents.onboarding import Onboarding
 from app.core.config import get_settings
 from app.models.schemas import Store
 from app.services.supabase_service import SupabaseService
@@ -99,11 +103,11 @@ async def main() -> None:
             await db.set_webhook_secret(store.id, secret)
             print("Generated and saved a new webhook secret.")
 
-        url = f"{base_url}/api/v1/webhook/{store.id}"
-        await telegram.set_webhook(token, url, secret)
+        await db.set_bot(store.id, bot_id=int(bot["id"]), bot_username=bot["username"])
+        store = store.model_copy(update={"webhook_secret": SecretStr(secret)})
+        await Onboarding(db, telegram, base_url).connect_bot(store)
         print("Connected. Telegram now sends this bot's messages to:")
         _print_info(await telegram.get_webhook_info(token))
-        await telegram.set_profile(token, *bot_profile(store.name))
         print("Bot description and /start, /help menu set.")
     except TelegramError as error:
         sys.exit(f"Telegram said: {error.description}")

@@ -56,11 +56,11 @@ async def world(anyio_backend):
 
     await _cleanup(service)
     store_a = await _insert(service, "stores", {
-        "name": f"{PREFIX}a",
+        "name": f"{PREFIX}a", "status": "active",
         "opening_hours": "Mon–Sat 8:30–19:00, Sun closed",
         "payment_instructions": "Telebirr 0911 000 000 (Selam Shoes)",
     })
-    store_b = await _insert(service, "stores", {"name": f"{PREFIX}b"})
+    store_b = await _insert(service, "stores", {"name": f"{PREFIX}b", "status": "active"})
 
     af1 = await _insert(service, "products", {
         "store_id": store_a["id"], "name": "Air Force 1", "brand": "Nike",
