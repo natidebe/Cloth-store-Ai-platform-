@@ -64,6 +64,16 @@ MAX_SEARCH_RESULTS = 10
 # ---------------------------------------------------------------------------
 
 @dataclass
+class StaffAlert:
+    """A message for the staff group about one customer (sent by staff.py)."""
+    text: str
+    telegram_id: int  # the customer it's about; staff can Reply to it
+    order_id: UUID | None = None  # adds a "Confirm payment" button
+    hand_back: bool = False  # adds a "Hand back to bot" button
+    photo_file_id: str | None = None  # send this photo, with the text as its caption
+
+
+@dataclass
 class ToolContext:
     store: Store
     customer: Customer
@@ -77,7 +87,7 @@ class ToolContext:
     # Filled in by tools, used by the orchestrator:
     sent: list[str] = field(default_factory=list)  # already sent to the customer (the summary)
     after_reply: list[str] = field(default_factory=list)  # to send after the AI's reply
-    staff_alerts: list[str] = field(default_factory=list)  # sent once the run is saved
+    staff_alerts: list[StaffAlert] = field(default_factory=list)  # sent once the run is saved
 
 
 # ---------------------------------------------------------------------------
@@ -142,19 +152,20 @@ def payment_message(store: Store, order: OrderWithItems, language: Language = "e
     )
 
 
-def new_order_alert(customer: Customer, order: OrderWithItems) -> str:
+def new_order_alert(customer: Customer, order: OrderWithItems) -> StaffAlert:
     items = "\n".join(
         f"• {i.product_name or 'item'}, {i.color or '-'}, size {i.size or '-'} × {i.quantity}"
         for i in order.items
     )
     where = (f"Delivery to: {order.delivery_address}" if order.fulfillment_method == "delivery"
              else "Pickup at the store")
-    return (
+    text = (
         f"🛒 New order #{order_number(order.id)} — waiting for payment\n"
         f"{items}\nTotal: {format_price(order.total_price)}\n"
         f"Customer: {order.contact_name}, {order.contact_phone} (Telegram id {customer.telegram_id})\n"
         f"{where}"
     )
+    return StaffAlert(text=text, telegram_id=customer.telegram_id, order_id=order.id)
 
 
 # ---------------------------------------------------------------------------
@@ -449,13 +460,22 @@ async def escalate_to_staff(args: EscalateArgs, ctx: ToolContext) -> dict[str, A
                 "instruction": "Staff already have this chat. Don't escalate again."}
     conversation.bot_paused = True
     conversation.paused_at = utc_now()
-    ctx.staff_alerts.append(
-        f"🙋 A customer needs a person\n"
-        f"Customer: {ctx.customer.name or 'unknown'} (Telegram id {ctx.customer.telegram_id})\n"
-        f"Reason: {args.reason}\n"
-        f"Summary: {args.summary}\n"
-        "The bot stays silent in this chat until staff hand it back."
-    )
+    conversation.staff_active_at = None
+    photos = [m.photo_file_id for m in ctx.new_messages if m.photo_file_id]
+    ctx.staff_alerts.append(StaffAlert(
+        text=(
+            f"🙋 A customer needs a person\n"
+            f"Customer: {ctx.customer.name or 'unknown'} (Telegram id {ctx.customer.telegram_id})\n"
+            f"Reason: {args.reason}\n"
+            f"Summary: {args.summary}\n"
+            "The bot stays silent in this chat until you hand it back. "
+            "To answer the customer, Reply to this message."
+        ),
+        telegram_id=ctx.customer.telegram_id,
+        order_id=conversation.order_draft.last_order_id,  # adds "Confirm payment"
+        hand_back=True,
+        photo_file_id=photos[-1] if photos else None,  # e.g. the payment screenshot
+    ))
     return {"status": "handed_over",
             "instruction": "Tell the customer in one short sentence that a team member will reply soon."}
 

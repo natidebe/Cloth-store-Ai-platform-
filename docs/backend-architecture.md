@@ -284,6 +284,17 @@ background job, and returns 200 immediately. Messages from a group (not a
 private chat) are only used for the `/link <code>` command that connects a
 store's staff group (section 10); anything else from a group is ignored.
 
+### `agents/staff.py` (Phase 9)
+The staff group in Telegram. Alerts about a customer carry buttons
+**[✅ Confirm payment #…]** and **[▶️ Hand back to bot]**; payment screenshots
+are posted as photos; while the bot is paused, everything the customer writes
+is posted in the group. Staff answer a customer with Telegram's **Reply** on
+any of those messages. Confirming a payment reduces stock, marks the order
+paid, tells the customer (in their language), and hands the chat back to the
+bot; it's refused, with nothing changed, if an item sold out. Chats with no
+staff activity for 2 hours go back to the bot (D9). Anyone in the staff group
+may act; we record who. `/chatid` in a group replies with its id.
+
 ### `api/v1/admin.py`
 Actions for staff (called from the dashboard):
 - Confirm payment for an order
@@ -424,7 +435,16 @@ new numbered migrations (see `BUILD_PLAN.md`, Phases 2 and 7).
   sets the hold; `confirm_payment` can't use stock held by other orders
 - `held_quantities` — held amounts for search results
 
-**`006_store_onboarding.sql`** (Phase 9b):
+**`006_staff_handover.sql`** (Phase 9):
+- `staff_messages` — which customer (and order) each bot message in the
+  staff group is about, so a staff Reply or button press reaches the right
+  customer; unique per store + staff group + message
+- `conversations.staff_active_at` — last staff reply or button press; the
+  bot takes the chat back 2 hours after it (D9)
+- `payments.confirmed_by_telegram_id`, `confirmed_by_name` — who confirmed a
+  payment from the staff group
+
+**`007_store_onboarding.sql`** (Phase 9b):
 - A way to mark platform admins (D15)
 - Store status: `pending`, `active`, `suspended` (the bot answers only when
   active)

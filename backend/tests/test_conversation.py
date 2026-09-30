@@ -291,7 +291,8 @@ async def test_version_conflict_redoes_the_run():
 async def test_staff_taking_over_mid_run_stops_the_reply():
     orchestrator, store, telegram = _world(store=ConflictOnce(pause=True))
     await _message(orchestrator, _update(1, "hi"))
-    assert telegram.sent == []
+    assert telegram.texts_to(CUSTOMER) == []  # the bot doesn't answer...
+    assert telegram.texts_to(STAFF_CHAT) == ["💬 Abebe (Telegram id 42):\nhi"]  # ...staff see it
     assert _statuses(store) == ["done"]
 
 
@@ -311,7 +312,9 @@ async def test_paused_bot_stays_silent_but_saves_messages():
     conversation = await store.get_or_create_conversation(STORE.id, CUSTOMER)
     store.pause_bot(STORE.id, CUSTOMER)
     await _message(orchestrator, _update(1, "I want a discount"))
-    assert telegram.sent == []
+    assert telegram.texts_to(CUSTOMER) == []
+    # Staff see what the customer wrote, so they can Reply to it.
+    assert telegram.texts_to(STAFF_CHAT) == ["💬 Abebe (Telegram id 42):\nI want a discount"]
     assert store.messages[conversation.id][0][1].content == "I want a discount"
     assert _statuses(store) == ["done"]
 

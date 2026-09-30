@@ -29,6 +29,7 @@ from app.models.schemas import (
     OrderItemDetail,
     OrderWithItems,
     Product,
+    StaffMessage,
     Store,
     VariantMatch,
     normalize_phone,
@@ -320,6 +321,29 @@ class SupabaseService:
         )
         return Customer.model_validate(rows[0]) if rows else None
 
+    async def get_customer(self, store_id: UUID, customer_id: UUID) -> Customer | None:
+        rows = await self._run(
+            self._db.table("customers").select("*")
+            .eq("store_id", str(store_id)).eq("id", str(customer_id)).limit(1)
+        )
+        return Customer.model_validate(rows[0]) if rows else None
+
+    async def verify_staff(self, store_id: UUID, access_token: str) -> UUID | None:
+        """The user id behind a Supabase login token, if that user is staff
+        of this store; otherwise None. (For the dashboard's admin endpoints.)"""
+        try:
+            response = await self._db.auth.get_user(access_token)
+        except Exception:  # invalid or expired token
+            return None
+        user = getattr(response, "user", None)
+        if user is None:
+            return None
+        rows = await self._run(
+            self._db.table("store_staff").select("user_id")
+            .eq("store_id", str(store_id)).eq("user_id", str(user.id)).limit(1)
+        )
+        return UUID(str(user.id)) if rows else None
+
     async def update_customer(
         self,
         store_id: UUID,
@@ -403,6 +427,20 @@ class SupabaseService:
         )
         return [_to_order_with_items(row) for row in rows]
 
+    async def get_order(self, store_id: UUID, order_id: UUID) -> OrderWithItems | None:
+        """One order of this store, with its items (None if not found)."""
+        rows = await self._run(
+            self._db.table("orders")
+            .select(
+                "*, order_items(id, order_id, variant_id, quantity, price, "
+                "product_variants(color, size, products(name)))"
+            )
+            .eq("store_id", str(store_id))
+            .eq("id", str(order_id))
+            .limit(1)
+        )
+        return _to_order_with_items(rows[0]) if rows else None
+
     # --- Stock and payments -------------------------------------------------
 
     async def update_stock(self, store_id: UUID, variant_id: UUID, delta: int) -> int:
@@ -438,6 +476,61 @@ class SupabaseService:
         }))
         logger.info("payment recorded", extra={"store_id": str(store_id), "order_id": str(order_id)})
         return UUID(payment_id)
+
+    async def note_payment_confirmer(
+        self, store_id: UUID, payment_id: UUID, telegram_id: int, name: str
+    ) -> None:
+        """Record which staff-group member confirmed a payment (migration 006)."""
+        payment = await self._run(
+            self._db.table("payments").select("id, orders!inner(store_id)")
+            .eq("id", str(payment_id)).eq("orders.store_id", str(store_id)).limit(1)
+        )
+        if not payment:
+            raise NotFoundError("payment_not_found", str(payment_id))
+        await self._run(
+            self._db.table("payments")
+            .update({"confirmed_by_telegram_id": telegram_id, "confirmed_by_name": name[:100]})
+            .eq("id", str(payment_id))
+        )
+
+    # --- Staff group (migration 006) ----------------------------------------
+
+    async def save_staff_message(self, message: StaffMessage) -> None:
+        """Remember which customer (and order) a staff-group message is about."""
+        await self._run(
+            self._db.table("staff_messages").upsert(
+                message.model_dump(mode="json"),
+                on_conflict="store_id,staff_chat_id,message_id",
+                ignore_duplicates=True,
+            )
+        )
+
+    async def find_staff_message(
+        self, store_id: UUID, staff_chat_id: int, message_id: int
+    ) -> StaffMessage | None:
+        rows = await self._run(
+            self._db.table("staff_messages")
+            .select("store_id, staff_chat_id, message_id, telegram_id, order_id")
+            .eq("store_id", str(store_id))
+            .eq("staff_chat_id", staff_chat_id)
+            .eq("message_id", message_id)
+            .limit(1)
+        )
+        return StaffMessage.model_validate(rows[0]) if rows else None
+
+    async def find_paused_before(self, cutoff: datetime, limit: int = 100) -> list[tuple[UUID, int]]:
+        """(store_id, telegram_id) of handed-over chats with no staff activity
+        since `cutoff` (D9: the bot takes them back). Looks across all stores
+        on purpose: it only finds work, which is then done per store."""
+        at = cutoff.isoformat()
+        rows = await self._run(
+            self._db.table("conversations")
+            .select("store_id, telegram_id")
+            .eq("bot_paused", True)
+            .or_(f'staff_active_at.lt."{at}",and(staff_active_at.is.null,paused_at.lt."{at}")')
+            .limit(limit)
+        )
+        return [(UUID(row["store_id"]), row["telegram_id"]) for row in rows or []]
 
     # --- Inbox (migration 003) ----------------------------------------------
 
@@ -580,6 +673,7 @@ class SupabaseService:
                 "last_message_at": _iso(conversation.last_message_at),
                 "bot_paused": conversation.bot_paused,
                 "paused_at": _iso(conversation.paused_at),
+                "staff_active_at": _iso(conversation.staff_active_at),  # migration 006
                 "version": conversation.version + 1,
                 "updated_at": _now().isoformat(),
             })

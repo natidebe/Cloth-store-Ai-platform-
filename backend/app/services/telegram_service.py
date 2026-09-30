@@ -18,7 +18,17 @@ logger = logging.getLogger(__name__)
 
 TELEGRAM_API = "https://api.telegram.org"
 MAX_MESSAGE_LENGTH = 4096  # Telegram's limit for one text message
+MAX_CAPTION_LENGTH = 1024  # ...and for a photo's caption
 _TIMEOUT_SECONDS = 15.0
+
+
+def _cut(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _keyboard(buttons: list[tuple[str, str]]) -> dict[str, Any]:
+    """Buttons under a message, one per row."""
+    return {"inline_keyboard": [[{"text": label, "callback_data": data}] for label, data in buttons]}
 
 
 class TelegramError(Exception):
@@ -101,12 +111,62 @@ class TelegramService:
 
     # --- Messages -----------------------------------------------------------
 
-    async def send_message(self, bot_token: str, chat_id: int, text: str) -> int | None:
-        """Send a text message. Returns its Telegram message id."""
-        if len(text) > MAX_MESSAGE_LENGTH:
-            text = text[: MAX_MESSAGE_LENGTH - 1] + "…"
-        result = await self._call(bot_token, "sendMessage", {"chat_id": chat_id, "text": text})
+    async def send_message(
+        self,
+        bot_token: str,
+        chat_id: int,
+        text: str,
+        *,
+        buttons: list[tuple[str, str]] | None = None,
+        reply_to: int | None = None,
+    ) -> int | None:
+        """Send a text message. Returns its Telegram message id.
+
+        buttons: (label, data) pairs shown under the message, one per row.
+        Pressing one sends us a callback query with that data.
+        reply_to: show it as a reply to this message in the same chat.
+        """
+        payload: dict[str, Any] = {"chat_id": chat_id, "text": _cut(text, MAX_MESSAGE_LENGTH)}
+        if buttons:
+            payload["reply_markup"] = _keyboard(buttons)
+        if reply_to:
+            payload["reply_parameters"] = {"message_id": reply_to, "allow_sending_without_reply": True}
+        result = await self._call(bot_token, "sendMessage", payload)
         return result.get("message_id") if isinstance(result, dict) else None
+
+    async def send_photo(
+        self,
+        bot_token: str,
+        chat_id: int,
+        photo_file_id: str,
+        caption: str,
+        *,
+        buttons: list[tuple[str, str]] | None = None,
+    ) -> int | None:
+        """Send a photo the bot received earlier (by its file id), with a caption."""
+        payload: dict[str, Any] = {
+            "chat_id": chat_id, "photo": photo_file_id, "caption": _cut(caption, MAX_CAPTION_LENGTH),
+        }
+        if buttons:
+            payload["reply_markup"] = _keyboard(buttons)
+        result = await self._call(bot_token, "sendPhoto", payload)
+        return result.get("message_id") if isinstance(result, dict) else None
+
+    async def answer_button(self, bot_token: str, callback_id: str, text: str,
+                            *, popup: bool = False) -> None:
+        """Answer a button press: a short notice for the person who pressed it
+        (popup=True shows a box they must close). Telegram shows a spinner on
+        the button until this is called."""
+        await self._call(bot_token, "answerCallbackQuery", {
+            "callback_query_id": callback_id, "text": _cut(text, 200), "show_alert": popup,
+        })
+
+    async def remove_buttons(self, bot_token: str, chat_id: int, message_id: int) -> None:
+        """Remove the buttons under a message (once they've been used)."""
+        await self._call(bot_token, "editMessageReplyMarkup", {
+            "chat_id": chat_id, "message_id": message_id,
+            "reply_markup": {"inline_keyboard": []},
+        })
 
     async def notify_staff(self, store: Store, text: str) -> bool:
         """Send a message to the store's staff group.
@@ -132,7 +192,8 @@ class TelegramService:
         await self._call(bot_token, "setWebhook", {
             "url": url,
             "secret_token": secret,
-            "allowed_updates": ["message"],
+            # messages, plus button presses in the staff group (Phase 9)
+            "allowed_updates": ["message", "callback_query"],
             "drop_pending_updates": True,  # don't replay old messages
         })
 

@@ -26,9 +26,11 @@ from datetime import timedelta
 
 from app.agents.messages import Language, both, detect_language, message_language, t
 from app.agents.prompts import build_system_prompt
+from app.agents.staff import StaffDesk
 from app.agents.tools import (
     TOOL_DEFINITIONS,
     EscalateArgs,
+    StaffAlert,
     ToolContext,
     escalate_to_staff,
     order_number,
@@ -87,7 +89,7 @@ MAX_TOOL_ROUNDS = 5
 @dataclass
 class RunResult:
     replies: list[str] = field(default_factory=list)  # to send to the customer, in order
-    staff_alerts: list[str] = field(default_factory=list)
+    staff_alerts: list[StaffAlert] = field(default_factory=list)
 
 
 def to_llm_message(message: ChatMessage) -> LLMMessage:
@@ -130,6 +132,7 @@ class Orchestrator:
         *,
         locks: CustomerLocks | None = None,
         burst_wait: float = BURST_WAIT_SECONDS,
+        staff: StaffDesk | None = None,
     ):
         self.db = db
         self.conversations = conversations
@@ -137,6 +140,7 @@ class Orchestrator:
         self.llm = llm
         self.locks = locks or CustomerLocks()
         self.burst_wait = burst_wait
+        self.staff = staff or StaffDesk(db, conversations, telegram)
         self._tasks: set[asyncio.Task] = set()
 
     # --- Handling one customer ----------------------------------------------
@@ -224,8 +228,20 @@ class Orchestrator:
             if attempt:
                 conversation = await self.conversations.get_or_create_conversation(store.id, telegram_id)
             if conversation.bot_paused:
+                # Staff have this chat: the bot stays silent, and staff see
+                # what the customer wrote (they Reply to it to answer).
                 logger.info("bot paused; staff handle this chat")
-                return RunResult()
+                last_order = conversation.order_draft.last_order_id
+                return RunResult(staff_alerts=[
+                    StaffAlert(
+                        text=(f"💬 {customer.name or 'Customer'} (Telegram id {customer.telegram_id}):\n"
+                              f"{m.text or f'[{m.kind}]'}"),
+                        telegram_id=customer.telegram_id,
+                        order_id=last_order if m.kind == "photo" else None,  # a screenshot?
+                        photo_file_id=m.photo_file_id,
+                    )
+                    for m in messages
+                ])
 
             now = utc_now()
             if is_expired(conversation, now):
@@ -314,10 +330,10 @@ class Orchestrator:
         await self.telegram.send_message(store.telegram_bot_token.get_secret_value(), chat_id, text)
         logger.info("reply sent")
 
-    async def _alert_staff(self, store: Store, text: str) -> None:
+    async def _alert_staff(self, store: Store, alert: StaffAlert) -> None:
         """Best effort: a failed staff alert is logged, not retried."""
         try:
-            await self.telegram.notify_staff(store, text)
+            await self.staff.send_alert(store, alert)
         except TelegramError as error:
             logger.error("staff alert not delivered", extra={"error": error.description})
 
@@ -345,11 +361,11 @@ class Orchestrator:
         except TelegramError as send_error:
             logger.error("fallback not delivered", extra={"error": send_error.description})
         try:
-            await self.telegram.notify_staff(
-                store,
-                f"⚠️ The bot could not answer a customer (Telegram id {failed[0].telegram_id}) "
-                f"after {failed[0].attempts} tries. Please reply to them yourself.",
-            )
+            await self.staff.send_alert(store, StaffAlert(
+                text=(f"⚠️ The bot could not answer a customer (Telegram id {failed[0].telegram_id}) "
+                      f"after {failed[0].attempts} tries. Reply to this message to answer them."),
+                telegram_id=failed[0].telegram_id,
+            ))
         except TelegramError as send_error:
             logger.error("staff alert not delivered", extra={"error": send_error.description})
 
@@ -407,6 +423,10 @@ class Orchestrator:
                 await self.recover()
             except Exception:
                 logger.exception("recovery sweep failed")
+            try:  # D9: chats staff haven't touched for 2 hours go back to the bot
+                await self.staff.resume_idle()
+            except Exception:
+                logger.exception("hand-back sweep failed")
 
     async def close(self) -> None:
         """At shutdown: stop running work. Unfinished rows are recovered at

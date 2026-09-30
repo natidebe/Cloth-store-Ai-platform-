@@ -286,12 +286,24 @@ class TelegramMessage(TelegramModel):
     sticker: TelegramFile | None = None
     voice: TelegramFile | None = None
     document: TelegramFile | None = None
+    # When this message is a Telegram "Reply" to another message (staff
+    # replying to the bot's alert about a customer).
+    reply_to_message: "TelegramMessage | None" = None
+
+
+class TelegramCallbackQuery(TelegramModel):
+    """Someone pressed a button under one of the bot's messages."""
+    id: str
+    from_user: TelegramUser = Field(alias="from")
+    message: TelegramMessage | None = None  # the message the button was on
+    data: str | None = None  # what we put in the button, e.g. "pay:<order id>"
 
 
 class TelegramUpdate(TelegramModel):
     update_id: int
     message: TelegramMessage | None = None
     edited_message: TelegramMessage | None = None
+    callback_query: TelegramCallbackQuery | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +450,21 @@ class Conversation(DbModel):
     bot_paused: bool = False  # true while staff handle the chat
     paused_at: datetime | None = None
     paused_by: UUID | None = None
+    # Last staff reply or button press in this chat (migration 006). The bot
+    # takes the chat back 2 hours after this (or after paused_at) (D9).
+    staff_active_at: datetime | None = None
     last_message_at: datetime | None = None  # last customer message
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class StaffMessage(DbModel):
+    """A bot message in the staff group, and the customer it's about (migration 006)."""
+    store_id: UUID
+    staff_chat_id: int
+    message_id: int
+    telegram_id: int
+    order_id: UUID | None = None
+
+
+TelegramMessage.model_rebuild()  # it refers to itself (reply_to_message)

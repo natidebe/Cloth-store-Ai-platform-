@@ -21,7 +21,7 @@ from itertools import count
 from typing import Any
 from uuid import UUID, uuid4
 
-from app.models.schemas import ChatMessage, Conversation, InboxItem, OrderDraft
+from app.models.schemas import ChatMessage, Conversation, InboxItem, OrderDraft, StaffMessage
 from app.services.supabase_service import (
     NotFoundError,
     SupabaseService,
@@ -113,6 +113,23 @@ class ConversationStore(ABC):
     async def save_conversation(self, conversation: Conversation) -> Conversation:
         """Raises VersionConflictError if someone else saved it since it was loaded."""
 
+    # --- Staff group (migration 006) ----------------------------------------
+
+    @abstractmethod
+    async def save_staff_message(self, message: StaffMessage) -> None:
+        """Remember which customer (and order) a staff-group message is about."""
+
+    @abstractmethod
+    async def find_staff_message(
+        self, store_id: UUID, staff_chat_id: int, message_id: int
+    ) -> StaffMessage | None:
+        ...
+
+    @abstractmethod
+    async def find_paused_before(self, cutoff: datetime) -> list[tuple[UUID, int]]:
+        """(store_id, telegram_id) of handed-over chats with no staff activity
+        since `cutoff`. Looks across stores, like the inbox recovery."""
+
     @abstractmethod
     async def add_messages(
         self, store_id: UUID, conversation_id: UUID, messages: list[ChatMessage]
@@ -167,6 +184,15 @@ class DatabaseConversationStore(ConversationStore):
     async def get_recent_messages(self, store_id, conversation_id, limit, since=None):
         return await self._db.get_recent_messages(store_id, conversation_id, limit, since)
 
+    async def save_staff_message(self, message):
+        await self._db.save_staff_message(message)
+
+    async def find_staff_message(self, store_id, staff_chat_id, message_id):
+        return await self._db.find_staff_message(store_id, staff_chat_id, message_id)
+
+    async def find_paused_before(self, cutoff):
+        return await self._db.find_paused_before(cutoff)
+
 
 # ---------------------------------------------------------------------------
 # In-memory version (tests only: everything is lost on restart)
@@ -176,6 +202,7 @@ class InMemoryConversationStore(ConversationStore):
     def __init__(self) -> None:
         self.inbox: dict[int, InboxItem] = {}
         self.conversations: dict[tuple[UUID, int], Conversation] = {}
+        self.staff_messages: dict[tuple[UUID, int, int], StaffMessage] = {}
         self.messages: dict[UUID, list[tuple[UUID, ChatMessage]]] = {}  # conversation id -> (store, message)
         self._ids = count(1)
 
@@ -257,6 +284,7 @@ class InMemoryConversationStore(ConversationStore):
             "last_message_at": conversation.last_message_at,
             "bot_paused": conversation.bot_paused,
             "paused_at": conversation.paused_at,
+            "staff_active_at": conversation.staff_active_at,
             "version": conversation.version + 1,
             "updated_at": utc_now(),
         })
@@ -277,7 +305,20 @@ class InMemoryConversationStore(ConversationStore):
             history = [m for m in history if m.created_at >= since]
         return history[-limit:]
 
-    # Test helper: what staff will do in Phase 9.
+    # --- Staff group -------------------------------------------------------
+
+    async def save_staff_message(self, message):
+        key = (message.store_id, message.staff_chat_id, message.message_id)
+        self.staff_messages.setdefault(key, message)
+
+    async def find_staff_message(self, store_id, staff_chat_id, message_id):
+        return self.staff_messages.get((store_id, staff_chat_id, message_id))
+
+    async def find_paused_before(self, cutoff):
+        return [(c.store_id, c.telegram_id) for c in self.conversations.values()
+                if c.bot_paused and (c.staff_active_at or c.paused_at or cutoff) < cutoff]
+
+    # Test helper: staff take over (without the staff group).
     def pause_bot(self, store_id: UUID, telegram_id: int) -> None:
         conversation = self.conversations[(store_id, telegram_id)]
         conversation.bot_paused, conversation.version = True, conversation.version + 1

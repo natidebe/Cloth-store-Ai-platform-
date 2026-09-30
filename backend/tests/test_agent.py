@@ -26,7 +26,7 @@ from app.models.schemas import (
 )
 from app.services.conversation_service import InMemoryConversationStore
 from app.services.llm_service import FakeProvider, LLMResponse, ToolCall
-from app.services.supabase_service import OutOfStockError
+from app.services.supabase_service import NotFoundError, OrderRejectedError, OutOfStockError
 from app.services.telegram_service import TELEGRAM_API, TelegramService
 
 pytestmark = pytest.mark.anyio
@@ -65,6 +65,8 @@ class FakeDb:
         self.orders: dict[str, OrderWithItems] = {}  # idempotency key -> order
         self.customer = Customer(id=uuid4(), store_id=STORE.id, telegram_id=CUSTOMER, name="Abebe")
         self.customer_updates = []
+        self.payments = []
+        self.staff_logins = {}  # (store_id, token) -> user id
         self.products = [Product(id=uuid4(), store_id=STORE.id, name="Air Force 1", brand="Nike",
                                  category="sneakers", search_keywords="AF1, ኤር ፎርስ")]
 
@@ -123,17 +125,69 @@ class FakeDb:
         return [o for o in self.orders.values()
                 if o.store_id == store_id and o.customer_id == customer_id][:limit]
 
+    # --- Phase 9: staff confirming payments ---------------------------------
+
+    async def get_order(self, store_id, order_id):
+        return next((o for o in self.orders.values() if o.id == order_id and o.store_id == store_id), None)
+
+    async def get_customer(self, store_id, customer_id):
+        return self.customer if (store_id, customer_id) == (STORE.id, self.customer.id) else None
+
+    async def record_payment(self, store_id, order_id, amount, method, staff_id):
+        """Like confirm_payment in the database: all or nothing (D3)."""
+        order = await self.get_order(store_id, order_id)
+        if order is None:
+            raise NotFoundError("order_not_found")
+        if order.payment_status == "paid":
+            raise OrderRejectedError("already_paid")
+        for item in order.items:
+            variant = self.variants[item.variant_id]
+            own_hold = item.quantity if variant.held >= item.quantity else 0
+            if variant.stock_quantity - (variant.held - own_hold) < item.quantity:
+                raise OutOfStockError("out_of_stock", str(item.variant_id))
+        for item in order.items:
+            variant = self.variants[item.variant_id]
+            self.variants[item.variant_id] = variant.model_copy(update={
+                "stock_quantity": variant.stock_quantity - item.quantity,
+                "held": max(variant.held - item.quantity, 0)})
+        paid = order.model_copy(update={"payment_status": "paid", "status": "confirmed"})
+        self.orders[order.idempotency_key] = paid
+        self.payments.append({"order_id": order_id, "amount": amount, "method": method, "staff": staff_id})
+        return uuid4()
+
+    async def note_payment_confirmer(self, store_id, payment_id, telegram_id, name):
+        self.payments[-1]["confirmed_by"] = (telegram_id, name)
+
+    async def verify_staff(self, store_id, token):
+        return self.staff_logins.get((store_id, token))
+
 
 class FakeTelegram:
     def __init__(self):
         self.sent = []  # (chat_id, text)
+        self.calls = []  # (method, body, message_id) for every call
         self._next_id = 1000
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content or b"{}")
-        self.sent.append((body.get("chat_id"), body.get("text")))
+        method = request.url.path.rsplit("/", 1)[-1]
         self._next_id += 1
+        self.calls.append((method, body, self._next_id))
+        if method in ("sendMessage", "sendPhoto"):
+            # A photo's text is its caption.
+            self.sent.append((body.get("chat_id"), body.get("text") or body.get("caption")))
         return httpx.Response(200, json={"ok": True, "result": {"message_id": self._next_id}})
+
+    def last_message_id(self, chat_id):
+        """The id of the last message the bot sent to this chat."""
+        return next(mid for method, body, mid in reversed(self.calls)
+                    if method in ("sendMessage", "sendPhoto") and body.get("chat_id") == chat_id)
+
+    def buttons(self, message_id):
+        """The (label, data) buttons on one of the bot's messages."""
+        body = next(body for _, body, mid in self.calls if mid == message_id)
+        rows = body.get("reply_markup", {}).get("inline_keyboard", [])
+        return [(b["text"], b["callback_data"]) for row in rows for b in row]
 
     def service(self):
         return TelegramService(httpx.AsyncClient(base_url=TELEGRAM_API,

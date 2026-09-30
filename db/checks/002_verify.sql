@@ -1,5 +1,9 @@
 -- 002_verify.sql
 --
+-- NOTE: only valid right after 002. Migration 005 changed place_order (it
+-- now takes a hold time), so after 005 this script fails with "function
+-- place_order(...) does not exist". Use the later check files instead.
+--
 -- Run in the Supabase SQL Editor AFTER 002_platform_updates.sql.
 -- It creates a temporary test store, checks every new rule and function,
 -- then deletes the test store again. Nothing is left behind.

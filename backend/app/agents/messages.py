@@ -53,6 +53,12 @@ TEXTS: dict[str, dict[Language, str]] = {
         "am": "ከከፈሉ በኋላ የክፍያውን ስክሪንሾት እዚህ ይላኩልን።",
     },
 
+    # Sent only after a STAFF member confirmed the payment (Phase 9).
+    "payment_confirmed": {
+        "en": "✅ Payment confirmed for order #{number}. Thank you! We're preparing your order.",
+        "am": "✅ ለትዕዛዝ #{number} ክፍያዎ ተረጋግጧል። እናመሰግናለን! ትዕዛዝዎን እያዘጋጀን ነው።",
+    },
+
     # --- Fixed replies ------------------------------------------------------
     # Deliberately says nothing about the payment: only staff confirm it.
     "photo_reply": {

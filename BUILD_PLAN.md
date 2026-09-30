@@ -414,7 +414,7 @@ Amharic; the same order in English gets them in English.
 
 ---
 
-### Phase 9 — Handing over to staff
+### Phase 9 — Handing over to staff 🟡 Built; waiting for migration 006 and my Telegram test
 
 **Goal:** staff can take over smoothly when the bot can't help.
 
@@ -433,6 +433,23 @@ Amharic; the same order in English gets them in English.
   adds the photo itself.)
 - Staff alerts need `staff_chat_id` on the store: until Phase 9b's `/link`,
   I set it by hand for the test store.
+
+**How it was built** (decisions D9, D25–D27):
+- Migration `006_staff_handover.sql`: `staff_messages` (which customer and
+  order each bot message in the staff group is about), `staff_active_at`
+  on conversations, and who confirmed a payment from Telegram.
+- `backend/app/agents/staff.py`: alerts with buttons **[✅ Confirm payment
+  #…]** and **[▶️ Hand back to bot]**; the payment screenshot itself is
+  posted in the group; while the bot is paused, everything the customer
+  writes is posted in the group; staff answer with Telegram's **Reply**.
+- Confirming a payment reduces stock, marks the order paid, tells the
+  customer in their language, and hands the chat back to the bot. Refused
+  (nothing changed) if an item sold out.
+- D9: the minute sweep hands chats back after 2 hours without staff activity.
+- Dashboard endpoints (login-protected): `POST /api/v1/admin/stores/{store}/
+  orders/{order}/confirm-payment` and `.../conversations/{telegram_id}/hand-back`.
+- `/chatid` in a group replies with the group's id (for `staff_chat_id`,
+  until Phase 9b's `/link`).
 
 **Check:** send a payment screenshot to the bot and see the photo arrive in
 the staff group with the order number; staff confirm the payment and the
@@ -476,7 +493,7 @@ the dashboard asks the backend to do each step.
 - Only platform admins (D15) can see it.
 
 **What to build:**
-- Migration `006_store_onboarding.sql` (I approve it first):
+- Migration `007_store_onboarding.sql` (I approve it first):
   - a way to mark platform admins
   - store status: pending, active, suspended
   - one store per bot (no two stores with the same bot)
@@ -555,7 +572,7 @@ Answer each before the phase listed, and record the answer here.
 | D6 | Which payment methods (Telebirr, bank transfer, cash on delivery, …)? | Phase 2 | Up to each store; we don't integrate payments. Method is free text recorded by staff |
 | D7 | Which order stages (e.g. pending → confirmed → shipped → delivered, or cancelled)? | Phase 2 | Order: pending, confirmed, out_for_delivery, delivered, cancelled. Payment: unpaid, paid, refunded |
 | D8 | Approve the `003_conversations.sql` tables? | Phase 7 | Yes: `conversations` (with version number), `messages`, `inbox` |
-| D9 | How does the bot resume after a handover (staff command, button, time limit)? | Phase 9 | |
+| D9 | How does the bot resume after a handover (staff command, button, time limit)? | Phase 9 | A "Hand back to bot" button in the staff group (and the dashboard endpoint), or automatically 2 hours after the last staff activity. Confirming a payment also hands the chat back |
 | D10 | One order can hold several items? | Phase 2 | Yes |
 | D11 | Staff roles? | Phase 2 | owner and staff |
 | D12 | Which phone numbers are accepted? | Phase 3 | Any number: optional +, 7–15 digits (spaces, dashes, brackets removed) |
@@ -571,10 +588,14 @@ Answer each before the phase listed, and record the answer here.
 | D22 | Which store profile fields? (suggested: opening hours, location, delivery areas and fees, pickup instructions, payment instructions, return policy) | Phase 7b | The suggested fields: opening hours, location, delivery areas and fees, pickup instructions, payment instructions, return policy |
 | D23 | Add product nicknames ("search keywords") now in 7b, or rely only on the product-name list in the AI's instructions for now? | Phase 7b | Now, in 7b (plus the product-name list in Phase 8) |
 | D24 | Delivery fee: added to the order total automatically, shown as text next to the total, or adjusted by staff? | Phase 8 | Staff adjust it by hand: the order total covers the items only, and staff tell the customer the delivery fee |
+| D25 | How do staff reply to a customer during a handover? | Phase 9 | With Telegram's Reply on the bot's message about that customer in the staff group; the bot sends it to the customer and it's saved in the history |
+| D26 | How do staff confirm a payment before the dashboard exists? | Phase 9 | A "Confirm payment" button in the staff group (plus the login-protected endpoint for the dashboard) |
+| D27 | Who in the staff group may press the buttons and reply? | Phase 9 | Anyone in the staff group; we record who did it |
 
 ---
 
 ## 7. Where to start
 
-Phases 8 and 8b are done (checked in Telegram). Next is **Phase 9**
-(handing over to staff; needs D9 first) — no coding until I say "continue".
+Phase 9 is built and tested. Next: I run `006_staff_handover.sql` in
+Supabase and test the staff group in Telegram, then **Phase 9b** (store
+onboarding; needs D14–D18) or **Phase 10** — no coding until I say "continue".
