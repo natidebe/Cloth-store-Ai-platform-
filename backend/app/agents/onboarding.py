@@ -35,6 +35,7 @@ LINK_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 LINK_CODE_LENGTH = 8
 BOT_TOKEN_PATTERN = re.compile(r"^\d{5,15}:[A-Za-z0-9_-]{30,50}$")
 LINK_COMMAND = "/link"
+LINK_PATTERN = re.compile(r"/link(?:@\w+)?\s*([A-Za-z0-9]*)", re.IGNORECASE)
 
 
 class OnboardingError(Exception):
@@ -67,10 +68,11 @@ def link_command(update: TelegramUpdate) -> tuple[int, str, str] | None:
     message = update.message or update.channel_post
     if message is None or message.chat.type not in ("group", "supergroup", "channel"):
         return None
-    parts = (message.text or "").split()
-    if not parts or parts[0].split("@")[0].lower() != LINK_COMMAND:
+    # "/link CODE", "/link@shop_bot CODE", and also "/linkCODE" (easy to type by mistake).
+    found = LINK_PATTERN.fullmatch((message.text or "").strip())
+    if found is None:
         return None
-    return message.chat.id, message.chat.type, (parts[1].upper() if len(parts) > 1 else "")
+    return message.chat.id, message.chat.type, found.group(1).upper()
 
 
 class Onboarding:

@@ -14,12 +14,12 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from app.agents.messages import both
-from app.agents.onboarding import Onboarding, new_link_code
+from app.agents.onboarding import Onboarding, link_command, new_link_code
 from app.agents.orchestrator import Orchestrator
 from app.api.v1.stores import get_onboarding
 from app.api.v1.webhook import SECRET_HEADER, get_db, get_orchestrator
 from app.main import app
-from app.models.schemas import AuthUser, Customer, Store, StoreMembership, StoreSummary
+from app.models.schemas import AuthUser, Customer, Store, StoreMembership, StoreSummary, TelegramUpdate
 from app.services.conversation_service import InMemoryConversationStore
 from app.services.supabase_service import DuplicateError
 from app.services.telegram_service import TELEGRAM_API, TelegramService
@@ -341,6 +341,19 @@ def test_only_the_owner_gets_link_codes_and_manages_staff(world):
         assert client.put(f"/api/v1/stores/{store_id}/bot-token", json={"bot_token": TOKEN_B},
                           headers=auth(who)).status_code == status
     assert db.stores[store_id].telegram_bot_id == 111111111
+
+
+@pytest.mark.parametrize("text, code", [
+    ("/link ABCD2345", "ABCD2345"), ("/linkabcd2345", "ABCD2345"), ("/LINK  abcd2345 ", "ABCD2345"),
+    ("/link@shop_a_bot ABCD2345", "ABCD2345"), ("/link", ""),
+])
+def test_link_command_forms(text, code):
+    assert link_command(TelegramUpdate.model_validate(group_message(text))) == (-500, "group", code)
+
+
+@pytest.mark.parametrize("text", ["link ABCD2345", "/linker is here", "hello /link ABCD2345", "/chatid"])
+def test_not_a_link_command(text):
+    assert link_command(TelegramUpdate.model_validate(group_message(text))) is None
 
 
 def test_link_codes_are_easy_to_type():
