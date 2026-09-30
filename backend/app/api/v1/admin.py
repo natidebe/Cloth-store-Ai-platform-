@@ -11,7 +11,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from app.agents.catalog import Catalog
 from app.agents.orchestrator import Orchestrator
+from app.api.v1.catalog import get_catalog
 from app.api.v1.webhook import get_db, get_orchestrator
 from app.core.security import bearer_token
 from app.models.schemas import Store
@@ -68,6 +70,24 @@ async def confirm_payment(
     body = body or ConfirmPaymentRequest()
     result = await orchestrator.staff.confirm_payment(
         store, order_id, amount=body.amount, method=body.method, staff_user_id=staff_user_id)
+    if not result.ok:
+        raise HTTPException(status_code=409, detail=result.message)
+    return ActionResponse(ok=True, message=result.message)
+
+
+@router.post("/stores/{store_id}/products/{product_id}/publish", response_model=ActionResponse)
+async def publish_product(
+    store_id: UUID,
+    product_id: UUID,
+    staff_user_id: UUID = Depends(require_staff),
+    db: SupabaseService = Depends(get_db),
+    catalog: Catalog = Depends(get_catalog),
+) -> ActionResponse:
+    """Post the product to the store's channel now (or update its post).
+    New products are also posted automatically by the database webhook (D37);
+    this is for posting older products, or trying again."""
+    store = await _active_store(store_id, db)
+    result = await catalog.publish(store, product_id)
     if not result.ok:
         raise HTTPException(status_code=409, detail=result.message)
     return ActionResponse(ok=True, message=result.message)

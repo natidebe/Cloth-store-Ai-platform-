@@ -56,6 +56,25 @@ TEXTS: dict[str, dict[Language, str]] = {
     "ask_name": {"en": "Your name, please?", "am": "ስምዎን ይንገሩኝ?"},
     "ask_phone": {"en": "Your phone number?", "am": "ስልክ ቁጥርዎ ስንት ነው?"},
     "ask_edit": {"en": "What would you like to change?", "am": "ምን መቀየር ይፈልጋሉ?"},
+    # The cart (Phase 8d, D32): several items in one order.
+    "ask_more": {
+        "en": "🛒 Your cart:\n{items}\n\nWould you like to add another item?",
+        "am": "🛒 የያዙት:\n{items}\n\nሌላ ዕቃ መጨመር ይፈልጋሉ?",
+    },
+    "ask_edit_items": {
+        "en": "🛒 Your cart:\n{items}\n\nTap an item to remove it, or add another one.",
+        "am": "🛒 የያዙት:\n{items}\n\nለማስወገድ ዕቃውን ይጫኑ፣ ወይም ሌላ ይጨምሩ።",
+    },
+    "btn_add_item": {"en": "➕ Add another item", "am": "➕ ሌላ ዕቃ ጨምር"},
+    "btn_continue": {"en": "➡️ Continue", "am": "➡️ ቀጥል"},
+    "btn_remove": {"en": "❌ {item}", "am": "❌ {item}"},
+    "btn_edit_items": {"en": "🛒 Items", "am": "🛒 ዕቃዎች"},
+    # From the channel (Phase 8d, D34)
+    "sold_out_product": {
+        "en": "Sorry, {product} is sold out.",
+        "am": "ይቅርታ፣ {product} ተሽጧል።",
+    },
+    "similar_products": {"en": "Similar items you might like:", "am": "ሊወዷቸው የሚችሉ ተመሳሳይ ዕቃዎች:"},
     "summary_buttons": {
         "en": "Tap ✅ Confirm to place the order, or ✏️ Edit to change something.",
         "am": "ለማዘዝ ✅ አረጋግጥ ይጫኑ፤ ለመቀየር ✏️ አስተካክል ይጫኑ።",

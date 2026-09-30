@@ -29,6 +29,7 @@ from app.models.schemas import (
     OrderItemDetail,
     OrderWithItems,
     Product,
+    ProductPost,
     StaffMessage,
     Store,
     VariantMatch,
@@ -305,6 +306,73 @@ class SupabaseService:
             .eq("product_id", str(product_id))
         )
         return await self._with_holds(store_id, [_to_variant_match(row) for row in rows])
+
+    # --- Channel catalog (Phase 8d, migration 007) ----------------------------
+
+    async def get_product(self, store_id: UUID, product_id: UUID) -> Product | None:
+        rows = await self._run(
+            self._db.table("products").select("*")
+            .eq("store_id", str(store_id)).eq("id", str(product_id)).limit(1)
+        )
+        return Product.model_validate(rows[0]) if rows else None
+
+    async def find_product_by_code(self, store_id: UUID, code: str) -> Product | None:
+        """A product by its code (e.g. "P101"), in this store only."""
+        rows = await self._run(
+            self._db.table("products").select("*")
+            .eq("store_id", str(store_id)).eq("code", code.strip().upper()).limit(1)
+        )
+        return Product.model_validate(rows[0]) if rows else None
+
+    async def list_catalog(self, store_id: UUID, limit: int = 500) -> list[Product]:
+        """All of this store's products (for the post check in the sweep)."""
+        rows = await self._run(
+            self._db.table("products").select("*").eq("store_id", str(store_id)).limit(limit)
+        )
+        return [Product.model_validate(row) for row in rows]
+
+    async def stores_with_channel(self) -> list[Store]:
+        """Active stores that have a channel. Looks across stores on purpose:
+        it only finds work for the post check, which is then done per store."""
+        rows = await self._run(
+            self._db.table("stores").select("*").eq("is_active", True).not_.is_("channel_id", "null")
+        )
+        return [Store.model_validate(row) for row in rows]
+
+    async def list_product_posts(self, store_id: UUID, product_id: UUID | None = None,
+                                 code: str | None = None) -> list[ProductPost]:
+        """This store's channel posts, optionally for one product (or code)."""
+        request = self._db.table("product_posts").select("*").eq("store_id", str(store_id))
+        if product_id is not None:
+            request = request.eq("product_id", str(product_id))
+        if code is not None:
+            request = request.eq("product_code", code)
+        rows = await self._run(request.order("id"))
+        return [ProductPost.model_validate(row) for row in rows]
+
+    async def find_post(self, store_id: UUID, channel_id: int, message_id: int) -> ProductPost | None:
+        """The post a customer forwarded, if it's one of this store's bot posts."""
+        rows = await self._run(
+            self._db.table("product_posts").select("*")
+            .eq("store_id", str(store_id)).eq("channel_id", channel_id).eq("message_id", message_id)
+            .limit(1)
+        )
+        return ProductPost.model_validate(rows[0]) if rows else None
+
+    async def save_product_post(self, store_id: UUID, product: Product, channel_id: int,
+                                message_id: int, has_photo: bool, caption_hash: str) -> None:
+        await self._run(self._db.table("product_posts").insert({
+            "store_id": str(store_id), "product_id": str(product.id), "product_code": product.code,
+            "channel_id": channel_id, "message_id": message_id, "has_photo": has_photo,
+            "caption_hash": caption_hash,
+        }))
+
+    async def set_post_hash(self, store_id: UUID, post_id: int, caption_hash: str) -> None:
+        await self._run(
+            self._db.table("product_posts")
+            .update({"caption_hash": caption_hash, "updated_at": _now().isoformat()})
+            .eq("store_id", str(store_id)).eq("id", post_id)
+        )
 
     async def get_variants(self, store_id: UUID, variant_ids: list[UUID]) -> list[VariantMatch]:
         """These variants of this store, with current price and stock.

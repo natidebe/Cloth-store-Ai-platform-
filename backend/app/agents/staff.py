@@ -115,20 +115,23 @@ class StaffDesk:
 
     @staticmethod
     def is_chat_id_request(update: TelegramUpdate) -> bool:
-        """/chatid sent in a group: until Phase 9b's /link, this is how the
-        owner finds the group's id to put in stores.staff_chat_id."""
-        message = update.message
-        return (message is not None and message.chat.type in ("group", "supergroup")
+        """/chatid sent in a group or channel: until Phase 9b's /link, this is
+        how the owner finds the id to put in stores.staff_chat_id (the staff
+        group) or stores.channel_id (the store's channel, Phase 8d)."""
+        message = update.message or update.channel_post
+        return (message is not None and message.chat.type in ("group", "supergroup", "channel")
                 and (message.text or "").split("@")[0].strip().lower() == "/chatid")
 
     async def send_chat_id(self, store: Store, update: TelegramUpdate) -> None:
-        chat_id = update.message.chat.id
+        message = update.message or update.channel_post
+        chat_id = message.chat.id
+        field_name = "channel_id" if message.chat.type == "channel" else "staff_chat_id"
         try:
             await self.telegram.send_message(
                 store.telegram_bot_token.get_secret_value(), chat_id,
-                f"This group's chat id is {chat_id}\n"
-                "To make it the staff group, put this number in staff_chat_id for your store.",
-                reply_to=update.message.message_id)
+                f"This chat's id is {chat_id}\n"
+                f"Put this number, including the minus sign, in {field_name} for your store.",
+                reply_to=message.message_id)
         except TelegramError as error:
             logger.error("chat id not sent", extra={"error": error.description})
 

@@ -22,7 +22,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from app.agents.flow import OrderFlow, Reply
+from app.agents.flow import OrderFlow, Reply, product_link_code
 from app.agents.messages import Language, both, detect_language, message_language, t
 from app.agents.staff import StaffDesk
 from app.agents.tools import StaffAlert, ToolContext
@@ -54,6 +54,8 @@ logger = logging.getLogger(__name__)
 
 # Recovery sweep timing.
 RECOVERY_INTERVAL_SECONDS = 60
+# Check that channel posts match the database every this many sweeps (D39).
+CATALOG_CHECK_EVERY_MINUTES = 5
 # A waiting row older than this was missed (or is due for a retry). Normal
 # handling claims rows within a few seconds.
 WAITING_TOO_LONG = timedelta(seconds=30)
@@ -113,6 +115,7 @@ class Orchestrator:
         burst_wait: float = BURST_WAIT_SECONDS,
         staff: StaffDesk | None = None,
         flow: OrderFlow | None = None,  # tests of the plumbing pass a simpler one
+        catalog=None,  # the channel catalog (Phase 8d), checked by the sweep
     ):
         self.db = db
         self.conversations = conversations
@@ -122,6 +125,7 @@ class Orchestrator:
         self.burst_wait = burst_wait
         self.staff = staff or StaffDesk(db, conversations, telegram)
         self.flow = flow or OrderFlow(db, llm)
+        self.catalog = catalog
         self._tasks: set[asyncio.Task] = set()
 
     # --- Handling one customer ----------------------------------------------
@@ -208,6 +212,13 @@ class Orchestrator:
         for attempt in range(MAX_VERSION_RETRIES):
             if attempt:
                 conversation = await self.conversations.get_or_create_conversation(store.id, telegram_id)
+            resumed = False
+            if conversation.bot_paused and await self._opens_channel_order(store, messages):
+                # D33: the customer tapped Order on a channel post: the bot
+                # takes the chat back and starts the order (staff are told).
+                conversation.bot_paused, conversation.paused_at = False, None
+                conversation.staff_active_at = None
+                resumed = True
             if conversation.bot_paused:
                 # Staff have this chat: the bot stays silent, and staff see
                 # what the customer wrote (they Reply to it to answer).
@@ -241,6 +252,11 @@ class Orchestrator:
             ctx = ToolContext(store=store, customer=customer, conversation=conversation,
                               new_messages=messages, chat_id=chat_id, db=self.db,
                               telegram=self.telegram, language=language)
+            if resumed:
+                ctx.staff_alerts.append(StaffAlert(
+                    text=(f"🛍 {customer.name or 'Customer'} (Telegram id {customer.telegram_id}) "
+                          "started an order from the channel. The bot is answering them again."),
+                    telegram_id=customer.telegram_id))
             replies = await self.flow.handle(ctx, history)
             conversation.last_message_at = now
 
@@ -262,11 +278,30 @@ class Orchestrator:
 
         raise VersionConflictError("version_conflict", "conversation kept changing")
 
+    async def _opens_channel_order(self, store: Store, messages: list[IncomingMessage]) -> bool:
+        """A product link from the channel's Order button, or a forwarded bot post (D33)."""
+        for message in messages:
+            if product_link_code(message.text):
+                return True
+            if message.forwarded_post and self.db is not None:
+                post = await self.db.find_post(store.id, *message.forwarded_post)
+                if post is not None and post.product_id is not None:
+                    return True
+        return False
+
     async def _send(self, store: Store, chat_id: int, reply: Reply | str) -> None:
         if isinstance(reply, str):
             reply = Reply(reply)
-        await self.telegram.send_message(store.telegram_bot_token.get_secret_value(), chat_id,
-                                         reply.text, buttons=reply.buttons or None)
+        token = store.telegram_bot_token.get_secret_value()
+        if reply.photo_url:  # the product photo, with the question as its caption
+            try:
+                await self.telegram.send_photo(token, chat_id, reply.photo_url, reply.text,
+                                               buttons=reply.buttons or None)
+                logger.info("reply sent")
+                return
+            except TelegramError as error:  # a broken photo link: send the text alone
+                logger.warning("product photo not sent", extra={"error": error.description})
+        await self.telegram.send_message(token, chat_id, reply.text, buttons=reply.buttons or None)
         logger.info("reply sent")
 
     async def _answer_taps(self, store: Store, messages: list[IncomingMessage]) -> None:
@@ -367,8 +402,15 @@ class Orchestrator:
 
     async def run_recovery_loop(self) -> None:
         """Run the sweep every minute until the server stops."""
+        minutes = 0
         while True:
             await asyncio.sleep(RECOVERY_INTERVAL_SECONDS)
+            minutes += 1
+            if self.catalog is not None and minutes % CATALOG_CHECK_EVERY_MINUTES == 0:
+                try:  # D39's safety net: fix channel posts that missed a webhook
+                    await self.catalog.reconcile()
+                except Exception:
+                    logger.exception("catalog check failed")
             try:
                 await self.recover()
             except Exception:

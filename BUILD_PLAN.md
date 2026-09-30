@@ -418,7 +418,7 @@ Amharic; the same order in English gets them in English.
 
 ---
 
-### Phase 8c — Scripted order flow ✅ Built (decision D28); waiting for my Telegram test
+### Phase 8c — Scripted order flow ✅ Done (decision D28; tested in Telegram)
 
 **Goal:** a predictable, button-driven order conversation instead of the AI
 driving the whole chat. Cheaper (most messages need no AI call), and the
@@ -478,7 +478,7 @@ Edit at the summary; Start over; the whole chat in Amharic.
 
 ---
 
-### Phase 8d — Channel catalog and dashboard publishing (planned; D30–D34)
+### Phase 8d — Channel catalog and dashboard publishing ✅ Done (D30–D40; migration 007 run, tested in Telegram)
 
 **Goal:** customers see real products (photos, colors, sizes, description)
 in the store's Telegram channel and order with one tap. Especially for
@@ -495,17 +495,20 @@ order.
   (D36, uploaded to Supabase Storage), and a color × size grid with the
   stock of each. The product code is generated automatically (D40).
 - Saving a new product posts it to the channel automatically (D37): the
-  dashboard asks the backend to post it. Only the backend holds the bot
-  token, so the dashboard never talks to Telegram itself:
+  database webhook (D39) tells the backend about the new product, and the
+  store's bot posts it. Only the backend holds the bot token, so the
+  dashboard never talks to Telegram itself. The dashboard can also post an
+  older product (or try again) with a Publish button:
 
       dashboard -> POST /api/v1/admin/stores/{store}/products/{product}/publish
                 -> backend checks the staff login (Phase 9)
-                -> the store's bot posts photo(s) + caption + [🛒 Order]
-                -> the post's message id is saved on the product
+                -> the store's bot posts the photo + caption + [🛒 Order]
+                -> the post's message id is saved in product_posts
 
 - Later, optionally: open the dashboard's product screens as a Telegram
   Mini App (the same web app inside Telegram), and a few quick chat
   commands for the owner (e.g. mark something sold at the counter).
+  
 
 **The channel (D31):** one channel per store; the store's sales bot is
 added as an admin (post and edit messages); the channel id is saved on the
@@ -548,14 +551,61 @@ retried).
 
 **What to build (backend):**
 - Migration (next number): `products.code` (unique per store),
-  photos per product and per color (Supabase Storage paths), `stores.channel_id`,
+  one photo per product (Supabase Storage), `stores.channel_id`,
   and a `product_posts` table (product, channel, message id) so forwarded
   posts can be recognised and posts edited later.
-- Endpoints (staff login): publish a product, update its post, remove it.
+- Endpoints (staff login): publish a product (posting again updates its post).
 - The sales bot: `/start p_<code>`, forwarded posts, product codes, the
   cart, and "similar products" when sold out.
 - For the dashboard (my teammate): the product form with the color × size
   stock grid, photo upload, and the Publish button.
+
+**How it was built:**
+- Migration `007_channel_catalog.sql` (safe to run again): on products,
+  `code` (generated P101, P102, … per store; existing products get codes
+  too), `description` (up to 700 characters) and `photo_url`; on stores,
+  `channel_id`; the `product_posts` table; a public `product-photos`
+  Storage bucket where staff upload only into their own store's folder
+  (`product-photos/<store id>/…`).
+- `backend/app/agents/catalog.py`: the post (photo, name, price, colors and
+  sizes in stock, description, code, in Amharic and English, and
+  [🛒 እዘዝ / Order]); posting, editing (a fingerprint of each caption
+  avoids needless edits), "SOLD OUT", "No longer available" when a product
+  is deleted; database webhook handling with changes grouped 3 seconds; the
+  check in the sweep every 5 minutes (it fixes existing posts, it never
+  posts old products by itself).
+- `POST /api/v1/catalog/webhook`: Supabase database webhooks for
+  `products` and `product_variants`, checked with the `X-Webhook-Secret`
+  header (`CATALOG_WEBHOOK_SECRET` in `.env`).
+- `POST /api/v1/admin/stores/{store}/products/{product}/publish` for the
+  dashboard's Publish button.
+- The order flow (`flow.py`): `/start p_<code>`, forwarded bot posts,
+  typed codes (P101); the product photo with the color question; the cart
+  (after each item: [➕ Add another item] [➡️ Continue], up to 10 items; the
+  same item twice is added up within stock); Edit is now Items / Delivery /
+  Contact, and Items lets the customer remove an item or add one; a cart
+  item that sells out before confirming is removed with a note (if it was
+  the only one, the customer picks another size of it).
+- `/chatid` also works in a channel (to find `channel_id`).
+- For testing without the dashboard:
+  `python -m scripts.publish_product "Selam Shoes" P101` (or `--all`,
+  `--check`).
+
+**Manual steps:**
+1. Run `db/migrations/007_channel_catalog.sql` in the Supabase SQL Editor.
+2. Create a channel (or use the store's), add the store's bot as an admin
+   that can post and edit messages, send `/chatid` in the channel, and put
+   the number (with the minus sign) in `stores.channel_id`.
+3. Rerun `python -m scripts.connect_store "Selam Shoes"` (the bot now also
+   receives channel posts, for `/chatid`).
+4. Put `CATALOG_WEBHOOK_SECRET=<long random text>` in `backend/.env` and
+   restart the server.
+5. Supabase → Database → Webhooks: two webhooks, on `products` and on
+   `product_variants`, for Insert, Update and Delete, HTTP POST to
+   `<PUBLIC_BASE_URL>/api/v1/catalog/webhook`, with the header
+   `X-Webhook-Secret: <the same secret>`.
+6. Give a product a `photo_url` (any public image address, or a file in the
+   `product-photos` bucket).
 
 **Check:** add a product with two colors and three sizes in the dashboard,
 publish it, see the post in the channel with photos and [🛒 Order]; tap it
@@ -644,7 +694,7 @@ the dashboard asks the backend to do each step.
 - Only platform admins (D15) can see it.
 
 **What to build:**
-- Migration `007_store_onboarding.sql` (I approve it first):
+- Migration `008_store_onboarding.sql` (I approve it first):
   - a way to mark platform admins
   - store status: pending, active, suspended
   - one store per bot (no two stores with the same bot)
@@ -761,7 +811,7 @@ Answer each before the phase listed, and record the answer here.
 ## 7. Where to start
 
 Phase 8c (scripted order flow, D28/D29) is built and tested. Phase 8d
-(channel catalog and dashboard publishing) is planned and all its
-decisions (D30–D40) are made. Next: agree the dashboard side (product form,
-photo upload, colour × size stock grid) with my teammate — no coding until I
+(channel catalog, D30–D40) is built; next: run migration 007, do the manual
+steps in Phase 8d, and test in Telegram. The dashboard side (product form,
+photo upload, colour × size stock grid) is my teammate's — no coding until I
 say "continue".

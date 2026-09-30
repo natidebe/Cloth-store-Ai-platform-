@@ -11,7 +11,9 @@ import pytest
 from app.agents.messages import t
 from app.agents.orchestrator import Orchestrator
 from app.agents.tools import order_number
-from app.models.schemas import Customer, OrderItemDetail, OrderWithItems, Product, Store, VariantMatch
+from app.agents.flow import product_link_code
+from app.models.schemas import (Customer, OrderItemDetail, OrderWithItems, Product, ProductPost, Store,
+                                VariantMatch)
 from app.services.conversation_service import InMemoryConversationStore
 from app.services.llm_service import FakeProvider, LLMResponse, ToolCall
 from app.services.supabase_service import NotFoundError, OrderRejectedError, OutOfStockError
@@ -71,6 +73,9 @@ class FakeDb:
         self.store_of = {AF1: STORE.id, SAMBA: STORE.id, SHIRT: STORE.id, OTHER_SHOE: OTHER_STORE_ID}
         other, _ = _v(OTHER_VARIANT, OTHER_SHOE, "Other store shoe", None, "sneakers", "White", "42", 9, "100")
         self.variants[OTHER_VARIANT] = other
+        self.codes = {AF1: "P101", SAMBA: "P102", SHIRT: "P103", OTHER_SHOE: "P101"}  # D40
+        self.photos = {AF1: "https://photos.example/af1.jpg"}
+        self.posts = {}  # (store_id, channel_id, message_id) -> ProductPost
         self.orders: dict[str, OrderWithItems] = {}
         self.customer = Customer(id=uuid4(), store_id=STORE.id, telegram_id=CUSTOMER, name="Abebe")
         self.customer_updates = []
@@ -96,8 +101,22 @@ class FakeDb:
         for v in self._mine(store_id):
             seen.setdefault(v.product_id, Product(id=v.product_id, store_id=store_id, name=v.product_name,
                                                   brand=v.brand, category=v.category,
-                                                  search_keywords=self.keywords.get(v.product_id)))
+                                                  search_keywords=self.keywords.get(v.product_id),
+                                                  code=self.codes.get(v.product_id),
+                                                  photo_url=self.photos.get(v.product_id)))
         return list(seen.values())
+
+    async def get_product(self, store_id, product_id):
+        return next((p for p in await self.list_products(store_id) if p.id == product_id), None)
+
+    async def find_product_by_code(self, store_id, code):
+        return next((p for p in await self.list_products(store_id) if p.code == code.strip().upper()), None)
+
+    async def find_post(self, store_id, channel_id, message_id):
+        return self.posts.get((store_id, channel_id, message_id))
+
+    async def get_variants(self, store_id, variant_ids):
+        return [v for v in self._mine(store_id) if v.variant_id in variant_ids]
 
     async def list_categories(self, store_id):
         return sorted({v.category for v in self._mine(store_id) if v.stock_quantity > 0})
@@ -298,6 +317,8 @@ class World:
 
 START_OVER = t("btn_start_over", "en")
 LANGUAGE = t("btn_change_language", "en")
+CONTINUE = t("btn_continue", "en")
+ADD_ITEM = t("btn_add_item", "en")
 
 
 async def up_to_confirm(world: World, color="White", size="42", fulfillment="btn_pickup"):
@@ -309,6 +330,7 @@ async def up_to_confirm(world: World, color="White", size="42", fulfillment="btn
     if size in world.labels():
         await world.tap(size)
     await world.tap("1")
+    await world.tap(CONTINUE)
     await world.tap(t(fulfillment, "en"))
     await world.say("Abebe Kebede")
     await world.say("0911 22 33 44")
@@ -483,7 +505,7 @@ async def test_quantity_buttons_never_offer_more_than_available():
     await world.say("5")
     assert world.last_text().startswith(t("too_many", "en"))
     await world.say("ሁለት")  # two
-    assert world.draft.quantity == 2 and world.draft.step == "ask_delivery"
+    assert world.draft.items[0].quantity == 2 and world.draft.step == "ask_more"
 
 
 # --- Step 5: ASK_DELIVERY and ASK_CONTACT ----------------------------------------------
@@ -494,6 +516,7 @@ async def test_delivery_no_longer_asks_for_an_address():
     await world.tap("White")
     await world.tap("43")
     await world.tap("1")
+    await world.tap(CONTINUE)
     assert world.labels() == [t("btn_delivery", "en"), t("btn_pickup", "en"), START_OVER]
     await world.say("delivery please")
     assert world.draft.fulfillment_method == "delivery"
@@ -506,6 +529,7 @@ async def test_new_customer_gives_name_and_phone():
     await world.tap("White")
     await world.tap("43")
     await world.tap("1")
+    await world.tap(CONTINUE)
     await world.tap(t("btn_pickup", "en"))
     assert world.last_text() == t("ask_name", "en")
     assert world.labels() == [t("btn_use", "en", value="Abebe"), START_OVER]  # the Telegram name
@@ -524,6 +548,7 @@ async def test_known_customer_skips_contact():
     await world.tap("White")
     await world.tap("43")
     await world.tap("1")
+    await world.tap(CONTINUE)
     await world.tap(t("btn_pickup", "en"))
     assert world.draft.step == "confirm"  # no name / phone questions
     assert "Phone: 0911223344" in world.last_text()
@@ -542,28 +567,33 @@ async def test_summary_has_database_price_and_confirm_edit_buttons():
     assert world.db.orders == {}
 
 
-async def test_edit_goes_back_to_a_step_and_keeps_the_rest():
+async def test_edit_menu_is_items_delivery_contact():
     world = World()
     await up_to_confirm(world)
     await world.tap(t("btn_edit", "en"))
     assert world.last_text() == t("ask_edit", "en")
-    await world.tap(t("btn_edit_size", "en"))
-    assert world.draft.step == "ask_size" and world.draft.color == "White"  # color kept
-    await world.tap("43")
-    await world.tap("1")
-    assert world.draft.step == "confirm"  # delivery and contact kept
-    assert "White, size 43 × 1" in world.last_text()
+    assert world.labels() == [t("btn_edit_items", "en"), t("btn_edit_delivery", "en"),
+                              t("btn_edit_contact", "en"), t("btn_back_to_summary", "en"), START_OVER]
+    await world.tap(t("btn_back_to_summary", "en"))
+    assert world.draft.step == "confirm"
 
 
-async def test_edit_color_asks_color_then_size_again():
+async def test_edit_items_swaps_an_item_and_keeps_the_rest():
     world = World()
     await up_to_confirm(world)
     await world.tap(t("btn_edit", "en"))
-    await world.tap(t("btn_edit_color", "en"))
-    assert world.draft.step == "ask_color"
+    await world.tap(t("btn_edit_items", "en"))
+    assert world.draft.step == "edit_items"
+    remove = t("btn_remove", "en", item="Air Force 1 (Nike), White, size 42 × 1")[:60]
+    assert world.labels() == [remove, ADD_ITEM, t("btn_back_to_summary", "en"), START_OVER]
+    await world.tap(remove)
+    assert world.draft.items == [] and world.draft.step == "ask_product"
+    await world.say("Air Force 1")
     await world.tap("Black")  # only 42 in black
     await world.tap("1")
-    assert "Black, size 42 × 1" in world.last_text()
+    await world.tap(CONTINUE)
+    assert world.draft.step == "confirm"  # delivery and contact kept
+    assert "Black, size 42 × 1" in world.last_text() and "White" not in world.last_text()
 
 
 async def test_edit_contact_asks_again_even_for_a_known_customer():
@@ -580,8 +610,10 @@ async def test_old_confirm_button_does_not_place_a_changed_order():
     await up_to_confirm(world)
     old_confirm = dict(world.last_buttons())[t("btn_confirm", "en")]
     await world.tap(t("btn_edit", "en"))
-    await world.tap(t("btn_edit_quantity", "en"))
-    await world.tap("2")  # the draft changed after that summary
+    await world.tap(t("btn_edit_items", "en"))
+    await world.tap(ADD_ITEM)
+    await world.say("Samba")
+    await world.tap("1")  # the draft changed after that summary
     await world.tap_data(old_confirm)
     assert world.db.orders == {}
     assert world.last_text().startswith(t("option_gone", "en"))
@@ -799,3 +831,149 @@ def test_a_store_can_override_any_text():
     assert t("ask_product", "en", StoreWithTexts()) == "Welcome to Selam! What do you need?"
     assert t("ask_product", "am", StoreWithTexts()) == t("ask_product", "am")  # falls back
     assert t("ask_product", "en", STORE) == t("ask_product", "en")  # today: no overrides
+
+
+# --- From the channel (Phase 8d, D32–D34) ----------------------------------------------
+
+CHANNEL = -100888
+
+
+async def forward_post(world: World, message_id: int, channel_id: int = CHANNEL):
+    fields = {"text": "Air Force 1 — 5,000 ETB",
+              "forward_origin": {"type": "channel", "date": 1790000000, "message_id": message_id,
+                                 "chat": {"id": channel_id, "type": "channel", "title": "Selam"}}}
+    await world._deliver({"update_id": next(_update_ids), "message": world._message(**fields)})
+
+
+async def test_order_button_link_opens_the_product_with_its_photo():
+    world = World()
+    await world.say("/start p_P101")  # the channel post's Order button
+    assert world.draft.product_name == "Air Force 1" and world.draft.step == "ask_color"
+    method, body, _ = world.telegram.calls[-1]
+    assert method == "sendPhoto" and body["photo"] == "https://photos.example/af1.jpg"
+    assert body["caption"] == t("ask_color", "en", product="Air Force 1", price="5,000 ETB")
+    assert world.labels() == ["White", "Black", START_OVER]
+
+
+async def test_product_without_a_photo_gets_a_text_question():
+    world = World()
+    await world.say("/start p_P102")  # Samba: one color, one size
+    assert world.draft.step == "ask_quantity"
+    assert world.telegram.calls[-1][0] == "sendMessage"
+
+
+async def test_link_before_the_language_opens_after_choosing_it():
+    world = World(language=None)
+    await world.say("/start p_P101")
+    assert world.last_text() == t("choose_language", "en") and world.draft.product_id is None
+    await world.tap("አማርኛ")
+    assert world.draft.product_name == "Air Force 1" and world.draft.step == "ask_color"
+    assert world.draft.pending_product_code is None
+
+
+async def test_unknown_or_other_store_code_is_not_opened():
+    world = World()
+    world.db.codes[AF1] = "P500"  # P101 is only the other store's code now
+    await world.say("/start p_P101")
+    assert world.draft.product_id is None
+    assert world.last_text().startswith(t("option_gone", "en"))
+
+
+async def test_typed_code_opens_the_product():
+    world = World()
+    await world.say("/start")
+    await world.say("p103")
+    assert world.draft.product_name == "Basic T-Shirt"
+
+
+async def test_forwarded_bot_post_opens_its_product():
+    world = World()
+    world.db.posts[(STORE.id, CHANNEL, 77)] = ProductPost(
+        id=1, store_id=STORE.id, product_id=SAMBA, product_code="P102", channel_id=CHANNEL, message_id=77)
+    await forward_post(world, 77)
+    assert world.draft.product_name == "Samba"
+
+
+async def test_forwarded_unknown_post_goes_to_staff():
+    world = World()
+    await forward_post(world, 12)  # an old hand-made post (D38)
+    assert world.conversation.bot_paused
+    assert "Forwarded post 12" in world.telegram.to(STAFF_CHAT)[-1]
+
+
+async def test_sold_out_product_suggests_similar_ones():
+    world = World()
+    world.db.set_stock(SAMBA_WHITE_40, 0)
+    await world.say("/start p_P102")
+    text = world.last_text()
+    assert text.startswith(t("sold_out_product", "en", product="Samba"))
+    assert t("similar_products", "en") in text
+    assert "Air Force 1 (Nike)" in world.labels() and "Basic T-Shirt" not in world.labels()
+    await world.tap("Air Force 1 (Nike)")
+    assert world.draft.product_name == "Air Force 1"
+
+
+async def test_cart_takes_several_items_into_one_order():
+    world = World()
+    await world.say("/start p_P101")
+    await world.tap("White")
+    await world.tap("43")
+    await world.tap("2")
+    assert world.draft.step == "ask_more"
+    assert world.last_text() == t("ask_more", "en", items="• Air Force 1 (Nike), White, size 43 × 2")
+    assert world.labels() == [ADD_ITEM, CONTINUE, START_OVER]
+    await world.tap(ADD_ITEM)
+    assert world.draft.step == "ask_product"
+    await world.say("/start p_P103")  # a second channel post: added, not replacing
+    await world.tap("1")
+    await world.tap(CONTINUE)
+    await world.tap(t("btn_pickup", "en"))
+    await world.say("Abebe Kebede")
+    await world.say("0911 22 33 44")
+    summary = world.last_text()
+    assert "White, size 43 × 2" in summary and "Basic T-Shirt" in summary
+    await world.tap(t("btn_confirm", "en"))
+    [order] = world.db.orders.values()
+    assert len(order.items) == 2 and order.total_price == Decimal("10800")
+
+
+async def test_same_item_twice_adds_up_within_stock():
+    world = World()
+    await world.say("/start p_P101")
+    await world.tap("White")
+    await world.tap("42")
+    await world.tap("2")
+    await world.tap(ADD_ITEM)
+    await world.say("/start p_P101")
+    await world.tap("White")
+    await world.tap("42")
+    await world.tap("1")
+    assert [(i.variant_id, i.quantity) for i in world.draft.items] == [(AF1_WHITE_42, 2)]  # only 2 in stock
+
+
+async def test_a_new_link_replaces_an_unfinished_pick():
+    world = World()
+    await world.say("/start p_P101")
+    await world.tap("White")  # size not chosen yet
+    await world.say("/start p_P102")
+    assert world.draft.product_name == "Samba" and world.draft.variant_id == SAMBA_WHITE_40
+    assert world.draft.items == []
+
+
+async def test_order_link_takes_a_paused_chat_back_from_staff():
+    world = World()
+    await up_to_confirm(world, fulfillment="btn_delivery")
+    await world.tap(t("btn_confirm", "en"))
+    assert world.conversation.bot_paused  # delivery: staff call the customer (D29)
+    await world.say("where is my order")  # staff handle this
+    assert world.draft.step == "payment"
+    await world.say("/start p_P102")  # D33: tapped Order on a channel post
+    assert not world.conversation.bot_paused
+    assert world.draft.product_name == "Samba"
+    assert "started an order from the channel" in world.telegram.to(STAFF_CHAT)[-1]
+
+
+def test_product_link_code():
+    assert product_link_code("/start p_P101") == "P101"
+    assert product_link_code("/start@SelamBot p_p7") == "P7"
+    assert product_link_code("/start") is None and product_link_code("hello p_P1") is None

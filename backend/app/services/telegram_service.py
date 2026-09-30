@@ -29,12 +29,19 @@ def _cut(text: str, limit: int) -> str:
 Button = tuple[str, str]  # (label, data)
 
 
+def _button(label: str, data: str) -> dict[str, str]:
+    # A link opens in Telegram (e.g. the channel post's "Order" button, which
+    # opens the sales bot on that product); anything else is sent back to us.
+    if data.startswith("https://"):
+        return {"text": label, "url": data}
+    return {"text": label, "callback_data": data}
+
+
 def _keyboard(buttons: list[Button | list[Button]]) -> dict[str, Any]:
     """Buttons under a message. A (label, data) pair gets its own row; a
     list of pairs is one row (e.g. sizes side by side)."""
     rows = [row if isinstance(row, list) else [row] for row in buttons]
-    return {"inline_keyboard": [[{"text": label, "callback_data": data} for label, data in row]
-                                for row in rows]}
+    return {"inline_keyboard": [[_button(label, data) for label, data in row] for row in rows]}
 
 
 class TelegramError(Exception):
@@ -107,6 +114,7 @@ def parse_update(store_id: UUID, update: TelegramUpdate) -> IncomingMessage | No
         text=text,
         # Telegram sends each photo in several sizes; the last is the largest.
         photo_file_id=message.photo[-1].file_id if message.photo else None,
+        forwarded_post=message.forwarded_from_channel(),
         sent_at=message.date,
     )
 
@@ -171,7 +179,7 @@ class TelegramService:
         *,
         buttons: list[tuple[str, str]] | None = None,
     ) -> int | None:
-        """Send a photo the bot received earlier (by its file id), with a caption."""
+        """Send a photo (a file id the bot received earlier, or a public URL) with a caption."""
         payload: dict[str, Any] = {
             "chat_id": chat_id, "photo": photo_file_id, "caption": _cut(caption, MAX_CAPTION_LENGTH),
         }
@@ -188,6 +196,32 @@ class TelegramService:
         await self._call(bot_token, "answerCallbackQuery", {
             "callback_query_id": callback_id, "text": _cut(text, 200), "show_alert": popup,
         })
+
+    async def edit_post(
+        self,
+        bot_token: str,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        *,
+        has_photo: bool,
+        buttons: list[Button | list[Button]] | None = None,
+    ) -> None:
+        """Change a message the bot sent: the caption of a photo, or the
+        text of a text message (Phase 8d: keeping channel posts up to date)."""
+        payload: dict[str, Any] = {"chat_id": chat_id, "message_id": message_id,
+                                   "reply_markup": _keyboard(buttons or [])}
+        if has_photo:
+            payload["caption"] = _cut(text, MAX_CAPTION_LENGTH)
+            method = "editMessageCaption"
+        else:
+            payload["text"] = _cut(text, MAX_MESSAGE_LENGTH)
+            method = "editMessageText"
+        try:
+            await self._call(bot_token, method, payload)
+        except TelegramError as error:
+            if "message is not modified" not in error.description:
+                raise  # "not modified" means it already says this: fine
 
     async def remove_buttons(self, bot_token: str, chat_id: int, message_id: int) -> None:
         """Remove the buttons under a message (once they've been used)."""
@@ -220,8 +254,9 @@ class TelegramService:
         await self._call(bot_token, "setWebhook", {
             "url": url,
             "secret_token": secret,
-            # messages, plus button presses in the staff group (Phase 9)
-            "allowed_updates": ["message", "callback_query"],
+            # messages, button presses (Phase 9), and channel posts (for
+            # /chatid in the store's channel, Phase 8d)
+            "allowed_updates": ["message", "callback_query", "channel_post"],
             "drop_pending_updates": True,  # don't replay old messages
         })
 

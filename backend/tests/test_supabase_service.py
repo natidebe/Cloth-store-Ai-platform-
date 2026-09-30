@@ -172,6 +172,55 @@ async def test_catalog_for_the_order_flow(world):
     assert await service.get_product_variants(world["store_b"], products[0].id) == []
 
 
+async def _has_migration_007(service) -> bool:
+    try:
+        await service._db.table("product_posts").select("id").limit(1).execute()
+        return True
+    except Exception:
+        return False
+
+
+async def test_channel_catalog(world):
+    # Phase 8d (migration 007): product codes, channel posts.
+    service = world["service"]
+    if not await _has_migration_007(service):
+        pytest.skip("run db/migrations/007_channel_catalog.sql first")
+    store_a, store_b = world["store_a"], world["store_b"]
+    [af1] = [p for p in await service.list_catalog(store_a) if p.name == "Air Force 1"]
+    [other] = await service.list_catalog(store_b)
+    assert af1.code == "P101" and other.code == "P101"  # generated, per store (D40)
+    new = await _insert(service, "products", {"store_id": str(store_a), "name": "Samba"})
+    assert new["code"] == "P102"
+
+    assert (await service.find_product_by_code(store_a, " p101 ")).id == af1.id
+    assert (await service.find_product_by_code(store_b, "P101")).id == other.id  # never store A's
+    assert await service.find_product_by_code(store_b, "P102") is None
+    assert (await service.get_product(store_a, af1.id)).name == "Air Force 1"
+    assert await service.get_product(store_b, af1.id) is None
+
+    await service.save_product_post(store_a, af1, -100123, 55, True, "hash1")
+    [post] = await service.list_product_posts(store_a, product_id=af1.id)
+    assert (post.product_code, post.message_id, post.has_photo) == ("P101", 55, True)
+    assert (await service.find_post(store_a, -100123, 55)).product_id == af1.id
+    assert await service.find_post(store_b, -100123, 55) is None  # another store's post
+    await service.set_post_hash(store_a, post.id, "hash2")
+    assert (await service.find_post(store_a, -100123, 55)).caption_hash == "hash2"
+    assert await service.list_product_posts(store_a, code="P101") != []
+
+    # Deleting a product keeps its post (the code says which product it was).
+    samba = await service.get_product(store_a, UUID(new["id"]))
+    await service.save_product_post(store_a, samba, -100123, 56, False, "h")
+    await service._db.table("products").delete().eq("id", new["id"]).execute()
+    [gone] = await service.list_product_posts(store_a, code="P102")
+    assert gone.product_id is None and gone.message_id == 56
+
+    stores = await service.stores_with_channel()
+    assert store_a not in {s.id for s in stores}  # no channel set yet
+    await service._db.table("stores").update({"channel_id": -100123}).eq("id", str(store_a)).execute()
+    assert store_a in {s.id for s in await service.stores_with_channel()}
+    assert (await service.get_store(store_a)).channel_id == -100123
+
+
 async def test_search_shows_sold_out_and_base_price(world):
     results = await world["service"].search_variants(world["store_a"], "sneakers", color="white", size="43")
     assert len(results) == 1

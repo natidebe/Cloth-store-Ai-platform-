@@ -81,6 +81,7 @@ class Store(DbModel):
     pickup_instructions: str | None = None
     payment_instructions: str | None = None
     return_policy: str | None = None
+    channel_id: int | None = None  # the store's Telegram channel (migration 007, D31)
 
     @property
     def profile(self) -> StoreProfile:
@@ -104,7 +105,23 @@ class Product(DbModel):
     base_price: Decimal | None = Field(default=None, ge=0)
     # Nicknames customers use, comma-separated, e.g. "AF1, air force, ኤር ፎርስ" (D23).
     search_keywords: str | None = None
+    # Channel catalog (migration 007, Phase 8d)
+    code: str | None = None  # generated, e.g. P101 (D40)
+    description: str | None = None
+    photo_url: str | None = None  # one photo per product (D36)
     created_at: datetime | None = None
+
+
+class ProductPost(DbModel):
+    """A channel post showing a product (migration 007)."""
+    id: int
+    store_id: UUID
+    product_id: UUID | None = None  # empty if the product was deleted
+    product_code: str | None = None
+    channel_id: int
+    message_id: int
+    has_photo: bool = False
+    caption_hash: str | None = None
 
 
 class ProductVariant(DbModel):
@@ -289,6 +306,20 @@ class TelegramMessage(TelegramModel):
     # When this message is a Telegram "Reply" to another message (staff
     # replying to the bot's alert about a customer).
     reply_to_message: "TelegramMessage | None" = None
+    # A forwarded message: where it came from. Telegram sends forward_origin
+    # (Bot API 7+); older clients' forward_from_chat / _message_id also count.
+    forward_origin: dict | None = None
+    forward_from_chat: TelegramChat | None = None
+    forward_from_message_id: int | None = None
+
+    def forwarded_from_channel(self) -> tuple[int, int] | None:
+        """(channel id, post id) if this is a post forwarded from a channel."""
+        origin = self.forward_origin or {}
+        if origin.get("type") == "channel" and origin.get("chat") and origin.get("message_id"):
+            return int(origin["chat"]["id"]), int(origin["message_id"])
+        if self.forward_from_chat and self.forward_from_message_id:
+            return self.forward_from_chat.id, self.forward_from_message_id
+        return None
 
 
 class TelegramCallbackQuery(TelegramModel):
@@ -304,6 +335,7 @@ class TelegramUpdate(TelegramModel):
     message: TelegramMessage | None = None
     edited_message: TelegramMessage | None = None
     callback_query: TelegramCallbackQuery | None = None
+    channel_post: TelegramMessage | None = None  # a post in a channel the bot is in
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +361,9 @@ class IncomingMessage(BaseModel):
     # kind == "button": the customer tapped one of the bot's buttons.
     button_data: str | None = None  # what we put in the button, e.g. "f:size:42"
     callback_id: str | None = None  # to answer the tap (stops Telegram's spinner)
+    # A post forwarded from a channel: (channel id, post id). Lets the bot
+    # recognise which product the post shows (Phase 8d).
+    forwarded_post: tuple[int, int] | None = None
     sent_at: datetime
 
     @model_validator(mode="after")
@@ -365,8 +400,9 @@ class DraftItem(BaseModel):
 
 
 FlowStep = Literal[
-    "choose_language", "ask_product", "ask_color", "ask_size", "ask_quantity", "ask_delivery",
-    "ask_address", "ask_name", "ask_phone", "confirm", "edit", "payment",
+    "choose_language", "ask_product", "ask_color", "ask_size", "ask_quantity", "ask_more",
+    "ask_delivery", "ask_address", "ask_name", "ask_phone", "confirm", "edit", "edit_items",
+    "payment",
 ]
 
 
@@ -395,6 +431,13 @@ class OrderDraft(BaseModel):
     # Set when the customer edits the contact at CONFIRM: don't refill it
     # from the saved customer details.
     ask_contact_again: bool = False
+    # The cart (Phase 8d, D32): `items` holds the finished items; the fields
+    # above (product, color, size, quantity) are the item being picked now.
+    adding_item: bool = False  # tapped "Add another item": pick a product
+    cart_closed: bool = False  # tapped "Continue": on to delivery
+    # A product link (/start p_<code>) that arrived before the language was
+    # chosen: opened right after the customer picks a language.
+    pending_product_code: str | None = None
 
     items: list[DraftItem] = Field(default_factory=list)
     contact_name: str | None = None

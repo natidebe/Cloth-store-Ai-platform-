@@ -33,6 +33,10 @@ class Settings(BaseSettings):
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
+    # Supabase database webhooks (Phase 8d, D39) send this in the
+    # X-Webhook-Secret header, so nobody else can trigger channel updates.
+    catalog_webhook_secret: SecretStr = SecretStr("")
+
     @field_validator("supabase_url")
     @classmethod
     def _project_url_only(cls, value: str) -> str:

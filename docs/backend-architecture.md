@@ -221,12 +221,13 @@ the old design; their safe parts live on in `agents/tools.py` as helpers).
   label (English and Amharic); `t()` looks for a store's own text first
   (future `stores.text_overrides`).
 
-## 4c. Channel catalog and ordering from a post (Phase 8d, planned: D30–D34)
+## 4c. Channel catalog and ordering from a post (Phase 8d, D30–D40)
 
 ```
-Dashboard ──(Publish)──► Backend ──► store's bot posts to the channel
-   photos (Storage),                  photo(s) + caption + [🛒 Order]
-   color × size stock                 post id saved (product_posts)
+Dashboard saves a product ──► Supabase database webhook ──► Backend (catalog.py)
+   photo (Storage),                                       store's bot posts / edits:
+   color × size stock          (or the Publish button)    photo + caption + [🛒 Order]
+                                                          post id saved (product_posts)
 
 Customer in the channel ──(🛒 Order = t.me/<bot>?start=p_<code>)──► sales bot
    /start p_<code> ─► (language first if needed) ─► order flow at the color step
@@ -234,24 +235,32 @@ Customer in the channel ──(🛒 Order = t.me/<bot>?start=p_<code>)──► 
 ```
 
 - **Posting:** only the backend talks to Telegram (it holds the bot token).
-  The dashboard calls `POST /api/v1/admin/stores/{store}/products/{product}/publish`
-  (staff login, Phase 9). Photos come from Supabase Storage by URL.
+  A new product is posted when its database webhook arrives (D37); the
+  dashboard's Publish button calls
+  `POST /api/v1/admin/stores/{store}/products/{product}/publish` (staff
+  login, Phase 9) for older products. Photos come from Supabase Storage by URL.
+- **Webhook endpoint:** `POST /api/v1/catalog/webhook`, for Supabase database
+  webhooks on `products` and `product_variants`; the `X-Webhook-Secret`
+  header must match `CATALOG_WEBHOOK_SECRET`.
 - **Keeping posts honest (D39):** Supabase database webhooks tell the backend
   about every product or variant change (dashboard, payments, Table Editor);
   the backend groups quick changes into one post edit (sold-out sizes, SOLD
-  OUT, new price) and ignores 5-minute holds. The minute sweep also fixes
-  any post that's out of date, in case a webhook was missed.
+  OUT, new price) and ignores 5-minute holds. Every 5 minutes the sweep also
+  fixes any post that's out of date, in case a webhook was missed (a
+  fingerprint of each caption says whether a post needs an edit).
 - **Products (D35–D37, D40):** added by owner or staff in the dashboard, one
   photo per product, posted to the channel automatically, with a generated
   product code. Old hand-made channel posts are left as they are (D38).
 - **Cart (D32):** Order on a second post adds the item to the same order;
   after each item the flow asks Add another item / Continue; the summary
-  lists all items; `place_order` already takes several items.
+  lists all items; Edit → Items removes or adds items; `place_order`
+  already takes several items.
 - **Handed-over chat (D33):** Order takes the chat back from staff (they're
   told). **Sold out (D34):** similar in-stock products from the same
   category are offered.
-- **Database (planned migration):** `products.code`, photos per product /
-  color, `stores.channel_id`, `product_posts` (product, channel, message id).
+- **Database (migration 007):** `products.code` / `description` /
+  `photo_url`, `stores.channel_id`, `product_posts` (product, channel,
+  message id, caption fingerprint), the `product-photos` Storage bucket.
 
 ## 5. Tools
 
@@ -291,6 +300,7 @@ backend/
 │   │   └── v1/
 │   │       ├── webhook.py
 │   │       ├── admin.py
+│   │       ├── catalog.py
 │   │       └── health.py
 │   ├── services/
 │   │   ├── telegram_service.py
@@ -301,6 +311,11 @@ backend/
 │   │   └── schemas.py
 │   ├── agents/
 │   │   ├── orchestrator.py
+│   │   ├── flow.py
+│   │   ├── interpreter.py
+│   │   ├── messages.py
+│   │   ├── staff.py
+│   │   ├── catalog.py
 │   │   ├── prompts.py
 │   │   └── tools.py
 │   └── utils/
@@ -351,8 +366,14 @@ bot; it's refused, with nothing changed, if an item sold out. Chats with no
 staff activity for 2 hours go back to the bot (D9). Anyone in the staff group
 may act; we record who. `/chatid` in a group replies with its id.
 
+### `agents/catalog.py` and `api/v1/catalog.py` (Phase 8d)
+The store's channel as its catalog (section 4c): posting a product, editing
+its post when stock or price changes, the Supabase database webhook
+endpoint, and the 5-minute check in the sweep.
+
 ### `api/v1/admin.py`
 Actions for staff (called from the dashboard):
+- Publish a product to the store's channel (Phase 8d)
 - Confirm payment for an order
 - Resolve an escalation and hand the conversation back to the assistant
 - Retry a failed order
@@ -500,7 +521,7 @@ new numbered migrations (see `BUILD_PLAN.md`, Phases 2 and 7).
 - `payments.confirmed_by_telegram_id`, `confirmed_by_name` — who confirmed a
   payment from the staff group
 
-**`007_store_onboarding.sql`** (Phase 9b):
+**`008_store_onboarding.sql`** (Phase 9b):
 - A way to mark platform admins (D15)
 - Store status: `pending`, `active`, `suspended` (the bot answers only when
   active)

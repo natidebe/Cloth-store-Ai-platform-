@@ -31,6 +31,12 @@ How a message is handled:
   hand-over to staff (haggling, complaints, anything unclear).
 - Prices and stock always come from the database, never from the AI.
 
+Channel catalog (Phase 8d, D32–D34): the channel post's Order button sends
+"/start p_<code>"; a forwarded post or a typed code ("P101") works too. The
+product is added to the order (a cart: several items in one order; an
+unfinished pick is replaced). A sold-out product gets similar products. The
+product's photo is shown with the color question.
+
 Every question and button label comes from messages.py (the one config).
 """
 import logging
@@ -66,6 +72,8 @@ MAX_QUANTITY = 10  # per order line
 MAX_QUANTITY_BUTTONS = 5
 MAX_CATEGORY_BUTTONS = 8
 MAX_PRODUCT_BUTTONS = 8
+MAX_CART_ITEMS = 10
+PRODUCT_CODE = re.compile(r"^[Pp]\d{2,6}$")  # generated codes (D40), e.g. P101
 
 # Everyday Amharic words for colors and small numbers.
 AMHARIC_COLORS = {
@@ -90,6 +98,7 @@ class Reply:
     """One message to the customer, with optional buttons (rows)."""
     text: str
     buttons: list = field(default_factory=list)
+    photo_url: str | None = None  # sent as a photo with the text as its caption
 
 
 def _size_key(size: str) -> tuple:
@@ -125,6 +134,16 @@ def _english_color(text: str) -> str:
 
 def _color_key(color: str | None) -> str:
     return (color or "").strip().lower()
+
+
+def product_link_code(text: str | None) -> str | None:
+    """The code in a channel post's Order link: "/start p_P101" -> "P101"."""
+    if not text:
+        return None
+    parts = text.strip().split()
+    if len(parts) == 2 and parts[0].lower().split("@")[0] == "/start" and parts[1].lower().startswith("p_"):
+        return parts[1][2:].upper() or None
+    return None
 
 
 def parse_quantity(text: str) -> int | None:
@@ -169,6 +188,7 @@ class _Run:
         self.handover_text: str | None = None
         self.finished = False  # an order was placed: its message says what's next
         self._variants: dict[UUID, list[VariantMatch]] = {}
+        self._products: dict[UUID, Product | None] = {}
 
     @property
     def draft(self) -> OrderDraft:
@@ -188,10 +208,17 @@ class _Run:
         for message in self.ctx.new_messages:
             if self.handover_text or self.finished:
                 break
+            code = product_link_code(message.text)
             if message.kind == "button":
                 await self.on_button(message.button_data or "")
             elif self.draft.language is None:
+                if code:  # opened right after the language is chosen
+                    self.draft.pending_product_code = code
                 continue  # the language question comes first (D29)
+            elif code:
+                await self.open_product_code(code)
+            elif message.forwarded_post:
+                await self.on_forwarded_post(*message.forwarded_post)
             elif message.kind == "photo":
                 await self.on_photo(message.text)
             elif message.kind == "text":
@@ -207,7 +234,7 @@ class _Run:
             return self.before  # the order message already says what happens next
         question = await self.question(step)
         text = "\n\n".join([*self.notes, question.text])
-        return [*self.before, Reply(text, question.buttons)]
+        return [*self.before, Reply(text, question.buttons, question.photo_url)]
 
     # --- Changing the draft --------------------------------------------------
 
@@ -226,6 +253,17 @@ class _Run:
         self.ctx.conversation.order_draft = OrderDraft(
             revision=old.revision + 1, last_order_id=old.last_order_id, language=old.language, **fields)
         self.product_options = []
+
+    async def product(self, product_id: UUID) -> Product | None:
+        if product_id not in self._products:
+            self._products[product_id] = await self.db.get_product(self.store.id, product_id)
+        return self._products[product_id]
+
+    def clear_pick(self) -> None:
+        """Forget the item being picked (the cart's finished items stay)."""
+        d = self.draft
+        d.product_id = d.product_name = None
+        self.clear_choice()
 
     def clear_choice(self, *, keep_color: bool = False) -> None:
         d = self.draft
@@ -248,9 +286,11 @@ class _Run:
         return [v for v in await self.variants(d.product_id) if _color_key(v.color) == _color_key(d.color)]
 
     async def select_product(self, product_id: UUID) -> bool:
+        """Start picking this product. The cart's finished items stay (D32);
+        an unfinished pick is replaced; after an order, a new order starts."""
         variants = await self.variants(product_id)
         if not variants:
-            self.notes.append(self.t("option_gone"))
+            await self.sold_out(product_id)
             return False
         if self.draft.step == "payment":
             self.new_draft()
@@ -259,8 +299,40 @@ class _Run:
             d.product_id, d.product_name = product_id, variants[0].product_name
             self.clear_choice()
             self.changed()
+        d.cart_closed = False  # the new item goes through "Add another?" too
         self.product_options = []
         return True
+
+    async def sold_out(self, product_id: UUID) -> None:
+        """D34: say so, and offer similar products (same category, in stock)."""
+        product = await self.product(product_id)
+        if product is None:
+            self.notes.append(self.t("option_gone"))
+            return
+        self.notes.append(self.t("sold_out_product", product=product.name))
+        similar = [p for p in await self.db.list_products_in_stock(self.store.id, product.category)
+                   if p.id != product.id] if product.category else []
+        if similar:
+            self.notes.append(self.t("similar_products"))
+            self.product_options = similar[:MAX_PRODUCT_BUTTONS]
+
+    async def open_product_code(self, code: str) -> None:
+        """A product link from the channel (/start p_<code>) or a typed code."""
+        product = await self.db.find_product_by_code(self.store.id, code)
+        if product is None:
+            self.notes.append(self.t("option_gone"))
+            return
+        await self.select_product(product.id)
+
+    async def on_forwarded_post(self, channel_id: int, message_id: int) -> None:
+        """A channel post forwarded to the bot: if it's one of the store's
+        bot posts, open that product; an old hand-made post goes to staff (D38)."""
+        post = await self.db.find_post(self.store.id, channel_id, message_id)
+        if post is not None and post.product_id is not None:
+            await self.select_product(post.product_id)
+            return
+        await self.handover("the customer forwarded a channel post the bot doesn't know",
+                            f"Forwarded post {message_id} from chat {channel_id}")
 
     async def select_product_by_name(self, query: str) -> bool:
         """Search the catalog; one product -> selected, several -> buttons."""
@@ -397,6 +469,9 @@ class _Run:
         elif part == "contact":
             d.contact_name = d.contact_phone = None
             d.ask_contact_again = True
+        elif part == "items":
+            d.step = "edit_items"
+            return
         else:
             self.notes.append(self.t("option_gone"))
             return
@@ -414,6 +489,9 @@ class _Run:
         if action == "lang":
             if value in ("am", "en"):
                 d.language = value
+                if d.pending_product_code:  # a product link that came before the language
+                    code, d.pending_product_code = d.pending_product_code, None
+                    await self.open_product_code(code)
             else:
                 d.language = None  # "change language": ask again
             return
@@ -453,8 +531,20 @@ class _Run:
                     await self.place()
                 else:
                     self.notes.append(self.t("option_gone"))
+            elif action == "more" and value == "add":  # D32: add another item
+                d.adding_item, d.cart_closed = True, False
+                self.clear_pick()
+                d.step = "ask_product"
+            elif action == "more" and value == "done":
+                d.cart_closed, d.adding_item = True, False
+            elif action == "rm":  # remove a cart item (from the edit screen)
+                del d.items[int(value)]
+                self.changed()
+                d.step = "edit_items" if d.items else "ask_product"
             elif action == "edit" and not value:
                 d.step = "edit"
+            elif action == "edit" and value == "items":
+                d.step = "edit_items"
             elif action == "edit":
                 self.edit(value)
             elif action == "back":
@@ -489,6 +579,9 @@ class _Run:
         d = self.draft
         step = d.step
         question = is_question(text)
+        if step in ("ask_product", "payment") and PRODUCT_CODE.fullmatch(text):
+            await self.open_product_code(text)  # a code from a channel post, e.g. P101
+            return True
         if (step in ("ask_product", "payment") and not question and 3 <= len(text) <= 60
                 and not is_greeting(text)):
             return await self.select_product_by_name(text)
@@ -580,6 +673,7 @@ class _Run:
                 await self.set_quantity(found.quantity)
         if found.fulfillment:
             self.set_fulfillment(found.fulfillment)
+            d.cart_closed = True  # moving on to delivery: no "add another item?"
         if found.address:
             self.set_text_field("delivery_address", found.address)
         if found.name:
@@ -620,9 +714,8 @@ class _Run:
 
     async def place(self) -> None:
         d = self.draft
-        variant = await self.chosen_variant()
-        if variant is None or (d.fulfillment_method == "pickup" and d.missing_fields()):
-            return  # sold out meanwhile: next_step() says so and asks again
+        if not await self.cart_items_available() or not d.items or                 (d.fulfillment_method == "pickup" and d.missing_fields()):
+            return  # sold out meanwhile: next_step() shows the cart again
         delivery = d.fulfillment_method == "delivery"
         if delivery and not d.delivery_address:
             d.delivery_address = ADDRESS_TO_ARRANGE  # staff arrange it by phone (D29)
@@ -646,10 +739,13 @@ class _Run:
             self.draft.last_order_id = order.id
             self.finished = True
         elif result.sold_out_variant is not None:
-            self._variants.pop(d.product_id, None)  # stock changed: load it again
             if delivery and d.delivery_address == ADDRESS_TO_ARRANGE:
                 d.delivery_address = None
-            # next_step() sees the choice is gone, says so, and asks again.
+            # Stock changed since the check: remove that item and show the cart again.
+            gone = next((i for i in d.items if i.variant_id == result.sold_out_variant), None)
+            if gone is not None:
+                [variant] = await self.db.get_variants(self.store.id, [gone.variant_id]) or [None]
+                self.drop_item(gone, variant)
         else:
             await self.handover(f"the order was refused ({result.refused})", "placing the order failed")
 
@@ -662,10 +758,10 @@ class _Run:
             return "choose_language"
         if d.step == "payment" and d.product_id is None:
             return "payment"
-        if d.step == "edit":
-            return "edit"
+        if d.step in ("edit", "edit_items"):
+            return d.step
         if d.product_id is None:
-            return "ask_product"
+            return await self.cart_step()
         variants = await self.variants(d.product_id)
         if not variants:  # sold out since it was chosen
             self.notes.append(self.t("option_gone"))
@@ -701,8 +797,57 @@ class _Run:
         if d.quantity is None or d.quantity > variant.available:
             d.quantity = None
             return "ask_quantity"
-        d.items = [DraftItem(variant_id=variant.variant_id, quantity=d.quantity,
-                             description=describe(variant))]
+        self.add_to_cart(variant, d.quantity)
+        return await self.cart_step()
+
+    def add_to_cart(self, variant: VariantMatch, quantity: int) -> None:
+        """The picked item goes into the cart (the same variant twice: added up)."""
+        d = self.draft
+        for item in d.items:
+            if item.variant_id == variant.variant_id:
+                item.quantity = min(item.quantity + quantity, variant.available, MAX_QUANTITY)
+                break
+        else:
+            if len(d.items) < MAX_CART_ITEMS:
+                d.items.append(DraftItem(variant_id=variant.variant_id, quantity=quantity,
+                                         description=describe(variant)))
+        self.clear_pick()
+        d.adding_item = False
+        self.changed()
+
+    async def cart_items_available(self) -> bool:
+        """Check the cart against the database. False if something sold out
+        meanwhile: it is removed from the cart."""
+        d = self.draft
+        found = {v.variant_id: v for v in await self.db.get_variants(
+            self.store.id, [i.variant_id for i in d.items])}
+        gone = [i for i in d.items if (v := found.get(i.variant_id)) is None
+                or v.price is None or v.available < i.quantity]
+        for item in gone:
+            self.drop_item(item, found.get(item.variant_id))
+        return not gone
+
+    def drop_item(self, item: DraftItem, variant: VariantMatch | None) -> None:
+        """A cart item sold out. If it was the only one, that product is opened
+        again so the customer chooses another size (never switched for them);
+        otherwise it is removed with a note and the summary shows the rest."""
+        d = self.draft
+        d.items.remove(item)
+        self.changed()
+        if not d.items and d.product_id is None and variant is not None:
+            d.product_id, d.product_name, d.color = variant.product_id, variant.product_name, variant.color
+            d.size, d.variant_id = variant.size, variant.variant_id  # next_step() says it sold out
+            self._variants.pop(variant.product_id, None)
+            return
+        self.notes.append(self.t("sold_out_now", item=item.description))
+
+    async def cart_step(self) -> str:
+        """No item being picked: pick one, ask for more, or go on to delivery."""
+        d = self.draft
+        if not d.items or d.adding_item:
+            return "ask_product"
+        if not d.cart_closed:
+            return "ask_more"
         if d.fulfillment_method is None:
             return "ask_delivery"
         customer = self.ctx.customer
@@ -714,7 +859,15 @@ class _Run:
             return "ask_name"
         if not d.contact_phone:
             return "ask_phone"
+        if not await self.cart_items_available():  # sold out meanwhile
+            return await self.next_step()
+        if not d.items:
+            d.cart_closed = False
+            return "ask_product"
         return "confirm"
+
+    def cart_lines(self) -> str:
+        return "\n".join(f"• {i.description} × {i.quantity}" for i in self.draft.items)
 
     def with_start_over(self, buttons: list) -> list:
         return [*buttons, (self.t("btn_start_over"), "f:restart")]
@@ -747,8 +900,10 @@ class _Run:
             for v in variants:  # a color button carries one variant of that color
                 one_per_color.setdefault(_color_key(v.color), v)
             buttons = [(v.color or "—", f"f:col:{v.variant_id}") for v in one_per_color.values()]
+            product = await self.product(d.product_id)
             return Reply(self.t("ask_color", product=d.product_name, price=price),
-                         self.with_start_over(_rows(buttons, 2)))
+                         self.with_start_over(_rows(buttons, 2)),
+                         photo_url=product.photo_url if product else None)
 
         if step == "ask_size":
             sizes = sorted({v.size for v in await self.of_color() if v.size}, key=_size_key)
@@ -760,6 +915,10 @@ class _Run:
             most = min(variant.available, MAX_QUANTITY_BUTTONS)
             buttons = [(str(n), f"f:qty:{n}") for n in range(1, most + 1)]
             return Reply(self.t("ask_quantity"), self.with_start_over([buttons]))
+
+        if step == "ask_more":
+            buttons = [[(self.t("btn_add_item"), "f:more:add"), (self.t("btn_continue"), "f:more:done")]]
+            return Reply(self.t("ask_more", items=self.cart_lines()), self.with_start_over(buttons))
 
         if step == "ask_delivery":
             buttons = [(self.t("btn_delivery"), "f:ful:delivery"), (self.t("btn_pickup"), "f:ful:pickup")]
@@ -774,18 +933,25 @@ class _Run:
             return Reply(self.t("ask_phone"), self.with_start_over([]))
 
         if step == "confirm":
-            variant = await self.chosen_variant()
-            summary = build_summary(d, {variant.variant_id: variant}, self.language, self.store,
+            variants = {v.variant_id: v for v in await self.db.get_variants(
+                self.store.id, [i.variant_id for i in d.items])}
+            summary = build_summary(d, variants, self.language, self.store,
                                     closing_key="summary_buttons")
             d.summary_revision = d.revision
             buttons = [[(self.t("btn_confirm"), f"f:confirm:{d.revision}"), (self.t("btn_edit"), "f:edit")]]
             return Reply(summary, self.with_start_over(buttons))
 
         if step == "edit":
-            parts = ["product", "color", "size", "quantity", "delivery", "contact"]
+            parts = ["items", "delivery", "contact"]
             buttons = [(self.t(f"btn_edit_{p}"), f"f:edit:{p}") for p in parts]
             return Reply(self.t("ask_edit"), self.with_start_over(
-                [*_rows(buttons, 3), (self.t("btn_back_to_summary"), "f:back")]))
+                [buttons, (self.t("btn_back_to_summary"), "f:back")]))
+
+        if step == "edit_items":
+            buttons = [(self.t("btn_remove", item=f"{i.description} × {i.quantity}")[:60], f"f:rm:{n}")
+                       for n, i in enumerate(d.items)]
+            buttons += [(self.t("btn_add_item"), "f:more:add"), (self.t("btn_back_to_summary"), "f:back")]
+            return Reply(self.t("ask_edit_items", items=self.cart_lines()), self.with_start_over(buttons))
 
         # payment: waiting for the screenshot
         return Reply(self.t("payment_waiting"), self.with_start_over([]))

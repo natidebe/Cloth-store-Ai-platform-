@@ -140,6 +140,7 @@ async def test_amharic_customer_gets_amharic_payment_confirmation():
     await world.tap("White")
     await world.tap("42")
     await world.tap("1")
+    await world.tap(t("btn_continue", "am"))
     await world.tap(t("btn_pickup", "am"))
     await world.say("አበበ")
     await world.say("0911223344")
@@ -281,7 +282,7 @@ def test_chatid_command_tells_a_group_its_id():
             "from": {"id": 5, "first_name": "Owner"}, "text": "/chatid@demostore01bot"}}
         assert client.post(f"/api/v1/webhook/{STORE.id}", json=update,
                            headers={SECRET_HEADER: "s"}).status_code == 200
-        assert "chat id is -100777" in world.telegram.to(-100777)[0]
+        assert "id is -100777" in world.telegram.to(-100777)[0]
         assert world.store.inbox == {}
     finally:
         app.dependency_overrides.clear()

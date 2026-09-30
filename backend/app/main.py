@@ -4,8 +4,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.agents.catalog import Catalog
 from app.agents.orchestrator import Orchestrator
-from app.api.v1 import admin, health, webhook
+from app.api.v1 import admin, catalog, health, webhook
 from app.core.config import get_settings
 from app.services.conversation_service import DatabaseConversationStore
 from app.services.llm_service import create_provider
@@ -48,11 +49,14 @@ async def lifespan(app: FastAPI):
 
     # Handles customer messages in the background (needs the database).
     app.state.orchestrator = None
+    app.state.catalog = None
     recovery_task = None
     if app.state.db is not None:
+        # The store's channel as its catalog (Phase 8d).
+        app.state.catalog = Catalog(app.state.db, app.state.telegram)
         app.state.orchestrator = Orchestrator(
             app.state.db, DatabaseConversationStore(app.state.db), app.state.telegram,
-            app.state.llm,
+            app.state.llm, catalog=app.state.catalog,
         )
         # Messages left unfinished by the last run (crash or restart).
         try:
@@ -65,6 +69,8 @@ async def lifespan(app: FastAPI):
         recovery_task.cancel()
     if app.state.orchestrator is not None:
         await app.state.orchestrator.close()
+    if app.state.catalog is not None:
+        await app.state.catalog.close()
     if app.state.llm is not None:
         await app.state.llm.close()
     await app.state.telegram.close()
@@ -78,3 +84,4 @@ app = FastAPI(title="Cloth Store AI Platform", lifespan=lifespan)
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(webhook.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(catalog.router, prefix="/api/v1")
