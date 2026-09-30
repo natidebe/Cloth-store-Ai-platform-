@@ -676,7 +676,7 @@ customer is told.
 
 ---
 
-### Phase 9b — Store onboarding ✅ Built (D14–D18, migration 008 run); waiting for my test through `/docs`
+### Phase 9b — Store onboarding ✅ Done (D14–D18, migration 008 run; tested with a new store and bot)
 
 **Goal:** new stores join the platform through the dashboard, without
 anyone touching code or Supabase.
