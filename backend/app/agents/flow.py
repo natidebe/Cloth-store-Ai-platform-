@@ -23,7 +23,9 @@ the payment instructions and screenshot.
 
 How a message is handled:
 - Button taps (data like "f:size:42") are checked against the database
-  again, so an old button can't sell something that's gone.
+  again, so an old button can't sell something that's gone. A button only
+  works at the step that showed it (BUTTON_STEPS): once the chat has moved
+  on, an old one is ignored.
 - Typed text is first matched by code against the current step ("42",
   "black", "ጥቁር", "2", "pickup", a phone number...). Only if that fails does
   the AI interpret it (interpreter.py): several answers at once, a side
@@ -33,8 +35,9 @@ How a message is handled:
 
 Channel catalog (Phase 8d, D32–D34): the channel post's Order button sends
 "/start p_<code>"; a forwarded post or a typed code ("P101") works too. The
-product is added to the order (a cart: several items in one order; an
-unfinished pick is replaced). A sold-out product gets similar products. The
+product is added to the order (a cart: several items in one order). If the
+customer is still choosing another product, they're asked: finish it first
+(the new one comes right after) or switch. A sold-out product gets similar products. The
 product's photo is shown with the color question.
 
 Every question and button label comes from messages.py (the one config).
@@ -74,6 +77,15 @@ MAX_CATEGORY_BUTTONS = 8
 MAX_PRODUCT_BUTTONS = 8
 MAX_CART_ITEMS = 10
 PRODUCT_CODE = re.compile(r"^[Pp]\d{2,6}$")  # generated codes (D40), e.g. P101
+# The steps whose question shows each button. A tap on a button from an
+# earlier question (the chat has moved on) is ignored. Start over and the
+# language buttons work anytime; Confirm checks the summary's revision.
+BUTTON_STEPS = {
+    "cat": {"ask_product"}, "prod": {"ask_product"}, "col": {"ask_color"}, "size": {"ask_size"},
+    "qty": {"ask_quantity"}, "more": {"ask_more", "edit_items"}, "ful": {"ask_delivery"},
+    "name": {"ask_name"}, "rm": {"edit_items"}, "edit": {"confirm", "edit"},
+    "back": {"edit", "edit_items"}, "sw": {"ask_switch"},
+}
 
 # Everyday Amharic words for colors and small numbers.
 AMHARIC_COLORS = {
@@ -209,6 +221,12 @@ class _Run:
             if self.handover_text or self.finished:
                 break
             code = product_link_code(message.text)
+            d = self.draft
+            if d.switch_product_id and not (message.button_data or "").startswith(f"{BUTTON_PREFIX}sw:"):
+                # Carried on without answering "finish or switch?": the other
+                # product comes next, so it's never silently dropped.
+                d.next_product_id, d.switch_product_id = d.switch_product_id, None
+                d.step = await self.next_step()  # typed answers are for the current product
             if message.kind == "button":
                 await self.on_button(message.button_data or "")
             elif self.draft.language is None:
@@ -285,9 +303,11 @@ class _Run:
             return []
         return [v for v in await self.variants(d.product_id) if _color_key(v.color) == _color_key(d.color)]
 
-    async def select_product(self, product_id: UUID) -> bool:
+    async def select_product(self, product_id: UUID, *, ask_first: bool = False) -> bool:
         """Start picking this product. The cart's finished items stay (D32);
-        an unfinished pick is replaced; after an order, a new order starts."""
+        after an order, a new order starts. An unfinished pick of another
+        product is replaced, or with ask_first (a tap in the channel) the
+        customer is asked first: finish it, or switch."""
         variants = await self.variants(product_id)
         if not variants:
             await self.sold_out(product_id)
@@ -295,6 +315,9 @@ class _Run:
         if self.draft.step == "payment":
             self.new_draft()
         d = self.draft
+        if ask_first and d.product_id is not None and d.product_id != product_id:
+            d.switch_product_id = product_id
+            return True
         if d.product_id != product_id:
             d.product_id, d.product_name = product_id, variants[0].product_name
             self.clear_choice()
@@ -322,14 +345,14 @@ class _Run:
         if product is None:
             self.notes.append(self.t("option_gone"))
             return
-        await self.select_product(product.id)
+        await self.select_product(product.id, ask_first=True)
 
     async def on_forwarded_post(self, channel_id: int, message_id: int) -> None:
         """A channel post forwarded to the bot: if it's one of the store's
         bot posts, open that product; an old hand-made post goes to staff (D38)."""
         post = await self.db.find_post(self.store.id, channel_id, message_id)
         if post is not None and post.product_id is not None:
-            await self.select_product(post.product_id)
+            await self.select_product(post.product_id, ask_first=True)
             return
         await self.handover("the customer forwarded a channel post the bot doesn't know",
                             f"Forwarded post {message_id} from chat {channel_id}")
@@ -497,6 +520,10 @@ class _Run:
             return
         if d.language is None:
             return  # the language question comes first
+        if action in BUTTON_STEPS and d.step not in BUTTON_STEPS[action]:
+            # A button from an earlier question: the chat has moved on.
+            self.notes.append(self.t("option_gone"))
+            return
         try:
             if action == "restart":
                 self.new_draft()
@@ -515,6 +542,13 @@ class _Run:
                     self.notes.append(self.t("option_gone"))
             elif action == "prod":
                 await self.select_product(UUID(value))
+            elif action == "sw" and d.switch_product_id:  # "finish first" or "switch now"
+                other, d.switch_product_id = d.switch_product_id, None
+                if value == "now":
+                    self.clear_pick()
+                    await self.select_product(other)
+                else:
+                    d.next_product_id = other
             elif action == "col":
                 await self.set_color_by_variant(UUID(value))
             elif action == "size":
@@ -758,9 +792,17 @@ class _Run:
             return "choose_language"
         if d.step == "payment" and d.product_id is None:
             return "payment"
+        if d.switch_product_id:
+            if d.product_id is not None:
+                return "ask_switch"
+            d.next_product_id, d.switch_product_id = d.switch_product_id, None  # nothing to finish
         if d.step in ("edit", "edit_items"):
             return d.step
         if d.product_id is None:
+            if d.next_product_id:  # "finish first": now the other product
+                other, d.next_product_id = d.next_product_id, None
+                if await self.select_product(other):
+                    return await self.next_step()
             return await self.cart_step()
         variants = await self.variants(d.product_id)
         if not variants:  # sold out since it was chosen
@@ -798,7 +840,7 @@ class _Run:
             d.quantity = None
             return "ask_quantity"
         self.add_to_cart(variant, d.quantity)
-        return await self.cart_step()
+        return await self.next_step()  # a product kept for later comes next, or the cart
 
     def add_to_cart(self, variant: VariantMatch, quantity: int) -> None:
         """The picked item goes into the cart (the same variant twice: added up)."""
@@ -915,6 +957,13 @@ class _Run:
             most = min(variant.available, MAX_QUANTITY_BUTTONS)
             buttons = [(str(n), f"f:qty:{n}") for n in range(1, most + 1)]
             return Reply(self.t("ask_quantity"), self.with_start_over([buttons]))
+
+        if step == "ask_switch":
+            other = await self.product(d.switch_product_id)
+            current, new = d.product_name or "", other.name if other else ""
+            buttons = [[(self.t("btn_switch_finish", product=current)[:60], "f:sw:finish")],
+                       [(self.t("btn_switch_now", product=new)[:60], "f:sw:now")]]
+            return Reply(self.t("ask_switch", current=current, new=new), self.with_start_over(buttons))
 
         if step == "ask_more":
             buttons = [[(self.t("btn_add_item"), "f:more:add"), (self.t("btn_continue"), "f:more:done")]]

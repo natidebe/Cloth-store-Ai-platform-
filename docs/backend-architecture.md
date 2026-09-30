@@ -251,8 +251,9 @@ Customer in the channel ──(🛒 Order = t.me/<bot>?start=p_<code>)──► 
 - **Products (D35–D37, D40):** added by owner or staff in the dashboard, one
   photo per product, posted to the channel automatically, with a generated
   product code. Old hand-made channel posts are left as they are (D38).
-- **Cart (D32):** Order on a second post adds the item to the same order;
-  after each item the flow asks Add another item / Continue; the summary
+- **Cart (D32):** Order on a second post adds the item to the same order
+  (if a product is still being chosen, the bot asks: finish it first, or
+  switch; old buttons from earlier questions are ignored); after each item the flow asks Add another item / Continue; the summary
   lists all items; Edit → Items removes or adds items; `place_order`
   already takes several items.
 - **Handed-over chat (D33):** Order takes the chat back from staff (they're

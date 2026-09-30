@@ -535,9 +535,11 @@ retried).
   which channel and which post it came from). Typing the product code works
   too. A screenshot still goes to staff (the bot doesn't read images).
 - **Cart (D32):** tapping Order while an order is in progress **adds the
-  product to the same order**. Items already chosen stay in the cart; an
-  unfinished pick (e.g. a color chosen but no size yet) is replaced by the
-  new product. The order holds several items (D10): after the quantity step
+  product to the same order**. Items already chosen stay in the cart. If
+  the customer is still choosing another product (e.g. a color chosen but
+  no size yet), the bot asks **[✅ Finish <current> first] [🔁 Switch to
+  <new>]**; finishing first opens the new product right after, so nothing
+  is dropped silently. The order holds several items (D10): after the quantity step
   the bot asks **[➕ Add another item] [➡️ Continue]**; the summary lists all
   items with their database prices and a total; Edit can change or remove
   one item. `place_order` already accepts several items.
@@ -587,6 +589,10 @@ retried).
   item that sells out before confirming is removed with a note (if it was
   the only one, the customer picks another size of it).
 - `/chatid` also works in a channel (to find `channel_id`).
+- After the Telegram test: Order on a second post while still choosing
+  the first asks "finish first or switch?" instead of dropping the first;
+  a button from an earlier question (the chat has moved on) is ignored
+  with "That option is no longer available".
 - For testing without the dashboard:
   `python -m scripts.publish_product "Selam Shoes" P101` (or `--all`,
   `--check`).
@@ -796,7 +802,7 @@ Answer each before the phase listed, and record the answer here.
 | D29 | Language choice, step order, and delivery in Ethiopia | Phase 8c | (1) The customer chooses the language first (አማርኛ / English), once; it's remembered and used for every reply, with a button to change it. (2) Color is asked before size; sizes shown are those in stock for the chosen color. (3) Delivery orders are paid on delivery or half before, so after the summary the order is created (address to be arranged, 5-minute hold) and the chat is handed to staff, who call the customer (phone and @username in the alert). Pickup keeps the payment instructions and screenshot |
 | D30 | How do stores add products and post them? | Phase 8d | In the dashboard (web app): product form with photos and a color × size stock grid, and a Publish button that asks the backend to post it to the store's channel with the store's bot. No separate manager chatbot for now; the dashboard may later open inside Telegram as a Mini App |
 | D31 | Channel setup? | Phase 8d | One channel per store, with the store's sales bot as an admin (post and edit); the channel id is saved on the store |
-| D32 | Customer taps Order on a post while another order is in progress? | Phase 8d | Add it to the same order (a cart with several items). Items already chosen stay; an unfinished pick is replaced. After each item: Add another item / Continue |
+| D32 | Customer taps Order on a post while another order is in progress? | Phase 8d | Add it to the same order (a cart with several items). Items already chosen stay; if another product is still being chosen, ask: finish it first (the new one comes next) or switch. After each item: Add another item / Continue |
 | D33 | Customer taps Order while staff have the chat (bot paused)? | Phase 8d | The bot takes the chat back and starts the order; the staff group is told |
 | D34 | Customer taps Order on a sold-out product? | Phase 8d | Say it's sold out and suggest similar products (same category, in stock) as buttons |
 | D35 | Who can add and edit products: only the owner, or staff too? | Phase 8d | Both owner and staff |

@@ -69,6 +69,12 @@ TEXTS: dict[str, dict[Language, str]] = {
     "btn_continue": {"en": "➡️ Continue", "am": "➡️ ቀጥል"},
     "btn_remove": {"en": "❌ {item}", "am": "❌ {item}"},
     "btn_edit_items": {"en": "🛒 Items", "am": "🛒 ዕቃዎች"},
+    "ask_switch": {
+        "en": "You're still choosing {current}. Finish it first ({new} comes next), or switch to {new} now?",
+        "am": "{current}ን መምረጥ ገና አልጨረሱም። መጀመሪያ እሱን ይጨርሱ ({new} ይከተላል)፣ ወይስ አሁን ወደ {new} ይቀይሩ?",
+    },
+    "btn_switch_finish": {"en": "✅ Finish {product} first", "am": "✅ መጀመሪያ {product}ን ልጨርስ"},
+    "btn_switch_now": {"en": "🔁 Switch to {product}", "am": "🔁 ወደ {product} ቀይር"},
     # From the channel (Phase 8d, D34)
     "sold_out_product": {
         "en": "Sorry, {product} is sold out.",

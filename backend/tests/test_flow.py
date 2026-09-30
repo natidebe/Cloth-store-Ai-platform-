@@ -951,13 +951,64 @@ async def test_same_item_twice_adds_up_within_stock():
     assert [(i.variant_id, i.quantity) for i in world.draft.items] == [(AF1_WHITE_42, 2)]  # only 2 in stock
 
 
-async def test_a_new_link_replaces_an_unfinished_pick():
+FINISH_AF1 = t("btn_switch_finish", "en", product="Air Force 1")
+SWITCH_SAMBA = t("btn_switch_now", "en", product="Samba")
+
+
+async def test_a_new_link_during_a_pick_asks_first():
     world = World()
     await world.say("/start p_P101")
     await world.tap("White")  # size not chosen yet
     await world.say("/start p_P102")
+    assert world.draft.step == "ask_switch"
+    assert world.last_text() == t("ask_switch", "en", current="Air Force 1", new="Samba")
+    assert world.draft.product_name == "Air Force 1" and world.draft.color == "White"  # nothing lost
+    await world.tap(SWITCH_SAMBA)
     assert world.draft.product_name == "Samba" and world.draft.variant_id == SAMBA_WHITE_40
-    assert world.draft.items == []
+    assert world.draft.next_product_id is None and world.draft.items == []
+
+
+async def test_finish_first_then_the_other_product_comes_next():
+    world = World()
+    await world.say("/start p_P101")
+    await world.tap("White")
+    await world.say("/start p_P102")
+    await world.tap(FINISH_AF1)
+    assert world.draft.step == "ask_size" and world.draft.color == "White"
+    await world.tap("42")
+    await world.tap("1")
+    # Air Force 1 is in the cart and Samba opened by itself (one color, one size).
+    assert [i.variant_id for i in world.draft.items] == [AF1_WHITE_42]
+    assert world.draft.product_name == "Samba" and world.draft.step == "ask_quantity"
+    await world.tap("1")
+    assert [i.variant_id for i in world.draft.items] == [AF1_WHITE_42, SAMBA_WHITE_40]
+
+
+async def test_carrying_on_without_answering_keeps_the_other_product():
+    world = World()
+    await world.say("/start p_P101")
+    await world.tap("White")
+    await world.say("/start p_P102")
+    await world.say("42")  # answers the size question instead
+    assert world.draft.size == "42" and world.draft.next_product_id == SAMBA
+    await world.tap("1")
+    assert [i.variant_id for i in world.draft.items] == [AF1_WHITE_42]
+    assert world.draft.product_name == "Samba"
+
+
+async def test_old_buttons_are_ignored_once_the_chat_moved_on():
+    world = World()
+    await world.say("/start p_P101")
+    await world.tap("White")
+    await world.tap("42")
+    await world.tap("1")
+    await world.tap(CONTINUE)
+    assert world.draft.step == "ask_delivery"
+    await world.tap_data("f:more:add")  # the cart's "Add another item", tapped late
+    assert world.last_text().startswith(t("option_gone", "en"))
+    assert world.draft.step == "ask_delivery" and not world.draft.adding_item
+    await world.tap_data("f:qty:2")  # an old quantity button
+    assert world.draft.items[0].quantity == 1 and world.draft.step == "ask_delivery"
 
 
 async def test_order_link_takes_a_paused_chat_back_from_staff():

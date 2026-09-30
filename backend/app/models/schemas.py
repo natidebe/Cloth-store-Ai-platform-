@@ -402,7 +402,7 @@ class DraftItem(BaseModel):
 FlowStep = Literal[
     "choose_language", "ask_product", "ask_color", "ask_size", "ask_quantity", "ask_more",
     "ask_delivery", "ask_address", "ask_name", "ask_phone", "confirm", "edit", "edit_items",
-    "payment",
+    "payment", "ask_switch",
 ]
 
 
@@ -438,6 +438,11 @@ class OrderDraft(BaseModel):
     # A product link (/start p_<code>) that arrived before the language was
     # chosen: opened right after the customer picks a language.
     pending_product_code: str | None = None
+    # Order tapped on another product while one is still being picked: the
+    # customer is asked "finish this one first, or switch?" (switch_product_id);
+    # "finish first" keeps the other product for right after (next_product_id).
+    switch_product_id: UUID | None = None
+    next_product_id: UUID | None = None
 
     items: list[DraftItem] = Field(default_factory=list)
     contact_name: str | None = None
