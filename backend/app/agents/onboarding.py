@@ -35,7 +35,8 @@ LINK_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 LINK_CODE_LENGTH = 8
 BOT_TOKEN_PATTERN = re.compile(r"^\d{5,15}:[A-Za-z0-9_-]{30,50}$")
 LINK_COMMAND = "/link"
-LINK_PATTERN = re.compile(r"/link(?:@\w+)?\s*([A-Za-z0-9]*)", re.IGNORECASE)
+# Also forgiving: "/linkCODE" and "/link <CODE>" (copying the <code> placeholder).
+LINK_PATTERN = re.compile(r"/link(?:@\w+)?\s*<?\s*([A-Za-z0-9]*)\s*>?", re.IGNORECASE)
 
 
 class OnboardingError(Exception):
@@ -68,7 +69,7 @@ def link_command(update: TelegramUpdate) -> tuple[int, str, str] | None:
     message = update.message or update.channel_post
     if message is None or message.chat.type not in ("group", "supergroup", "channel"):
         return None
-    # "/link CODE", "/link@shop_bot CODE", and also "/linkCODE" (easy to type by mistake).
+    # "/link CODE" or "/link@shop_bot CODE" (see LINK_PATTERN for the forgiving forms).
     found = LINK_PATTERN.fullmatch((message.text or "").strip())
     if found is None:
         return None
@@ -200,8 +201,9 @@ class Onboarding:
                 return
             text = (f"✅ This group is now the staff group of {store.name}. New orders, payment "
                     "screenshots and customer questions will appear here." if ok else
-                    "❌ That code is wrong or has expired. Get a new code in the dashboard and "
-                    f"send {LINK_COMMAND} <code> again.")
+                    "❌ That code is wrong, already used, or expired (codes last "
+                    f"{LINK_CODE_MINUTES} minutes and work once). Get a new code in the "
+                    f"dashboard and send it like this: {LINK_COMMAND} ABCD2345")
             await self.telegram.send_message(token, chat_id, text, reply_to=message.message_id)
             if ok:
                 logger.info("staff group linked", extra={"store_id": str(store.id)})

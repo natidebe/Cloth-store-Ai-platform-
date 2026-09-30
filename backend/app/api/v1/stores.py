@@ -18,7 +18,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
-from app.agents.onboarding import LINK_COMMAND, BotConnection, Onboarding, OnboardingError
+from app.agents.onboarding import LINK_CODE_MINUTES, LINK_COMMAND, BotConnection, Onboarding, OnboardingError
 from app.agents.orchestrator import Orchestrator
 from app.api.v1.webhook import get_db, get_orchestrator
 from app.core.config import get_settings
@@ -165,8 +165,11 @@ async def link_code(
     bot = f"@{store.telegram_bot_username}" if store.telegram_bot_username else "your bot"
     return LinkCodeResponse(
         code=code, expires_at=expires_at,
-        instructions=(f"Add {bot} to your staff group (or as an admin of your channel, allowed to "
-                      f"post and edit messages), then send there: {LINK_COMMAND} {code}"),
+        instructions=(
+            f"Send {LINK_COMMAND} {code} in the chat you want to connect (valid "
+            f"{LINK_CODE_MINUTES} minutes, works once). Staff group: a Telegram GROUP with {bot} "
+            f"added; the bot replies ✅. Sales channel: a CHANNEL with {bot} as an admin allowed "
+            "to post and edit messages; the /link post is deleted so customers don't see it."),
     )
 
 

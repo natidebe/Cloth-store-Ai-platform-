@@ -300,6 +300,7 @@ def test_link_code_connects_the_staff_group_once(world):
     assert response.status_code == 200
     code = response.json()["code"]
     assert f"/link {code}" in response.json()["instructions"] and "@shop_a_bot" in response.json()["instructions"]
+    assert "GROUP" in response.json()["instructions"] and "CHANNEL" in response.json()["instructions"]
 
     webhook(client, db.stores[store_id], group_message(f"/link {code.lower()}"))  # typed in lowercase
     assert db.stores[store_id].staff_chat_id == -500
@@ -307,7 +308,7 @@ def test_link_code_connects_the_staff_group_once(world):
 
     webhook(client, db.stores[store_id], group_message(f"/link {code}", chat_id=-600))  # used up
     assert db.stores[store_id].staff_chat_id == -500
-    assert telegram.sent(-600)[-1].startswith("❌ That code is wrong or has expired")
+    assert telegram.sent(-600)[-1].startswith("❌ That code is wrong, already used, or expired")
 
 
 def test_link_code_in_a_channel_saves_the_channel_quietly(world):
@@ -346,6 +347,7 @@ def test_only_the_owner_gets_link_codes_and_manages_staff(world):
 @pytest.mark.parametrize("text, code", [
     ("/link ABCD2345", "ABCD2345"), ("/linkabcd2345", "ABCD2345"), ("/LINK  abcd2345 ", "ABCD2345"),
     ("/link@shop_a_bot ABCD2345", "ABCD2345"), ("/link", ""),
+    ("/link <ABCD2345>", "ABCD2345"), ("/link<ABCD2345>", "ABCD2345"),
 ])
 def test_link_command_forms(text, code):
     assert link_command(TelegramUpdate.model_validate(group_message(text))) == (-500, "group", code)
