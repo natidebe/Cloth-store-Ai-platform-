@@ -260,6 +260,17 @@ class TelegramService:
             "drop_pending_updates": True,  # don't replay old messages
         })
 
+    async def set_profile(self, bot_token: str, description: str, short_description: str,
+                          commands: list[tuple[str, str]]) -> None:
+        """The bot's "What can this bot do?" text (shown before Start, up to
+        512 characters), its short profile text (120), and the command menu."""
+        await self._call(bot_token, "setMyDescription", {"description": description[:512]})
+        await self._call(bot_token, "setMyShortDescription",
+                         {"short_description": short_description[:120]})
+        await self._call(bot_token, "setMyCommands", {
+            "commands": [{"command": name, "description": text[:256]} for name, text in commands],
+        })
+
     async def delete_webhook(self, bot_token: str) -> None:
         await self._call(bot_token, "deleteWebhook")
 

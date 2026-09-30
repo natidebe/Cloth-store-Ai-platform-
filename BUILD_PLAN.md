@@ -621,7 +621,7 @@ a sold-out post and get similar products.
 
 ---
 
-### Phase 9 — Handing over to staff 🟡 Built; waiting for migration 006 and my Telegram test
+### Phase 9 — Handing over to staff ✅ Done (migration 006 run, tested in Telegram with two staff)
 
 **Goal:** staff can take over smoothly when the bot can't help.
 
@@ -661,6 +661,18 @@ a sold-out post and get similar products.
 **Check:** send a payment screenshot to the bot and see the photo arrive in
 the staff group with the order number; staff confirm the payment and the
 customer is told.
+
+**Added after the Telegram test:**
+- **How to use the bot:** `/help` in the chat explains how to order, in the
+  customer's language. `connect_store` also sets the bot's Telegram
+  profile in Amharic and English with the store's name: the "What can this
+  bot do?" text shown before Start, the short description, and the
+  /start and /help menu.
+- **Payment after the order:** pickup orders show the store's own payment
+  methods (`stores.payment_instructions`, free text, D6). Staff can
+  already edit it (migration 004), so the dashboard only needs a "Payment
+  methods" field in the store settings (my teammate). Delivery orders say
+  "You pay when you receive your items" (D29 updated).
 
 ---
 
@@ -799,7 +811,7 @@ Answer each before the phase listed, and record the answer here.
 | D26 | How do staff confirm a payment before the dashboard exists? | Phase 9 | A "Confirm payment" button in the staff group (plus the login-protected endpoint for the dashboard) |
 | D27 | Who in the staff group may press the buttons and reply? | Phase 9 | Anyone in the staff group; we record who did it |
 | D28 | How should the bot chat: AI-driven, or a scripted step-by-step flow? | Phase 8c | A scripted flow with fixed questions and buttons (product → size → color → quantity → delivery/pickup (+ address) → name and phone (skipped if known) → confirm with Edit → payment). Typed answers to the current step are accepted; several answers at once are extracted by the AI and the flow skips ahead; side questions get a short AI answer and the question again; haggling, complaints and anything unclear go to staff. Every step has Start over. Questions live in one config (English and Amharic), shared by all stores for now, with a per-store override hook. Quantity is its own step. Photos of products aren't read (a photo after an order still goes to staff as a payment screenshot). Prices and stock always come from the database |
-| D29 | Language choice, step order, and delivery in Ethiopia | Phase 8c | (1) The customer chooses the language first (አማርኛ / English), once; it's remembered and used for every reply, with a button to change it. (2) Color is asked before size; sizes shown are those in stock for the chosen color. (3) Delivery orders are paid on delivery or half before, so after the summary the order is created (address to be arranged, 5-minute hold) and the chat is handed to staff, who call the customer (phone and @username in the alert). Pickup keeps the payment instructions and screenshot |
+| D29 | Language choice, step order, and delivery in Ethiopia | Phase 8c | (1) The customer chooses the language first (አማርኛ / English), once; it's remembered and used for every reply, with a button to change it. (2) Color is asked before size; sizes shown are those in stock for the chosen color. (3) Delivery orders are paid when the customer receives the items (the customer is told so), so after the summary the order is created (address to be arranged, 5-minute hold) and the chat is handed to staff, who call the customer (phone and @username in the alert). Pickup keeps the payment instructions and screenshot |
 | D30 | How do stores add products and post them? | Phase 8d | In the dashboard (web app): product form with photos and a color × size stock grid, and a Publish button that asks the backend to post it to the store's channel with the store's bot. No separate manager chatbot for now; the dashboard may later open inside Telegram as a Mini App |
 | D31 | Channel setup? | Phase 8d | One channel per store, with the store's sales bot as an admin (post and edit); the channel id is saved on the store |
 | D32 | Customer taps Order on a post while another order is in progress? | Phase 8d | Add it to the same order (a cart with several items). Items already chosen stay; if another product is still being chosen, ask: finish it first (the new one comes next) or switch. After each item: Add another item / Continue |

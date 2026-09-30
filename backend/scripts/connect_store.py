@@ -11,6 +11,10 @@ The store can be given by name or by id. It must already exist, be active,
 and have its telegram_bot_token set. PUBLIC_BASE_URL in .env must be the
 public https address of this server (e.g. your ngrok URL).
 
+Connecting also sets the bot's profile: the "What can this bot do?" text
+customers see before pressing Start, its short description, and the
+/start and /help menu (in Amharic and English, with the store's name).
+
 Creating stores properly comes in Phase 9b; this is for the test store.
 """
 import argparse
@@ -19,6 +23,7 @@ import secrets
 import sys
 from uuid import UUID
 
+from app.agents.messages import bot_profile
 from app.core.config import get_settings
 from app.models.schemas import Store
 from app.services.supabase_service import SupabaseService
@@ -98,6 +103,8 @@ async def main() -> None:
         await telegram.set_webhook(token, url, secret)
         print("Connected. Telegram now sends this bot's messages to:")
         _print_info(await telegram.get_webhook_info(token))
+        await telegram.set_profile(token, *bot_profile(store.name))
+        print("Bot description and /start, /help menu set.")
     except TelegramError as error:
         sys.exit(f"Telegram said: {error.description}")
     finally:

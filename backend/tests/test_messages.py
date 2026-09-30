@@ -4,7 +4,9 @@ from decimal import Decimal
 
 import pytest
 
-from app.agents.messages import TEXTS, both, detect_language, format_price, message_language, t
+from app.agents.messages import (
+    TEXTS, both, bot_profile, detect_language, format_price, message_language, t,
+)
 
 
 def _placeholders(text: str) -> set[str]:
@@ -74,3 +76,11 @@ def test_prices():
 
 def test_both_languages_amharic_first():
     assert both("empty_reply") == f"{t('empty_reply', 'am')}\n{t('empty_reply', 'en')}"
+
+
+def test_bot_profile_in_both_languages_within_telegram_limits():
+    description, short, commands = bot_profile("Selam Shoes")
+    assert description.startswith("👋 እንኳን ወደ Selam Shoes") and "Welcome to Selam Shoes" in description
+    assert "Selam Shoes" in short and [name for name, _ in commands] == ["start", "help"]
+    long_name = bot_profile("A" * 300)
+    assert len(long_name[0]) <= 512 and len(long_name[1]) <= 120

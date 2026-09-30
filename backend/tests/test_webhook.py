@@ -218,6 +218,21 @@ async def test_long_messages_are_cut_to_telegram_limit():
     assert len(sent[0]) == 4096
 
 
+@pytest.mark.anyio
+async def test_bot_profile_sets_description_short_description_and_commands():
+    calls = []
+
+    def record(request):
+        calls.append((request.url.path.rsplit("/", 1)[-1], json.loads(request.content)))
+        return httpx.Response(200, json={"ok": True, "result": True})
+
+    service = TelegramService(httpx.AsyncClient(base_url=TELEGRAM_API, transport=httpx.MockTransport(record)))
+    await service.set_profile(BOT_TOKEN, "d" * 600, "s" * 200, [("help", "How to order")])
+    await service.close()
+    assert [method for method, _ in calls] == ["setMyDescription", "setMyShortDescription", "setMyCommands"]
+    assert len(calls[0][1]["description"]) == 512 and len(calls[1][1]["short_description"]) == 120
+    assert calls[2][1]["commands"] == [{"command": "help", "description": "How to order"}]
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"

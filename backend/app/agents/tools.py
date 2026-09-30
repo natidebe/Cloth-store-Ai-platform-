@@ -140,7 +140,7 @@ def new_order_alert(customer: Customer, order: OrderWithItems) -> StaffAlert:
 def delivery_order_alert(customer: Customer, order: OrderWithItems,
                          username: str | None) -> StaffAlert:
     """D29: a delivery order is handed to staff, who call the customer to
-    arrange the address and payment (pay on delivery, or half before)."""
+    arrange the address; the customer was told they pay on delivery."""
     items = "\n".join(
         f"• {i.product_name or 'item'}, {i.color or '-'}, size {i.size or '-'} × {i.quantity}"
         for i in order.items
@@ -152,7 +152,8 @@ def delivery_order_alert(customer: Customer, order: OrderWithItems,
         f"🚚 New DELIVERY order #{order_number(order.id)} — please call the customer\n"
         f"{items}\nTotal: {format_price(order.total_price)} (delivery fee not included)\n"
         f"Customer: {contact} (Telegram id {customer.telegram_id})\n"
-        "Arrange the delivery address and payment (on delivery, or half before). The bot "
+        "Arrange the delivery address. The customer was told they pay when they receive "
+        "the items. The bot "
         "stays silent in this chat until you hand it back. Reply to this message to "
         "write to the customer."
     )

@@ -119,16 +119,20 @@ TEXTS: dict[str, dict[Language, str]] = {
         "en": "Sorry, {color} isn't available.",
         "am": "ይቅርታ፣ {color} የለም።",
     },
-    # Delivery (D29): staff arrange the address and payment by phone.
+    # Delivery (D29): staff arrange the address by phone; the customer pays
+    # when the items arrive.
     "summary_delivery_arranged": {
-        "en": "Delivery: our team will call you to arrange the address and payment",
-        "am": "ማድረስ፦ አድራሻውንና ክፍያውን ለማመቻቸት ቡድናችን ይደውልልዎታል",
+        "en": "Delivery: our team will call you to arrange the address. "
+              "You pay when you receive your items.",
+        "am": "ማድረስ፦ አድራሻውን ለማመቻቸት ቡድናችን ይደውልልዎታል። ክፍያው ዕቃዎቹን ሲረከቡ ነው።",
     },
     "delivery_handoff": {
         "en": "✅ Order #{number} is placed. Total: {total}.\n"
-              "Our team will call you on {phone} to arrange the delivery address and payment.",
+              "Our team will call you on {phone} to arrange the delivery address.\n"
+              "💵 You pay when you receive your items.",
         "am": "✅ ትዕዛዝ #{number} ተመዝግቧል። ጠቅላላ ዋጋ: {total}።\n"
-              "የማድረሻ አድራሻውንና ክፍያውን ለማመቻቸት ቡድናችን በ{phone} ይደውልልዎታል።",
+              "የማድረሻ አድራሻውን ለማመቻቸት ቡድናችን በ{phone} ይደውልልዎታል።\n"
+              "💵 ክፍያው ዕቃዎቹን ሲረከቡ ነው።",
     },
     "too_many": {
         "en": "Sorry, we don't have that many. Please pick a smaller number.",
@@ -227,6 +231,41 @@ TEXTS: dict[str, dict[Language, str]] = {
         "am": "ይቅርታ፣ በእኛ በኩል ችግር ተፈጥሯል። ቡድናችን ተነግሮታል፤ በቅርቡ ይመልስልዎታል።",
     },
 
+    # --- How to use the bot -------------------------------------------------
+    # /help in the chat, in the customer's language.
+    "help": {
+        "en": "ℹ️ How to order:\n"
+              "1. Tap 🛒 Order on a post in our channel, or type a product name or code (e.g. P101).\n"
+              "2. Choose the color, size and quantity with the buttons.\n"
+              "3. Add more items or tap ➡️ Continue, then choose 🚚 Delivery or 🏪 Pickup.\n"
+              "4. Check the summary and tap ✅ Confirm.\n\n"
+              "💵 Pickup: pay with the details we send you, then send a screenshot here.\n"
+              "💵 Delivery: you pay when you receive your items.\n\n"
+              "🔄 Start over anytime. Questions? Just write, and our team will answer.",
+        "am": "ℹ️ እንዴት ማዘዝ ይቻላል:\n"
+              "1. በቻናላችን ላይ ያለውን 🛒 እዘዝ ይጫኑ፣ ወይም የምርቱን ስም ወይም ኮድ (ለምሳሌ P101) ይጻፉ።\n"
+              "2. ቀለሙን፣ ቁጥሩንና ብዛቱን በቁልፎቹ ይምረጡ።\n"
+              "3. ሌላ ዕቃ ይጨምሩ ወይም ➡️ ቀጥል ይጫኑ፤ ከዚያ 🚚 ይድረስልኝ ወይም 🏪 ከሱቁ እወስዳለሁ ይምረጡ።\n"
+              "4. ማጠቃለያውን አይተው ✅ አረጋግጥ ይጫኑ።\n\n"
+              "💵 ከሱቁ ሲወስዱ: በምንልክልዎት የክፍያ መረጃ ከፍለው ስክሪንሾቱን እዚህ ይላኩ።\n"
+              "💵 ሲደርስልዎ: ክፍያው ዕቃዎቹን ሲረከቡ ነው።\n\n"
+              "🔄 በማንኛውም ጊዜ እንደገና መጀመር ይችላሉ። ጥያቄ ካለዎት ይጻፉልን፤ ቡድናችን ይመልሳል።",
+    },
+    # The bot's Telegram profile (set by scripts/connect_store.py). Both
+    # languages go into one text: Telegram picks a description by the app's
+    # language, and few people use Telegram in Amharic.
+    "bot_description": {
+        "en": "👋 Welcome to {shop}!\n"
+              "🛒 Tap Order on a post in our channel, or type a product name. "
+              "Choose color, size and quantity, then confirm. Type /help anytime.",
+        "am": "👋 እንኳን ወደ {shop} በደህና መጡ!\n"
+              "🛒 በቻናላችን ላይ እዘዝ ይጫኑ፣ ወይም የምርቱን ስም ይጻፉ። "
+              "ቀለም፣ ቁጥርና ብዛት መርጠው ያረጋግጡ። እርዳታ ከፈለጉ /help ይጻፉ።",
+    },
+    "bot_short_description": {"en": "Order from {shop} in a few taps.", "am": "ከ{shop} በቀላሉ ይዘዙ።"},
+    "command_start": {"en": "Start an order", "am": "ትዕዛዝ ጀምር"},
+    "command_help": {"en": "How to order", "am": "እንዴት ማዘዝ ይቻላል"},
+
     # --- Prices -------------------------------------------------------------
     "currency": {"en": "ETB", "am": "ብር"},
     "price_not_set": {"en": "price not set", "am": "ዋጋ አልተወሰነም"},
@@ -247,6 +286,17 @@ def t(key: str, language: Language, store: object | None = None, **values: objec
 def both(key: str, **values: object) -> str:
     """Amharic and English together, for when we don't know the language."""
     return f"{t(key, 'am', **values)}\n{t(key, 'en', **values)}"
+
+
+def bot_profile(shop: str) -> tuple[str, str, list[tuple[str, str]]]:
+    """The bot's Telegram profile, Amharic first: its description (shown
+    before Start), short description, and command menu."""
+    shop = shop.strip()[:40]
+    description = f"{t('bot_description', 'am', shop=shop)}\n\n{t('bot_description', 'en', shop=shop)}"
+    short = f"{t('bot_short_description', 'am', shop=shop)} {t('bot_short_description', 'en', shop=shop)}"
+    commands = [(name, f"{t(f'command_{name}', 'am')} / {t(f'command_{name}', 'en')}")
+                for name in ("start", "help")]
+    return description, short, commands
 
 
 def format_price(price: Decimal | None, language: Language = "en") -> str:

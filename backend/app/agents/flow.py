@@ -16,10 +16,13 @@ for customers we already know.
 Language (D29): the customer chooses it once; everything the bot says uses
 it (questions, buttons, summary, the AI's short answers).
 
-Delivery (D29): in Ethiopia delivery orders are paid on delivery (or half
-before), so after the summary the order is created (address "to be
-arranged") and the chat goes to staff, who call the customer. Pickup keeps
-the payment instructions and screenshot.
+Delivery (D29): delivery orders are paid when the customer receives the
+items, so after the summary the order is created (address "to be
+arranged") and the chat goes to staff, who call the customer. Pickup gets
+the store's payment instructions (stores.payment_instructions, set in the
+dashboard) and a screenshot is sent back.
+
+/help shows how to order, in the customer's language.
 
 How a message is handled:
 - Button taps (data like "f:size:42") are checked against the database
@@ -601,8 +604,12 @@ class _Run:
 
     async def on_text(self, text: str) -> None:
         text = text.strip()
-        if text.lower().split("@")[0] == "/start":  # Telegram's "Start" button
+        command = text.lower().split("@")[0]
+        if command == "/start":  # Telegram's "Start" button
             self.new_draft()
+            return
+        if command == "/help":  # how to order; the current question follows
+            self.notes.append(self.t("help"))
             return
         if await self.direct_answer(text):
             return
@@ -757,7 +764,7 @@ class _Run:
         if result.order is not None:
             order = result.order
             if delivery:
-                # D29: pay on delivery (or half before): staff call the customer.
+                # D29: pay on delivery: staff call the customer about the address.
                 self.ctx.staff_alerts[-1] = delivery_order_alert(
                     self.ctx.customer, order, self.ctx.new_messages[-1].customer_username)
                 self.before.append(Reply(self.t(

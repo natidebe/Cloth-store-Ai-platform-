@@ -674,6 +674,22 @@ async def test_screenshot_after_the_order_goes_to_staff():
     assert f"#{order_number(order.id)}" in alert and "paid" in alert
 
 
+# --- /help ------------------------------------------------------------------------
+
+async def test_help_explains_how_to_order_then_repeats_the_question():
+    world = World()
+    await world.say("/start p_P101")
+    await world.say("/help")
+    assert world.last_text().startswith(t("help", "en"))
+    assert world.draft.step == "ask_color" and world.draft.product_name == "Air Force 1"
+
+
+async def test_help_in_amharic():
+    world = World(language="am")
+    await world.say("/help")
+    assert world.last_text().startswith(t("help", "am"))
+
+
 # --- Delivery goes to staff (D29) --------------------------------------------------
 
 async def test_delivery_summary_says_staff_will_call():
@@ -694,6 +710,7 @@ async def test_delivery_order_is_placed_and_handed_to_staff():
     assert world.last_text() == t("delivery_handoff", "en", number=order_number(order.id),
                                   total="5,000 ETB", phone="0911223344")
     assert PAYMENT_TEXT not in world.last_text()
+    assert "You pay when you receive your items" in world.last_text()
     # Staff: the order, the phone, the @username, and the buttons.
     alert_id = world.telegram.last_message_id(STAFF_CHAT)
     alert = world.telegram.to(STAFF_CHAT)[-1]
