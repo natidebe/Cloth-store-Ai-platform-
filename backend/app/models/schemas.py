@@ -8,6 +8,7 @@ Three groups:
 
 Money is `Decimal`, never `float`, so prices and totals are exact.
 """
+import logging
 import re
 from datetime import datetime
 from decimal import Decimal
@@ -15,6 +16,8 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
+
+logger = logging.getLogger(__name__)
 
 # Allowed values — must match the check constraints in 002 (decisions D4, D7, D11).
 OrderStatus = Literal["pending", "confirmed", "out_for_delivery", "delivered", "cancelled"]
@@ -145,6 +148,19 @@ class Product(DbModel):
     description: str | None = None
     photo_url: str | None = None  # one photo per product (D36)
     created_at: datetime | None = None
+
+    @field_validator("photo_url")
+    @classmethod
+    def _web_photo_only(cls, value: str | None) -> str | None:
+        """Telegram can only fetch an http(s) link. Anything else (a pasted
+        "data:image/...;base64" image, a file path) is ignored: the product is
+        shown without a photo instead of the post failing."""
+        value = (value or "").strip()
+        if not value.lower().startswith(("https://", "http://")):
+            if value:
+                logger.warning("photo_url ignored: not a web link", extra={"start": value[:30]})
+            return None
+        return value
 
 
 class ProductPost(DbModel):

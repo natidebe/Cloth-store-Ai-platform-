@@ -12,6 +12,7 @@ from app.models.schemas import (
     OrderDraft,
     OrderItem,
     Payment,
+    Product,
     ProductVariant,
     Store,
     TelegramUpdate,
@@ -234,3 +235,16 @@ def test_store_profile_has_no_secrets():
                   webhook_secret="s3cret", opening_hours="9–5")
     dumped = str(store.profile.model_dump())
     assert "123:ABC" not in dumped and "s3cret" not in dumped
+
+
+@pytest.mark.parametrize("photo, expected", [
+    ("https://example.com/jacket.jpg", "https://example.com/jacket.jpg"),
+    ("  https://example.com/a.png ", "https://example.com/a.png"),
+    ("data:image/jpeg;base64,/9j/4AAQSkZJRg", None),  # an image pasted as text
+    ("C:/Users/pc/jacket.jpg", None),  # a file on the computer
+    ("", None),
+    (None, None),
+])
+def test_product_photo_must_be_a_web_link(photo, expected):
+    product = Product(id=uuid4(), store_id=uuid4(), name="Jacket", photo_url=photo)
+    assert product.photo_url == expected
