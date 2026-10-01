@@ -851,6 +851,93 @@ then the AI isn't limited (the counter isn't there yet).
 
 ---
 
+### Phase 10b — Telegram Mini App (the store dashboard) 📝 Planned (D41–D47)
+
+**Goal:** shop owners and staff manage their store inside Telegram, with no
+web dashboard: see how the store is doing, manage products and stock, and
+change the store's settings. New shops sign up there too.
+
+**Why:** my teammate isn't building the web dashboard (D41). Without it,
+products, stock and settings are SQL-only, which no shop owner can do.
+
+**What it is:** a web page that opens inside Telegram (a "Mini App"),
+built with React (D47) and served by our own backend, so there's nothing
+extra to host. Telegram tells the page who the user is, signed with the
+bot's token, so there are no passwords.
+
+**Who gets in (D42):**
+- A store's Mini App opens from that store's bot. Anyone in the store's
+  **staff group** gets in; the group's **admins** (and whoever created the
+  store) are **owners**. Remove someone from the group and they lose
+  access. Checked with Telegram (`getChatMember`), remembered 5 minutes.
+- How to open it: `/dashboard` in a private chat with the store's bot, or
+  the "📊 Dashboard" button the bot posts in the staff group (it opens the
+  private chat, which shows the Mini App button). Telegram only allows Mini
+  App buttons in private chats. Customers never see it: the bot only shows
+  it to staff-group members.
+
+**Screens (D43):**
+1. **Analytics** (everyone in the group): for today / 7 days / 30 days:
+   revenue (paid orders), number of orders placed and paid, paid ÷ placed,
+   average order, unpaid orders waiting, sales per day (chart), top
+   products, delivery vs pickup, new customers, low stock (≤ 2 left),
+   AI calls today vs the limit.
+2. **Products & stock** (everyone; prices owners only): product list with
+   stock; add / edit a product with a color × size stock grid, photo
+   upload (to Supabase Storage), price, description, keywords; quick stock
+   +/−; take off sale (stock to 0; ordered products can't be deleted);
+   post to the channel. Posts update by themselves (Phase 8d).
+3. **Store settings** (owners): payment accounts, delivery areas and fees,
+   location, opening hours, pickup instructions, return policy; link codes
+   for the staff group and channel; change the bot token.
+
+**Signing up (D44):** a **platform bot** (mine, e.g. @…PlatformBot, its
+token in `.env`) has its own Mini App:
+- "Create your store": store name + bot token from @BotFather (with a
+  short guide), then the same pending → approval flow as Phase 9b. The
+  creator is the store's owner by their Telegram account.
+- Next steps shown there: add the store's bot to a staff group and channel
+  and send the `/link` codes.
+- **Platform admin** screen (platform admins only, by Telegram id, D45):
+  all stores with status, plan and orders; approve, suspend, change plan.
+
+**Orders stay in the staff group (D46):** confirm payment, reply, hand
+back, as today. Order statuses (delivered, cancelled) come later.
+
+**What to build:**
+- Migration `010_mini_app.sql` (I approve it first): the store creator's
+  Telegram id, platform admins by Telegram id, and a `store_analytics`
+  function that computes the numbers in one call per period.
+- Backend:
+  - checking Mini App logins (Telegram's signed `initData`, checked with
+    the bot's token, max 24 hours old) and staff-group membership
+  - endpoints under `/api/v1/app/…`: analytics, products and variants,
+    stock, photo upload, publish, settings, link codes, bot token; and for
+    the platform bot: create store, my stores, platform admin
+  - `/dashboard` and the staff-group button; the platform bot's webhook
+  - serving the built React app at `/app/`
+- Frontend: `frontend/` — React + Vite + TypeScript, Telegram's theme
+  colors so it looks native, Amharic and English (D29: the user's choice).
+- Tests: login checks (forged, expired, not in the group, other store),
+  every endpoint's permissions, analytics numbers against known orders.
+
+**Steps (each one testable on its own):**
+1. Logins + `/dashboard` + an empty Mini App that says who you are and
+   your role.
+2. Analytics.
+3. Products & stock (incl. photo upload).
+4. Store settings and link codes.
+5. Platform bot: sign-up and platform admin.
+
+**Check:** from a phone: open the dashboard from the staff group; see
+today's numbers after placing and paying an order; add a product with a
+photo and a stock grid and see it posted in the channel; change the stock
+and see the post update; a customer can't open it; a member of another
+store's group can't see this store; sign up a new store through the
+platform bot and approve it.
+
+---
+
 ### Phase 11 — Ready to deploy
 
 **Goal:** everything needed to put it online.
@@ -908,6 +995,13 @@ Answer each before the phase listed, and record the answer here.
 | D38 | Stores with an existing channel: leave old hand-made posts as they are (forwarded old posts go to staff), or ask owners to re-add products still in stock? | Phase 8d | Leave old posts as they are; only new bot posts are orderable (a forwarded old post goes to staff) |
 | D39 | Updating posts when stock or price changes: the dashboard calls the backend after saving, or Supabase database webhooks? | Phase 8d | Supabase database webhooks (they catch changes from anywhere: dashboard, payments, Table Editor, future tools), plus a periodic check in the minute sweep that fixes any post out of date (webhooks aren't retried). Changes are grouped into one post edit; 5-minute holds don't change posts |
 | D40 | Product code format (e.g. D12), chosen by the owner or generated? | Phase 8d | Generated automatically |
+| D41 | Will there be a separate web dashboard? | Phase 10b | No (the teammate isn't building it). Everything a shop needs is in a Telegram Mini App |
+| D42 | Who can open a store's Mini App? | Phase 10b | Members of the store's linked staff group; group admins and the store's creator are owners. Checked with Telegram, no passwords |
+| D43 | What's in the Mini App? | Phase 10b | Analytics, products & stock, store settings. Not orders (they stay in the staff group) |
+| D44 | How do new stores sign up? | Phase 10b | In a platform bot's Mini App: name + bot token, then pending → approval (D14) |
+| D45 | How are platform admins identified in the Mini App? | Phase 10b | By Telegram id (added by SQL, like D15) |
+| D46 | Orders in the Mini App? | Phase 10b | Not now: confirming, replying and handing back stay in the staff group |
+| D47 | How is the Mini App built? | Phase 10b | React + Vite + TypeScript in `frontend/`, built to static files served by the backend at `/app/` |
 
 ---
 
