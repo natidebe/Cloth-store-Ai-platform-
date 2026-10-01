@@ -27,6 +27,8 @@ async def main() -> None:
     parser.add_argument("--all", action="store_true", help="post every product that has no post yet")
     parser.add_argument("--check", action="store_true", help="update posts that don't match the database")
     args = parser.parse_args()
+    # "P101." or "P101," copied from a sentence: keep only the code.
+    args.code = args.code.strip(" .,;:'\"").upper() if args.code else None
     if bool(args.code) + args.all + args.check != 1:
         parser.error("give a product code, --all, or --check")
 
@@ -48,7 +50,7 @@ async def main() -> None:
         if args.code:
             product = await db.find_product_by_code(store.id, args.code)
             if product is None:
-                sys.exit(f"{store.name} has no product {args.code.upper()}.")
+                sys.exit(f"{store.name} has no product {args.code}")
             products = [product]
         else:
             posted = {p.product_id for p in await db.list_product_posts(store.id)}
