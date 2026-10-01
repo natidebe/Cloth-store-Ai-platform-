@@ -15,6 +15,7 @@ import pytest
 from app.core.config import get_settings
 from app.models.schemas import DraftItem, OrderDraft
 from app.services.supabase_service import (
+    DatabaseError,
     NotFoundError,
     OrderRejectedError,
     OutOfStockError,
@@ -397,3 +398,39 @@ async def test_same_variant_on_two_lines_is_added_up(world):
     order_id = await service.create_order(store, customer, _draft((variant, 2), (variant, 1)), f"k-{uuid4()}")
     order = next(o for o in await service.get_customer_orders(store, customer, limit=50) if o.id == order_id)
     assert [(i.quantity, i.price) for i in order.items] == [(3, Decimal("1000"))]
+
+
+
+# --- Store isolation (Phase 10 review) ----------------------------------------
+# The backend's key skips the database's security rules, so every function
+# must filter by store itself. Store B, using store A's ids, sees nothing
+# and changes nothing.
+
+async def test_another_store_cant_read_or_change_store_a(world):
+    service, a, b = world["service"], world["store_a"], world["store_b"]
+    variant = world["variants"][("White", "40")]
+    customer = world["customer"]
+    [listed] = [p for p in await service.list_products(a) if p.name == "Air Force 1"]
+    product = await service.get_product(a, listed.id)  # the full row, with its code
+    order = await service.create_order(a, customer.id, _draft((variant, 1)), f"k-{uuid4()}")
+
+    # Reading store A's rows with store B's id: nothing.
+    assert await service.get_product(b, product.id) is None
+    assert await service.get_product_variants(b, product.id) == []
+    assert await service.get_variants(b, [variant]) == []
+    # Each store numbers its own products (P101, ...): B gets its own P101, never A's.
+    same_code = await service.find_product_by_code(b, product.code)
+    assert same_code is None or (same_code.store_id == b and same_code.id != product.id)
+    assert await service.get_customer(b, customer.id) is None
+    assert await service.get_order(b, order) is None
+    assert await service.list_product_posts(b, product_id=product.id) == []
+
+    # Changing them with store B's id: refused or no effect.
+    with pytest.raises(DatabaseError):
+        await service.update_customer(b, customer.id, name="Changed by B")
+    assert (await service.get_customer(a, customer.id)).name == customer.name
+    with pytest.raises(DatabaseError):  # an order in B with A's variant
+        b_customer = await service.get_or_create_customer(b, 900000002, "Kebede")
+        await service.create_order(b, b_customer.id, _draft((variant, 1)), f"k-{uuid4()}")
+    with pytest.raises(DatabaseError):  # an order in B for A's customer
+        await service.create_order(b, customer.id, _draft((world["other_variant"], 1)), f"k-{uuid4()}")

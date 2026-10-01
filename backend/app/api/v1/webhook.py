@@ -91,7 +91,8 @@ async def telegram_webhook(
     if store.status != "active":
         message = parse_update(store.id, update)
         if message is not None and message.kind != "button":
-            background.add_task(_say_not_open, orchestrator.telegram, store, message.telegram_id)
+            background.add_task(_say, orchestrator.telegram, store, message.telegram_id,
+                                both("store_not_open"))
         return {"ok": True}
 
     #    The staff group (button presses, staff replying to a customer) is
@@ -108,7 +109,17 @@ async def telegram_webhook(
 
     with log_context(store_id=str(store_id), telegram_id=message.telegram_id,
                      update_id=message.update_id):
-        # 6. Save it BEFORE answering. If saving fails, answer 503 so
+        # 6. Too many messages from this customer in the last minute (Phase 10):
+        #    ignore the extra ones (not saved, no AI), and say so once.
+        verdict = orchestrator.rate_limit.check(store.id, message.telegram_id)
+        if verdict != "ok":
+            logger.warning("customer over the message limit", extra={"verdict": verdict})
+            if verdict == "warn":
+                background.add_task(_say, orchestrator.telegram, store, message.telegram_id,
+                                    both("slow_down"))
+            return {"ok": True}
+
+        # 7. Save it BEFORE answering. If saving fails, answer 503 so
         #    Telegram sends it again later.
         try:
             is_new = await orchestrator.conversations.save_to_inbox(
@@ -122,14 +133,14 @@ async def telegram_webhook(
             return {"ok": True}
 
         logger.info("message received", extra={"kind": message.kind})
-        # 7. Handle it after responding.
+        # 8. Handle it after responding.
         background.add_task(orchestrator.process_customer, store, message.telegram_id)
         return {"ok": True}
 
 
-async def _say_not_open(telegram: TelegramService, store: Store, chat_id: int) -> None:
+async def _say(telegram: TelegramService, store: Store, chat_id: int, text: str) -> None:
+    """A short fixed reply that isn't part of the conversation (best effort)."""
     try:
-        await telegram.send_message(store.telegram_bot_token.get_secret_value(), chat_id,
-                                    both("store_not_open"))
+        await telegram.send_message(store.telegram_bot_token.get_secret_value(), chat_id, text)
     except TelegramError as error:
-        logger.warning("not-open reply not sent", extra={"error": error.description})
+        logger.warning("fixed reply not sent", extra={"error": error.description})

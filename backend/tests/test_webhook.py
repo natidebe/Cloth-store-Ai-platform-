@@ -11,7 +11,8 @@ from app.api.v1.webhook import SECRET_HEADER, get_db, get_orchestrator
 from app.main import app
 from tests.test_conversation import EchoFlow
 from app.models.schemas import Customer, Store, TelegramUpdate
-from app.services.conversation_service import InMemoryConversationStore
+from app.agents.messages import both
+from app.services.conversation_service import InMemoryConversationStore, RateLimiter
 from app.services.llm_service import LLMProvider, LLMResponse
 from app.services.supabase_service import DatabaseUnavailableError
 from app.services.telegram_service import (
@@ -76,12 +77,13 @@ class FakeTelegram:
 
 @pytest.fixture
 def setup():
-    def _setup(db=None, telegram=None, conversations=None):
+    def _setup(db=None, telegram=None, conversations=None, rate_limit=None):
         telegram = telegram or FakeTelegram()
         db = db or FakeDb()
         orchestrator = Orchestrator(
             db, conversations or InMemoryConversationStore(), telegram.service(), None,
             burst_wait=0, flow=EchoFlow(),  # routing tests: the reply just echoes
+            rate_limit=rate_limit,
         )
         app.dependency_overrides[get_db] = lambda: db
         app.dependency_overrides[get_orchestrator] = lambda: orchestrator
@@ -235,6 +237,20 @@ async def test_bot_profile_sets_description_short_description_and_commands():
     assert [method for method, _ in calls] == ["setMyDescription", "setMyShortDescription", "setMyCommands"]
     assert len(calls[0][1]["description"]) == 512 and len(calls[1][1]["short_description"]) == 120
     assert calls[2][1]["commands"] == [{"command": "help", "description": "How to order"}]
+
+def test_too_many_messages_are_ignored_with_one_note(setup):
+    conversations = InMemoryConversationStore()
+    client, telegram = setup(conversations=conversations, rate_limit=RateLimiter(2))
+    for n in range(4):
+        body = _update(text=f"message {n}")
+        body["update_id"] = 2000 + n
+        assert _post(client, body).status_code == 200
+    texts = [b["text"] for _, b in telegram.calls]
+    assert texts.count(both("slow_down")) == 1  # told once, the 4th is dropped silently
+    assert "You said: message 2" not in texts and "You said: message 3" not in texts
+    saved = [i for i in conversations.inbox.values() if i.store_id == STORE.id]
+    assert len(saved) == 2  # the extra messages were never stored or processed
+
 
 @pytest.fixture
 def anyio_backend():

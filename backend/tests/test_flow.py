@@ -15,7 +15,7 @@ from app.agents.flow import product_link_code
 from app.models.schemas import (Customer, OrderItemDetail, OrderWithItems, Product, ProductPost, Store,
                                 VariantMatch)
 from app.services.conversation_service import InMemoryConversationStore
-from app.services.llm_service import FakeProvider, LLMResponse, ToolCall
+from app.services.llm_service import FakeProvider, LLMError, LLMResponse, ToolCall
 from app.services.supabase_service import NotFoundError, OrderRejectedError, OutOfStockError
 from app.services.telegram_service import TELEGRAM_API, TelegramService
 
@@ -61,6 +61,7 @@ class FakeDb:
     """Just enough of SupabaseService for the flow, with the database's rules."""
 
     def __init__(self):
+        self.ai_calls = 0
         rows = [
             _v(AF1_WHITE_42, AF1, "Air Force 1", "Nike", "sneakers", "White", "42", 2, "5000", "AF1, ኤር ፎርስ"),
             _v(AF1_WHITE_43, AF1, "Air Force 1", "Nike", "sneakers", "White", "43", 10, "5000", "AF1, ኤር ፎርስ"),
@@ -207,6 +208,11 @@ class FakeDb:
     async def verify_staff(self, store_id, token):
         return self.staff_logins.get((store_id, token))
 
+    async def use_ai_call(self, store_id):  # D21: today's AI calls, this one included
+        assert store_id == STORE.id
+        self.ai_calls += 1
+        return self.ai_calls
+
     def set_stock(self, variant_id, stock):
         self.variants[variant_id] = self.variants[variant_id].model_copy(update={"stock_quantity": stock})
 
@@ -249,14 +255,14 @@ def interp(**fields) -> LLMResponse:
 
 
 class World:
-    def __init__(self, language="en"):
+    def __init__(self, language="en", ai_daily_limit=None):
         """language: chosen automatically before the first message (None: not chosen)."""
         self.db = FakeDb()
         self.telegram = FakeTelegram()
         self.store = InMemoryConversationStore()
         self.llm = FakeProvider()
         self.orchestrator = Orchestrator(self.db, self.store, self.telegram.service(), self.llm,
-                                         burst_wait=0)
+                                         burst_wait=0, ai_daily_limit=ai_daily_limit)
         self._pending_language = language
 
     def script(self, *responses: LLMResponse):
@@ -1083,3 +1089,63 @@ def test_delivery_message_without_accounts():
     store = STORE.model_copy(update={"payment_instructions": None})
     text = delivery_message(store, _order("delivery"), "am")
     assert text.endswith(t("pay_on_delivery", "am")) and t("delivery_fees", "am") not in text
+
+
+# --- When things go wrong (Phase 10) -------------------------------------------------
+
+class BrokenAI(FakeProvider):
+    """An AI provider that is down (after its own retries)."""
+
+    async def _complete(self, system_prompt, messages, tools):
+        raise LLMError("provider unavailable", retryable=True)
+
+
+async def test_ai_down_goes_to_staff_at_once():
+    world = World()
+    world.orchestrator.flow.llm = BrokenAI()
+    await world.say("Air Force 1")
+    await world.say("do they run small or large?")  # needs the AI
+    assert world.last_text() == t("handover_reply", "en")  # no waiting for retries
+    assert world.conversation.bot_paused
+    alert = world.telegram.to(STAFF_CHAT)[-1]
+    assert "AI is unavailable" in alert and "do they run small or large?" in alert
+
+
+async def test_daily_ai_limit_sends_typed_messages_to_staff():
+    world = World(ai_daily_limit=1)
+    world.script(interp(intent="side_question", reply="They run true to size."))
+    await world.say("do they run small?")  # call 1 of 1: the AI answers
+    assert world.last_text().startswith("They run true to size.")
+
+    await world.say("is there a warranty?")  # call 2: over the limit
+    assert world.last_text() == t("handover_reply", "en")
+    first = world.telegram.to(STAFF_CHAT)[-1]
+    assert "daily AI limit is reached (1 AI calls today)" in first  # the once-a-day note
+
+    world.conversation.bot_paused = False  # staff answered and handed back
+    await world.say("and a box?")  # call 3: still over, no repeated note
+    assert world.last_text() == t("handover_reply", "en")
+    third = world.telegram.to(STAFF_CHAT)[-1]
+    assert "daily AI limit is reached" in third and "AI calls today" not in third
+    assert len(world.llm.requests) == 1  # the AI was asked only once
+
+
+async def test_buttons_and_codes_dont_use_the_ai_budget():
+    world = World(ai_daily_limit=0)
+    await world.say("/start p_P101")  # a channel link: no AI
+    await world.tap("White")
+    await world.tap("42")
+    assert world.draft.step == "ask_quantity" and world.db.ai_calls == 0
+
+
+async def test_stickers_and_voice_get_a_polite_note():
+    world = World()
+    await world.say("/start p_P101")
+    sticker = {"file_id": "s", "file_unique_id": "u"}
+    await world._deliver({"update_id": next(_update_ids), "message": world._message(sticker=sticker)})
+    assert world.last_text().startswith(t("please_type", "en"))
+    assert world.last_text().endswith(t("ask_color", "en", product="Air Force 1", price="5,000 ETB"))
+    voice = {"file_id": "v", "file_unique_id": "w", "duration": 3}
+    await world._deliver({"update_id": next(_update_ids), "message": world._message(voice=voice)})
+    assert world.last_text().startswith(t("please_type", "en"))
+    assert not world.conversation.bot_paused

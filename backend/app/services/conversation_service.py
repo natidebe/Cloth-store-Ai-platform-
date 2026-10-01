@@ -13,7 +13,9 @@ Also here: CustomerLocks, which makes sure one customer's messages are
 handled one after another, never at the same time.
 """
 import asyncio
+import time
 from abc import ABC, abstractmethod
+from collections import deque
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -359,3 +361,51 @@ class CustomerLocks:
             if self._users[key] == 0:  # nobody waiting: forget it, so memory doesn't grow
                 del self._users[key]
                 del self._locks[key]
+
+
+# ---------------------------------------------------------------------------
+# Too many messages (Phase 10)
+# ---------------------------------------------------------------------------
+
+DEFAULT_MESSAGES_PER_MINUTE = 20
+
+
+class RateLimiter:
+    """At most `per_minute` messages per (store_id, telegram_id) in any 60
+    seconds. check() says what to do with one more message:
+
+    - "ok":   handle it
+    - "warn": over the limit; ignore it and tell the customer to slow down
+              (once per minute)
+    - "drop": over the limit and already told; ignore it silently
+
+    In this server's memory, like CustomerLocks (one server for now).
+    """
+
+    def __init__(self, per_minute: int = DEFAULT_MESSAGES_PER_MINUTE, *,
+                 window: float = 60.0, clock=time.monotonic) -> None:
+        self.per_minute, self.window, self.clock = per_minute, window, clock
+        self._hits: dict[tuple[UUID, int], deque[float]] = {}
+        self._warned_at: dict[tuple[UUID, int], float] = {}
+
+    def check(self, store_id: UUID, telegram_id: int) -> str:
+        key, now = (store_id, telegram_id), self.clock()
+        hits = self._hits.setdefault(key, deque())
+        while hits and hits[0] <= now - self.window:
+            hits.popleft()
+        if len(hits) < self.per_minute:
+            hits.append(now)
+            self._forget_old(now)
+            return "ok"
+        if self._warned_at.get(key, float("-inf")) > now - self.window:
+            return "drop"
+        self._warned_at[key] = now
+        return "warn"
+
+    def _forget_old(self, now: float) -> None:
+        """Drop customers who have been quiet for a minute, so memory doesn't grow."""
+        if len(self._hits) < 1000:
+            return
+        for key in [k for k, hits in self._hits.items() if not hits or hits[-1] <= now - self.window]:
+            del self._hits[key]
+            self._warned_at.pop(key, None)

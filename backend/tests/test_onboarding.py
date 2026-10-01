@@ -358,6 +358,20 @@ def test_not_a_link_command(text):
     assert link_command(TelegramUpdate.model_validate(group_message(text))) is None
 
 
+def test_the_owner_of_another_store_cant_touch_this_one(world):
+    db, _, client = world
+    store_a = UUID(create(client).json()["store_id"])
+    create(client, token=TOKEN_B, who="stranger", name="Other shop")  # the stranger owns store B
+    assert client.post(f"/api/v1/stores/{store_a}/link-code", headers=auth("stranger")).status_code == 403
+    assert client.post(f"/api/v1/stores/{store_a}/invites", json={"email": "x@example.com"},
+                       headers=auth("stranger")).status_code == 403
+    assert client.delete(f"/api/v1/stores/{store_a}/staff/{OWNER.id}", headers=auth("stranger")).status_code == 403
+    assert client.put(f"/api/v1/stores/{store_a}/bot-token", json={"bot_token": TOKEN_A2},
+                      headers=auth("stranger")).status_code == 403
+    assert [s["name"] for s in client.get("/api/v1/me/stores", headers=auth("stranger")).json()] == ["Other shop"]
+    assert db.links == {} and db.invites == {}
+
+
 def test_link_codes_are_easy_to_type():
     code = new_link_code()
     assert len(code) == 8 and not set(code) & set("0O1IL")

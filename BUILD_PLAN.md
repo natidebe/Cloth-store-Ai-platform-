@@ -793,7 +793,7 @@ Supabase (store row + bot token + my user in `store_staff` as owner).
 
 ---
 
-### Phase 10 — Making it robust
+### Phase 10 — Making it robust ✅ Built (D21); waiting for migration 009
 
 **Goal:** the bot behaves well when things go wrong.
 
@@ -818,6 +818,36 @@ code is the only protection.
   store A is never visible to, or changeable by, store B.
 - Conversations, locks, and caches are keyed by store + customer, never
   by Telegram id alone (the same person can chat with several stores).
+
+**How it was built:**
+- **AI down:** if the AI call fails (after its own retries), the customer
+  gets "a team member will reply soon" at once and staff get the message,
+  instead of waiting for the inbox retries.
+- **Daily AI budget (D21):** migration `009_ai_budget.sql` (`ai_usage`, one
+  row per store per day, and `use_ai_call()`, counted in one statement).
+  Over the limit: hand-over to staff (see D21). If the counter can't be
+  reached, the AI call is allowed (the bot keeps working).
+- **Spam limit:** at most 20 messages per customer per minute (per store);
+  the extra ones are not saved or processed, and the customer gets one
+  "please slow down" note per minute. In memory, like the customer locks
+  (one server for now).
+- Already in place and tested: duplicate updates (the inbox), photos,
+  stickers and voice notes (a polite note), and the final "sorry" + staff
+  alert after 3 failed tries.
+- **Store isolation review:** every database function filters by store,
+  except the few that must look across stores, on purpose: the sweeps
+  (inbox, paused chats, channel check), the platform admin's list, the
+  one-store-per-bot check, setup scripts, and accepting invites (by the
+  user's own confirmed email). The Postgres functions (place_order,
+  confirm_payment, adjust_stock, inbox, holds) check the store themselves.
+  Endpoints check the login against the store in the URL; staff-group
+  buttons and replies only count from the store's current staff group;
+  locks, rate limits and caches are keyed by store + customer. New tests:
+  store B using store A's ids reads nothing and changes nothing (real
+  database), and the owner of another store gets 403 everywhere.
+
+**Manual step:** run `009_ai_budget.sql` in the Supabase SQL Editor. Until
+then the AI isn't limited (the counter isn't there yet).
 
 ---
 
@@ -858,7 +888,7 @@ Answer each before the phase listed, and record the answer here.
 | D18 | Can one person own or work in several stores? | Phase 9b | Yes (store_staff allows it; `GET /me/stores` lists them with the role in each) |
 | D19 | Last-item risk: keep D3 and re-check stock before sending payment instructions, or reserve stock for a short time (how long?) after ordering? | Phase 8 | Reserve: a placed order holds its items for 5 minutes (migration 005). Kept short on purpose: a longer hold blocks real sales to other customers while an order may never be paid. Stock still goes down at payment (D3). Payment text is each store's own (`stores.payment_instructions`); customers see "in stock" / "only a few left" (3 or fewer) / "sold out", never exact numbers |
 | D20 | How long to wait for more quick messages before replying (e.g. 2 seconds)? | Phase 7 | 2 seconds |
-| D21 | Daily AI budget per store (e.g. $1), and what happens when it's reached? | Phase 10 | |
+| D21 | Daily AI budget per store (e.g. $1), and what happens when it's reached? | Phase 10 | Counted in AI calls, not dollars (works with any provider; Gemini's price isn't in the code): 300 per store per day (Addis Ababa date), `AI_DAILY_CALLS_PER_STORE`. Over it, typed messages the flow can't read go to staff with "our team will reply soon"; the first alert of the day says why. Buttons, codes and orders don't use AI. Spam limit: 20 messages per customer per minute (`CUSTOMER_MESSAGES_PER_MINUTE`) |
 | D22 | Which store profile fields? (suggested: opening hours, location, delivery areas and fees, pickup instructions, payment instructions, return policy) | Phase 7b | The suggested fields: opening hours, location, delivery areas and fees, pickup instructions, payment instructions, return policy |
 | D23 | Add product nicknames ("search keywords") now in 7b, or rely only on the product-name list in the AI's instructions for now? | Phase 7b | Now, in 7b (plus the product-name list in Phase 8) |
 | D24 | Delivery fee: added to the order total automatically, shown as text next to the total, or adjusted by staff? | Phase 8 | Staff adjust it by hand: the order total covers the items only, and staff tell the customer the delivery fee |

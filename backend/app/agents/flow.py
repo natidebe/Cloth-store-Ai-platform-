@@ -69,8 +69,8 @@ from app.agents.tools import (
 )
 from app.models.schemas import ChatMessage, DraftItem, OrderDraft, Product, VariantMatch, normalize_phone
 from app.services.conversation_service import utc_now
-from app.services.llm_service import LLMProvider
-from app.services.supabase_service import SupabaseService
+from app.services.llm_service import LLMError, LLMProvider
+from app.services.supabase_service import DatabaseError, SupabaseService
 
 logger = logging.getLogger(__name__)
 
@@ -182,9 +182,12 @@ def parse_fulfillment(text: str) -> str | None:
 class OrderFlow:
     """Created once at startup, shared by all stores."""
 
-    def __init__(self, db: SupabaseService, llm: LLMProvider | None):
+    def __init__(self, db: SupabaseService, llm: LLMProvider | None, ai_daily_limit: int | None = None):
         self.db = db
         self.llm = llm
+        # D21: AI calls per store per day (None: no limit). Only typed
+        # messages the flow can't read by itself use the AI.
+        self.ai_daily_limit = ai_daily_limit
 
     async def handle(self, ctx: ToolContext, history: list[ChatMessage]) -> list[Reply]:
         """Handle this run's customer messages; returns what to send.
@@ -197,6 +200,7 @@ class _Run:
 
     def __init__(self, flow: OrderFlow, ctx: ToolContext, history: list[ChatMessage]):
         self.db, self.llm, self.ctx, self.history = flow.db, flow.llm, ctx, history
+        self.ai_daily_limit = flow.ai_daily_limit
         self.store = ctx.store
         self.notes: list[str] = []  # shown above the next question
         self.before: list[Reply] = []  # sent before the question (the payment message)
@@ -667,9 +671,17 @@ class _Run:
         if self.llm is None:
             await self.handover("the bot couldn't understand the message (AI not configured)", text)
             return
+        if not await self.ai_allowed(text):
+            return
         products = await self.db.list_products(self.store.id)
-        result = await interpret(self.llm, self.store, products, self.draft, self.history, text,
-                                 self.language)
+        try:
+            result = await interpret(self.llm, self.store, products, self.draft, self.history, text,
+                                     self.language)
+        except LLMError as error:
+            # The AI is down: don't keep the customer waiting for retries.
+            logger.warning("AI unavailable; handed to staff", extra={"reason": error.reason})
+            await self.handover("the bot's AI is unavailable right now, so it couldn't read this", text)
+            return
         logger.info("message interpreted", extra={"intent": result.intent})
         if result.intent == "handover":
             await self.handover(result.reason or "needs a person", text)
@@ -737,6 +749,27 @@ class _Run:
             if len(sizes) == 1:
                 d.size, d.variant_id = sizes[0].size, sizes[0].variant_id
                 self.changed()
+
+    async def ai_allowed(self, text: str) -> bool:
+        """D21: count this AI call against the store's daily limit. Over the
+        limit, the message goes to staff (the first time each day, the alert
+        says why). If the counter can't be reached, the call is allowed."""
+        if self.ai_daily_limit is None:
+            return True
+        try:
+            calls = await self.db.use_ai_call(self.store.id)
+        except DatabaseError:
+            logger.warning("AI budget not checked (database error)")
+            return True
+        if calls <= self.ai_daily_limit:
+            return True
+        reason = "the store's daily AI limit is reached"
+        if calls == self.ai_daily_limit + 1:
+            logger.warning("daily AI limit reached", extra={"limit": self.ai_daily_limit})
+            reason += (f" ({self.ai_daily_limit} AI calls today). Until midnight, typed messages the "
+                       "bot can't read come to you; buttons and orders still work")
+        await self.handover(reason, text)
+        return False
 
     async def handover(self, reason: str, summary: str, reply_key: str = "handover_reply") -> None:
         await escalate_to_staff(EscalateArgs(

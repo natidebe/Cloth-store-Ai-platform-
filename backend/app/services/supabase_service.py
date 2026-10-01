@@ -217,6 +217,14 @@ class SupabaseService:
         if not rows:
             raise NotFoundError("store_not_found", str(store_id))
 
+    # --- AI budget (Phase 10, D21, migration 009) ----------------------------
+
+    async def use_ai_call(self, store_id: UUID) -> int:
+        """Count one AI call for this store today; returns today's total
+        (including this one). The caller compares it with the limit."""
+        calls = await self._run(self._db.rpc("use_ai_call", {"p_store_id": str(store_id)}))
+        return int(calls)
+
     # --- Onboarding (Phase 9b, migration 008) -------------------------------
 
     async def get_store_any_status(self, store_id: UUID) -> Store | None:

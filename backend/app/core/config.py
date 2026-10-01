@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/.env, regardless of which directory the server is started from.
@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     # Supabase database webhooks (Phase 8d, D39) send this in the
     # X-Webhook-Secret header, so nobody else can trigger channel updates.
     catalog_webhook_secret: SecretStr = SecretStr("")
+
+    # Phase 10. D21: AI calls per store per day (Addis Ababa date); over it,
+    # typed messages go to staff. Buttons and the order flow don't use AI.
+    ai_daily_calls_per_store: int = Field(default=300, ge=0)
+    # Messages one customer may send per minute; the rest are ignored.
+    customer_messages_per_minute: int = Field(default=20, ge=1)
 
     @field_validator("supabase_url")
     @classmethod

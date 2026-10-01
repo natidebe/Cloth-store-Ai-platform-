@@ -8,7 +8,7 @@ from app.agents.catalog import Catalog
 from app.agents.orchestrator import Orchestrator
 from app.api.v1 import admin, catalog, health, platform, stores, webhook
 from app.core.config import get_settings
-from app.services.conversation_service import DatabaseConversationStore
+from app.services.conversation_service import DatabaseConversationStore, RateLimiter
 from app.services.llm_service import create_provider
 from app.services.supabase_service import SupabaseService
 from app.services.telegram_service import TelegramService
@@ -57,6 +57,8 @@ async def lifespan(app: FastAPI):
         app.state.orchestrator = Orchestrator(
             app.state.db, DatabaseConversationStore(app.state.db), app.state.telegram,
             app.state.llm, catalog=app.state.catalog,
+            ai_daily_limit=settings.ai_daily_calls_per_store,  # D21 (Phase 10)
+            rate_limit=RateLimiter(settings.customer_messages_per_minute),
         )
         # Messages left unfinished by the last run (crash or restart).
         try:

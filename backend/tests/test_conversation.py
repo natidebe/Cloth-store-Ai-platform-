@@ -22,6 +22,7 @@ from app.services.conversation_service import (
     MAX_ATTEMPTS,
     CustomerLocks,
     InMemoryConversationStore,
+    RateLimiter,
     utc_now,
 )
 from app.agents.flow import Reply
@@ -480,3 +481,18 @@ async def test_failure_apology_is_in_the_customers_language():
     for _ in range(MAX_ATTEMPTS - 1):
         await orchestrator.process_customer(STORE, CUSTOMER)
     assert telegram.texts_to(CUSTOMER) == [t("fallback_reply", "am")]
+
+
+# --- Too many messages (Phase 10) ------------------------------------------------------
+
+def test_rate_limiter_allows_the_limit_then_warns_once():
+    now = [0.0]
+    limiter = RateLimiter(3, clock=lambda: now[0])
+    store, other_store = uuid4(), uuid4()
+    assert [limiter.check(store, 1) for _ in range(5)] == ["ok", "ok", "ok", "warn", "drop"]
+    assert limiter.check(store, 2) == "ok"  # another customer
+    assert limiter.check(other_store, 1) == "ok"  # the same person in another store
+    now[0] = 30.0
+    assert limiter.check(store, 1) == "drop"  # still within the minute
+    now[0] = 61.0
+    assert limiter.check(store, 1) == "ok"  # a new minute

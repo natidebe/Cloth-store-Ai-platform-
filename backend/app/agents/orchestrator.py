@@ -38,9 +38,11 @@ from app.models.schemas import (
 from app.services.conversation_service import (
     BURST_WAIT_SECONDS,
     HISTORY_LIMIT,
+    DEFAULT_MESSAGES_PER_MINUTE,
     MAX_ATTEMPTS,
     ConversationStore,
     CustomerLocks,
+    RateLimiter,
     history_since,
     is_expired,
     utc_now,
@@ -116,6 +118,8 @@ class Orchestrator:
         staff: StaffDesk | None = None,
         flow: OrderFlow | None = None,  # tests of the plumbing pass a simpler one
         catalog=None,  # the channel catalog (Phase 8d), checked by the sweep
+        ai_daily_limit: int | None = None,  # D21 (Phase 10); None: no limit
+        rate_limit: RateLimiter | None = None,  # messages per customer per minute
     ):
         self.db = db
         self.conversations = conversations
@@ -124,7 +128,8 @@ class Orchestrator:
         self.locks = locks or CustomerLocks()
         self.burst_wait = burst_wait
         self.staff = staff or StaffDesk(db, conversations, telegram)
-        self.flow = flow or OrderFlow(db, llm)
+        self.flow = flow or OrderFlow(db, llm, ai_daily_limit)
+        self.rate_limit = rate_limit or RateLimiter(DEFAULT_MESSAGES_PER_MINUTE)
         self.catalog = catalog
         self._tasks: set[asyncio.Task] = set()
 

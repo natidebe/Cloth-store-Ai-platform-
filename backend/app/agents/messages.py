@@ -246,6 +246,11 @@ TEXTS: dict[str, dict[Language, str]] = {
         "en": "Let me get a team member to help you with this. They'll reply here soon.",
         "am": "በዚህ ጉዳይ የቡድናችን አባል እንዲረዳዎት አደርጋለሁ። በቅርቡ እዚህ ይመልሱልዎታል።",
     },
+    # Too many messages in a minute (Phase 10): the extra ones are ignored.
+    "slow_down": {
+        "en": "You're sending messages very quickly. Please wait a minute, then send your message again.",
+        "am": "መልእክቶችን በጣም በፍጥነት እየላኩ ነው። እባክዎ አንድ ደቂቃ ቆይተው መልእክትዎን እንደገና ይላኩ።",
+    },
     # A store waiting for approval (D14) or suspended: no orders yet.
     "store_not_open": {
         "en": "Sorry, this shop isn't taking orders yet. Please check back soon.",
