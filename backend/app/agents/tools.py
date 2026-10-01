@@ -111,14 +111,42 @@ def build_summary(draft: OrderDraft, variants: dict[UUID, VariantMatch],
 
 
 def payment_message(store: Store, order: OrderWithItems, language: Language = "en") -> str:
+    """After a PICKUP order: how to pay (the store's accounts), then where and
+    when to pick it up (from the store's profile, if set)."""
     total = format_price(order.total_price, language)
-    return (
+    parts = [
         f"{t('order_placed', language, store, number=order_number(order.id), total=total)}\n"
-        f"{t('order_holding', language, store, minutes=ORDER_HOLD_MINUTES)}\n\n"
+        f"{t('order_holding', language, store, minutes=ORDER_HOLD_MINUTES)}",
         f"{t('how_to_pay', language, store)}\n"
-        f"{store.payment_instructions or t('payment_default', language, store)}\n\n"
-        f"{t('after_paying', language, store)}"
-    )
+        f"{store.payment_instructions or t('payment_default', language, store)}",
+        t("after_paying", language, store),
+    ]
+    pickup = []
+    if store.location:
+        pickup.append(t("pickup_where", language, store, location=store.location))
+    if store.opening_hours:
+        pickup.append(t("pickup_hours", language, store, hours=store.opening_hours))
+    if store.pickup_instructions:
+        pickup.append(store.pickup_instructions)
+    if pickup:
+        parts.append("\n".join(pickup))
+    return "\n\n".join(parts)
+
+
+def delivery_message(store: Store, order: OrderWithItems, language: Language = "en") -> str:
+    """After a DELIVERY order (D29): staff will call about the address; the
+    customer pays when the items arrive, with the store's accounts; and the
+    delivery areas and fees, if the store set them."""
+    total = format_price(order.total_price, language)
+    parts = [t("delivery_handoff", language, store, number=order_number(order.id), total=total,
+               phone=order.contact_phone)]
+    if store.delivery_info:
+        parts.append(f"{t('delivery_fees', language, store)}\n{store.delivery_info}")
+    if store.payment_instructions:
+        parts.append(f"{t('pay_on_delivery_with', language, store)}\n{store.payment_instructions}")
+    else:
+        parts.append(t("pay_on_delivery", language, store))
+    return "\n\n".join(parts)
 
 
 def new_order_alert(customer: Customer, order: OrderWithItems) -> StaffAlert:

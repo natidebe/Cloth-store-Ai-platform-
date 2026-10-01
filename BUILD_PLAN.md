@@ -673,6 +673,13 @@ customer is told.
   already edit it (migration 004), so the dashboard only needs a "Payment
   methods" field in the store settings (my teammate). Delivery orders say
   "You pay when you receive your items" (D29 updated).
+- **Clearer instructions (after testing):** the name and phone questions say
+  to type in the message box (phone with an example). Delivery orders also
+  list the store's payment accounts and its delivery areas and fees
+  (`delivery_info`), and say the total doesn't include delivery. Pickup
+  orders also show where and when to pick up (`location`,
+  `opening_hours`, `pickup_instructions`). Each part appears only if the
+  store filled it in.
 
 ---
 

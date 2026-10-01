@@ -57,6 +57,7 @@ from app.agents.tools import (
     EscalateArgs,
     ToolContext,
     build_summary,
+    delivery_message,
     delivery_order_alert,
     describe,
     escalate_to_staff,
@@ -767,9 +768,7 @@ class _Run:
                 # D29: pay on delivery: staff call the customer about the address.
                 self.ctx.staff_alerts[-1] = delivery_order_alert(
                     self.ctx.customer, order, self.ctx.new_messages[-1].customer_username)
-                self.before.append(Reply(self.t(
-                    "delivery_handoff", number=order_number(order.id),
-                    total=format_price(order.total_price, self.language), phone=order.contact_phone)))
+                self.before.append(Reply(delivery_message(self.store, order, self.language)))
                 conversation = self.ctx.conversation
                 conversation.bot_paused, conversation.paused_at = True, utc_now()
                 conversation.staff_active_at = None
@@ -982,8 +981,10 @@ class _Run:
 
         if step == "ask_name":
             known = self.ctx.customer.name
-            buttons = [(self.t("btn_use", value=known[:40]), "f:name:saved")] if known else []
-            return Reply(self.t("ask_name"), self.with_start_over(buttons))
+            if not known:
+                return Reply(self.t("ask_name"), self.with_start_over([]))
+            return Reply(f"{self.t('ask_name')}\n{self.t('ask_name_known')}",
+                         self.with_start_over([(self.t("btn_use", value=known[:40]), "f:name:saved")]))
 
         if step == "ask_phone":
             return Reply(self.t("ask_phone"), self.with_start_over([]))

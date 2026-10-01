@@ -10,7 +10,7 @@ import pytest
 
 from app.agents.messages import t
 from app.agents.orchestrator import Orchestrator
-from app.agents.tools import order_number
+from app.agents.tools import delivery_message, order_number, payment_message
 from app.agents.flow import product_link_code
 from app.models.schemas import (Customer, OrderItemDetail, OrderWithItems, Product, ProductPost, Store,
                                 VariantMatch)
@@ -534,10 +534,12 @@ async def test_new_customer_gives_name_and_phone():
     await world.tap("1")
     await world.tap(CONTINUE)
     await world.tap(t("btn_pickup", "en"))
-    assert world.last_text() == t("ask_name", "en")
-    assert world.labels() == [t("btn_use", "en", value="Abebe"), START_OVER]  # the Telegram name
+    # Says where to type, and what the button is for (the Telegram name).
+    assert world.last_text() == f"{t('ask_name', 'en')}\n{t('ask_name_known', 'en')}"
+    assert "message box" in world.last_text()
+    assert world.labels() == [t("btn_use", "en", value="Abebe"), START_OVER]
     await world.tap(t("btn_use", "en", value="Abebe"))
-    assert world.last_text() == t("ask_phone", "en")
+    assert world.last_text() == t("ask_phone", "en") and "message box" in world.last_text()
     await world.say("12")
     assert world.last_text().startswith(t("invalid_phone", "en"))
     await world.say("+251 91 122 3344")
@@ -633,6 +635,8 @@ async def test_pickup_order_gets_payment_instructions():
     payment = world.last_text()
     assert payment.startswith(t("order_placed", "en", number=order_number(order.id), total="5,000 ETB"))
     assert PAYMENT_TEXT in payment and t("after_paying", "en") in payment
+    # Where and when to pick it up (the store's opening hours are set; no location).
+    assert t("pickup_hours", "en", hours=STORE.opening_hours) in payment and "📍" not in payment
     assert world.telegram.to(STAFF_CHAT)[-1].startswith("🛒 New order")
     assert world.draft.step == "payment" and world.draft.last_order_id == order.id
     assert not world.conversation.bot_paused
@@ -709,11 +713,13 @@ async def test_delivery_order_is_placed_and_handed_to_staff():
     assert order.fulfillment_method == "delivery" and order.delivery_address  # "to be arranged"
     assert world.db.variants[AF1_WHITE_42].held == 1  # held like pickup (D19)
 
-    # The customer: no payment instructions, staff will call.
-    assert world.last_text() == t("delivery_handoff", "en", number=order_number(order.id),
-                                  total="5,000 ETB", phone="0911223344")
-    assert PAYMENT_TEXT not in world.last_text()
-    assert "You pay when you receive your items" in world.last_text()
+    # The customer: staff will call about the address; pay on delivery with the store's accounts.
+    assert world.last_text() == "\n\n".join([
+        t("delivery_handoff", "en", number=order_number(order.id), total="5,000 ETB", phone="0911223344"),
+        f"{t('pay_on_delivery_with', 'en')}\n{PAYMENT_TEXT}",
+    ])
+    assert "delivery fee not included" in world.last_text()
+    assert t("after_paying", "en") not in world.last_text()  # no screenshot step for delivery
     # Staff: the order, the phone, the @username, and the buttons.
     alert_id = world.telegram.last_message_id(STAFF_CHAT)
     alert = world.telegram.to(STAFF_CHAT)[-1]
@@ -1048,3 +1054,32 @@ def test_product_link_code():
     assert product_link_code("/start p_P101") == "P101"
     assert product_link_code("/start@SelamBot p_p7") == "P7"
     assert product_link_code("/start") is None and product_link_code("hello p_P1") is None
+
+
+# --- After the order: payment and pickup / delivery details -----------------------
+
+def _order(method):
+    return OrderWithItems(id=uuid4(), store_id=STORE.id, total_price=Decimal("5000"),
+                          fulfillment_method=method, contact_phone="0911223344")
+
+
+def test_pickup_message_shows_location_hours_and_instructions():
+    store = STORE.model_copy(update={"location": "Bole, next to Edna Mall",
+                                     "pickup_instructions": "Bring your order number."})
+    text = payment_message(store, _order("pickup"), "am")
+    assert t("pickup_where", "am", location="Bole, next to Edna Mall") in text
+    assert t("pickup_hours", "am", hours=STORE.opening_hours) in text
+    assert text.endswith("Bring your order number.")
+
+
+def test_delivery_message_with_fees_and_accounts():
+    store = STORE.model_copy(update={"delivery_info": "Bole & CMC 150 ETB"})
+    text = delivery_message(store, _order("delivery"), "en")
+    assert f"{t('delivery_fees', 'en')}\nBole & CMC 150 ETB" in text
+    assert text.endswith(f"{t('pay_on_delivery_with', 'en')}\n{PAYMENT_TEXT}")
+
+
+def test_delivery_message_without_accounts():
+    store = STORE.model_copy(update={"payment_instructions": None})
+    text = delivery_message(store, _order("delivery"), "am")
+    assert text.endswith(t("pay_on_delivery", "am")) and t("delivery_fees", "am") not in text

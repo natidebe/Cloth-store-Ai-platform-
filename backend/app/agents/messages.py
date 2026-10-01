@@ -53,8 +53,21 @@ TEXTS: dict[str, dict[Language, str]] = {
         "am": "እናድርስልዎት ወይስ ከሱቁ ይወስዳሉ?",
     },
     "ask_address": {"en": "What's the delivery address?", "am": "የሚደርስበት አድራሻ የት ነው?"},
-    "ask_name": {"en": "Your name, please?", "am": "ስምዎን ይንገሩኝ?"},
-    "ask_phone": {"en": "Your phone number?", "am": "ስልክ ቁጥርዎ ስንት ነው?"},
+    "ask_name": {
+        "en": "What's your name? ✍️ Type it in the message box below.",
+        "am": "ስምዎ ማን ነው? ✍️ ከታች ባለው የመልእክት ሳጥን ውስጥ ይጻፉት።",
+    },
+    # Shown under the name question when we already know their name (a button).
+    "ask_name_known": {
+        "en": "Tap the button to use the name below, or type another one.",
+        "am": "ከታች ያለውን ስም ለመጠቀም ቁልፉን ይጫኑ፣ ወይም ሌላ ስም ይጻፉ።",
+    },
+    "ask_phone": {
+        "en": "📞 What's your phone number? Type it in the message box below, e.g. 0911 223 344.\n"
+              "Our team uses it only to contact you about this order.",
+        "am": "📞 ስልክ ቁጥርዎ ስንት ነው? ከታች ባለው የመልእክት ሳጥን ውስጥ ይጻፉት፣ ለምሳሌ 0911 223 344።\n"
+              "ቡድናችን ስለዚህ ትዕዛዝ ብቻ ሊያገኝዎ ይጠቀምበታል።",
+    },
     "ask_edit": {"en": "What would you like to change?", "am": "ምን መቀየር ይፈልጋሉ?"},
     # The cart (Phase 8d, D32): several items in one order.
     "ask_more": {
@@ -127,20 +140,29 @@ TEXTS: dict[str, dict[Language, str]] = {
         "am": "ማድረስ፦ አድራሻውን ለማመቻቸት ቡድናችን ይደውልልዎታል። ክፍያው ዕቃዎቹን ሲረከቡ ነው።",
     },
     "delivery_handoff": {
-        "en": "✅ Order #{number} is placed. Total: {total}.\n"
-              "Our team will call you on {phone} to arrange the delivery address.\n"
-              "💵 You pay when you receive your items.",
-        "am": "✅ ትዕዛዝ #{number} ተመዝግቧል። ጠቅላላ ዋጋ: {total}።\n"
-              "የማድረሻ አድራሻውን ለማመቻቸት ቡድናችን በ{phone} ይደውልልዎታል።\n"
-              "💵 ክፍያው ዕቃዎቹን ሲረከቡ ነው።",
+        "en": "✅ Order #{number} is placed. Total: {total} (delivery fee not included).\n"
+              "📞 Our team will call you on {phone} to arrange the delivery address.",
+        "am": "✅ ትዕዛዝ #{number} ተመዝግቧል። ጠቅላላ ዋጋ: {total} (የማድረሻ ክፍያን አይጨምርም)።\n"
+              "📞 የማድረሻ አድራሻውን ለማመቻቸት ቡድናችን በ{phone} ይደውልልዎታል።",
+    },
+    "delivery_fees": {"en": "🚚 Delivery areas and fees:", "am": "🚚 የማድረሻ ቦታዎችና ክፍያ:"},
+    # Delivery orders are paid when the items arrive (D29), with the store's accounts.
+    "pay_on_delivery": {
+        "en": "💵 You pay when you receive your items.",
+        "am": "💵 ክፍያው ዕቃዎቹን ሲረከቡ ነው።",
+    },
+    "pay_on_delivery_with": {
+        "en": "💵 You pay when you receive your items. You can pay with:",
+        "am": "💵 ክፍያው ዕቃዎቹን ሲረከቡ ነው። በእነዚህ መክፈል ይችላሉ:",
     },
     "too_many": {
         "en": "Sorry, we don't have that many. Please pick a smaller number.",
         "am": "ይቅርታ፣ ያን ያህል የለንም። እባክዎ ትንሽ ቁጥር ይምረጡ።",
     },
     "invalid_phone": {
-        "en": "That doesn't look like a phone number. Please send it again (digits only).",
-        "am": "ይህ ስልክ ቁጥር አይመስልም። እባክዎ እንደገና ይላኩ (ቁጥሮችን ብቻ)።",
+        "en": "That doesn't look like a phone number. Please type it again, digits only, "
+              "e.g. 0911 223 344.",
+        "am": "ይህ ስልክ ቁጥር አይመስልም። እባክዎ እንደገና በቁጥሮች ብቻ ይጻፉት፣ ለምሳሌ 0911 223 344።",
     },
     "sold_out_now": {
         "en": "Sorry, {item} just sold out. Please pick another option.",
@@ -195,7 +217,10 @@ TEXTS: dict[str, dict[Language, str]] = {
         "en": "We're holding your items for {minutes} minutes.",
         "am": "ዕቃዎቹን ለ{minutes} ደቂቃ ይዘንልዎታል።",
     },
-    "how_to_pay": {"en": "How to pay:", "am": "የክፍያ መንገድ:"},
+    "how_to_pay": {"en": "💵 How to pay:", "am": "💵 የክፍያ መንገድ:"},
+    # Pickup orders: where and when, from the store's profile (if set).
+    "pickup_where": {"en": "📍 Pick up at: {location}", "am": "📍 የሚወስዱበት ቦታ: {location}"},
+    "pickup_hours": {"en": "🕒 Opening hours: {hours}", "am": "🕒 የሥራ ሰዓት: {hours}"},
     "payment_default": {
         "en": "Our team will send you the payment details shortly.",
         "am": "የክፍያ መረጃውን ቡድናችን በቅርቡ ይልክልዎታል።",
