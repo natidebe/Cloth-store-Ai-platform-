@@ -16,13 +16,12 @@ import {
   Sheet,
   SkeletonList,
   Stepper,
-  Steps,
   TextInput,
 } from '@/components/ui';
 import { swatch } from '@/lib/colors';
 import { money, variantLabel } from '@/lib/format';
 import { confirmAction, haptic } from '@/lib/telegram';
-import { cellKey, splitKey, useGridDraft } from '@/state/gridDraft';
+import { axis, cellKey, splitKey, useGridDraft } from '@/state/gridDraft';
 import { toast } from '@/state/toasts';
 
 import s from './grid.module.css';
@@ -48,7 +47,6 @@ export function StockGridScreen() {
 
 function Grid({ product }: { product: Product }) {
   const { t } = useTranslation();
-  const language = useLanguage();
   const errorText = useErrorText();
   const { storeId, role, isOwner } = useStore();
   const save = useSaveGrid(storeId, product.id);
@@ -75,7 +73,10 @@ function Grid({ product }: { product: Product }) {
     );
   }, [blocker, t]);
 
-  const selected = draft.selected ? draft.cells[draft.selected] : undefined;
+  const colors = axis(draft.colors);
+  const sizes = axis(draft.sizes);
+  // No colors and no sizes (a bag, a belt, jewelry): just one stock counter.
+  const plain = colors.length === 1 && colors[0] === '' && sizes.length === 1 && sizes[0] === '';
   const [selColor, selSize] = draft.selected ? splitKey(draft.selected) : ['', ''];
   const basePrice = product.base_price;
 
@@ -95,20 +96,13 @@ function Grid({ product }: { product: Product }) {
       },
     );
 
-  /** Add a color or size, then guide to the next step: the other one, then the first box. */
+  /** Add a color or size (both optional); then the first box is ready for its stock. */
   const onAdd = (name: string): boolean => {
     const added = adding === 'color' ? draft.addColor(name) : draft.addSize(name);
     if (!added) return false;
+    setAdding(null);
     const { colors, sizes, selected } = useGridDraft.getState();
-    if (colors.length === 0) setAdding('color');
-    else if (sizes.length === 0) setAdding('size');
-    else {
-      setAdding(null);
-      const color = adding === 'color' ? name.trim() : colors[0];
-      const size = adding === 'size' ? name.trim() : sizes[0];
-      if (!selected && color !== undefined && size !== undefined)
-        draft.select(cellKey(color, size));
-    }
+    if (!selected) draft.select(cellKey(axis(colors)[0] ?? '', axis(sizes)[0] ?? ''));
     return true;
   };
 
@@ -133,72 +127,96 @@ function Grid({ product }: { product: Product }) {
     <Page>
       <PageHeader title={t('grid.title')} subtitle={product.name} role={role} />
 
-      <Card>
-        {draft.colors.length > 0 && draft.sizes.length > 0 ? (
-          <div className={s.scroll}>
-            <table className={s.grid}>
-              <thead>
-                <tr>
-                  <th aria-hidden="true" />
-                  {draft.sizes.map((size) => (
-                    <th key={size} scope="col">
-                      {size || t('grid.noSize')}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {draft.colors.map((color) => (
-                  <tr key={color}>
-                    <th scope="row" className={s.colorHead}>
-                      <span className={s.dot} style={{ background: swatch(color) }} />
-                      <span className={s.colorName}>{color || t('grid.noColor')}</span>
-                    </th>
-                    {draft.sizes.map((size) => {
-                      const key = cellKey(color, size);
-                      const cell = draft.cells[key];
-                      const label = variantLabel(color, size);
-                      return (
-                        <td key={size}>
-                          <button
-                            type="button"
-                            className={[
-                              s.cell,
-                              !cell && s.empty,
-                              cell?.stock === 0 && s.zero,
-                              draft.selected === key && s.selected,
-                            ]
-                              .filter(Boolean)
-                              .join(' ')}
-                            aria-label={
-                              cell ? `${label}: ${cell.stock}` : `${t('grid.addSize')} ${label}`
-                            }
-                            aria-pressed={draft.selected === key}
-                            onClick={() => {
-                              haptic.select();
-                              draft.select(key);
-                            }}
-                          >
-                            {cell ? (
-                              <>
-                                <span className={s.cellStock}>{cell.stock}</span>
-                                <span className={s.cellPrice}>{cell.price ? cell.price : '—'}</span>
-                              </>
-                            ) : (
-                              <span className={s.cellPlus}>+</span>
-                            )}
-                          </button>
-                        </td>
-                      );
-                    })}
+      {plain ? (
+        <Card label={t('grid.inStock')}>
+          <CellEditor cellKey={PLAIN} basePrice={basePrice} canRemove={false} />
+        </Card>
+      ) : (
+        <>
+          <Card>
+            <div className={s.scroll}>
+              <table className={s.grid}>
+                <thead>
+                  <tr>
+                    <th aria-hidden="true" />
+                    {sizes.map((size) => (
+                      <th key={size} scope="col">
+                        {size || t('grid.noSize')}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <GridSteps colors={draft.colors} sizes={draft.sizes} />
-        )}
+                </thead>
+                <tbody>
+                  {colors.map((color) => (
+                    <tr key={color}>
+                      <th scope="row" className={s.colorHead}>
+                        {color && <span className={s.dot} style={{ background: swatch(color) }} />}
+                        <span className={s.colorName}>{color || t('grid.noColor')}</span>
+                      </th>
+                      {sizes.map((size) => {
+                        const key = cellKey(color, size);
+                        const cell = draft.cells[key];
+                        const label = variantLabel(color, size) || t('grid.inStock');
+                        return (
+                          <td key={size}>
+                            <button
+                              type="button"
+                              className={[
+                                s.cell,
+                                !cell && s.empty,
+                                cell?.stock === 0 && s.zero,
+                                draft.selected === key && s.selected,
+                              ]
+                                .filter(Boolean)
+                                .join(' ')}
+                              aria-label={
+                                cell ? `${label}: ${cell.stock}` : `${t('grid.addSize')} ${label}`
+                              }
+                              aria-pressed={draft.selected === key}
+                              onClick={() => {
+                                haptic.select();
+                                draft.select(key);
+                              }}
+                            >
+                              {cell ? (
+                                <>
+                                  <span className={s.cellStock}>{cell.stock}</span>
+                                  <span className={s.cellPrice}>
+                                    {cell.price ? cell.price : '—'}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className={s.cellPlus}>+</span>
+                              )}
+                            </button>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+          <Card>
+            {draft.selected && draft.cells[draft.selected] ? (
+              <>
+                <p className={s.selectedTitle}>
+                  {t('grid.selected', {
+                    label: variantLabel(selColor, selSize) || t('grid.inStock'),
+                  })}
+                </p>
+                <CellEditor cellKey={draft.selected} basePrice={basePrice} canRemove />
+              </>
+            ) : (
+              <p className={s.emptyText}>{t('grid.tapCell')}</p>
+            )}
+          </Card>
+        </>
+      )}
+
+      <Card label={t('grid.optionalTitle')}>
+        <p className={s.emptyText}>{t('grid.optionalHint')}</p>
         <div className={s.addRow}>
           <Button icon="plus" block onClick={() => setAdding('color')}>
             {t('grid.addColor')}
@@ -207,51 +225,6 @@ function Grid({ product }: { product: Product }) {
             {t('grid.addSize')}
           </Button>
         </div>
-      </Card>
-
-      <Card>
-        {selected && draft.selected ? (
-          <>
-            <p className={s.selectedTitle}>
-              {t('grid.selected', { label: variantLabel(selColor, selSize) })}
-            </p>
-            <div className={s.stockLine}>
-              <span>{t('grid.stock')}</span>
-              <Stepper
-                label={t('grid.stock')}
-                value={selected.stock}
-                onChange={(n) => draft.setStock(draft.selected as string, n)}
-              />
-            </div>
-            <Field
-              label={t('grid.ownPrice')}
-              hint={isOwner ? t('grid.ownPriceHint') : t('product.priceLocked')}
-            >
-              {(id) => (
-                <TextInput
-                  id={id}
-                  inputMode="decimal"
-                  value={selected.price}
-                  locked={!isOwner}
-                  placeholder={
-                    basePrice !== null ? money(basePrice, language) : t('product.pricePlaceholder')
-                  }
-                  onChange={(event) =>
-                    draft.setPrice(
-                      draft.selected as string,
-                      event.target.value.replace(/[^\d.]/g, ''),
-                    )
-                  }
-                />
-              )}
-            </Field>
-            <Button variant="link" onClick={() => draft.removeCell(draft.selected as string)}>
-              {t('grid.removeVariant', { label: variantLabel(selColor, selSize) })}
-            </Button>
-          </>
-        ) : (
-          <p className={s.emptyText}>{t('grid.tapCell')}</p>
-        )}
       </Card>
 
       {isOwner && (
@@ -300,25 +273,67 @@ function Grid({ product }: { product: Product }) {
   );
 }
 
-/** An empty grid: the three steps, with what's been added so far. */
-function GridSteps({ colors, sizes }: { colors: string[]; sizes: string[] }) {
+const PLAIN = cellKey('', '');
+
+/** The stock and own price of one box (for a plain product: its only one). */
+function CellEditor({
+  cellKey: key,
+  basePrice,
+  canRemove,
+}: {
+  cellKey: string;
+  basePrice: Product['base_price'];
+  canRemove: boolean;
+}) {
   const { t } = useTranslation();
+  const language = useLanguage();
+  const { isOwner } = useStore();
+  const draft = useGridDraft();
+  const cell = draft.cells[key];
+  const [color, size] = splitKey(key);
+  // A plain product's box exists once something is set in it.
+  const ensure = () => {
+    if (!useGridDraft.getState().cells[key]) draft.select(key);
+  };
   return (
-    <div className={s.steps}>
-      <Steps
-        items={[
-          <span key="c">
-            {t('grid.step1')}
-            {colors.length > 0 && <strong> {colors.join(', ')} ✓</strong>}
-          </span>,
-          <span key="s">
-            {t('grid.step2')}
-            {sizes.length > 0 && <strong> {sizes.join(', ')} ✓</strong>}
-          </span>,
-          t('grid.step3'),
-        ]}
-      />
-    </div>
+    <>
+      <div className={s.stockLine}>
+        <span>{t('grid.stock')}</span>
+        <Stepper
+          label={t('grid.stock')}
+          value={cell?.stock ?? 0}
+          onChange={(n) => {
+            ensure();
+            draft.setStock(key, n);
+          }}
+        />
+      </div>
+      <Field
+        label={t('grid.ownPrice')}
+        hint={isOwner ? t('grid.ownPriceHint') : t('product.priceLocked')}
+      >
+        {(id) => (
+          <TextInput
+            id={id}
+            inputMode="decimal"
+            value={cell?.price ?? ''}
+            locked={!isOwner}
+            placeholder={
+              basePrice !== null ? money(basePrice, language) : t('product.pricePlaceholder')
+            }
+            onChange={(event) => {
+              ensure();
+              draft.setPrice(key, event.target.value.replace(/[^\d.]/g, ''));
+            }}
+          />
+        )}
+      </Field>
+      {canRemove && (
+        <Button variant="link" onClick={() => draft.removeCell(key)}>
+          {t('grid.removeVariant', { label: variantLabel(color, size) || t('grid.inStock') })}
+        </Button>
+      )}
+    </>
   );
 }
 

@@ -126,7 +126,7 @@ function LineRow({ line, onOpen }: { line: CounterLine; onOpen: () => void }) {
         <span className={s.lineMain}>
           <span className={s.lineName}>{line.productName}</span>
           <span className={s.lineSub}>
-            {line.label} · ×{line.quantity}
+            {[line.label, `×${line.quantity}`].filter(Boolean).join(' · ')}
           </span>
         </span>
         <span className={s.lineEnd}>

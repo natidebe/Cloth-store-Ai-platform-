@@ -35,8 +35,8 @@ const en = {
     editDetails: 'Edit details',
     stockAndPrices: 'Stock and prices',
     noVariants: 'No colors or sizes yet.',
-    noVariantsHint: 'No colors or sizes yet. Add them to set the stock.',
-    addVariants: 'Add colors and sizes',
+    noVariantsHint: 'No stock yet. Set how many you have.',
+    addVariants: 'Set the stock',
   },
   product: {
     editTitle: 'Edit product',
@@ -73,9 +73,6 @@ const en = {
     exists: 'That one is already in the grid',
     selected: 'Selected: {{label}}',
     tapCell: 'Tap a box to change its stock or price.',
-    step1: 'Add a color (e.g. Black).',
-    step2: 'Add a size (e.g. 42 or M).',
-    step3: 'Tap the box, set the stock, then Save.',
     stock: 'Stock',
     ownPrice: 'Own price (optional)',
     ownPriceHint: 'Empty = uses the product price',
@@ -87,6 +84,10 @@ const en = {
     offSale: 'Taken off sale',
     noColor: 'No color',
     noSize: 'One size',
+    inStock: 'In stock',
+    optionalTitle: 'Colors and sizes (optional)',
+    optionalHint:
+      'Only if it comes in different colors or sizes, like shoes or shirts. Bags, belts and jewelry can stay as one.',
   },
   orders: {
     title: 'Orders',

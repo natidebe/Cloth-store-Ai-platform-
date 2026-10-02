@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 
 import type { CounterSaleInput } from '@/api/types';
-import { me, settings, STORE_ID } from '@/test/fixtures';
+import { jacket, me, settings, STORE_ID } from '@/test/fixtures';
 import { renderApp } from '@/test/render';
 import { server, storeApiBase } from '@/test/server';
 import { useCounterDraft } from '@/state/counterDraft';
@@ -59,6 +59,34 @@ describe('Counter sale', () => {
       customer_name: 'Hana',
       allow_held: false,
     });
+  });
+
+  it('sells a bag without asking for a color or size', async () => {
+    const bag = {
+      ...jacket(),
+      id: 'p-bag',
+      code: 'P200',
+      name: 'Leather Bag',
+      total_stock: 4,
+      variant_count: 1,
+      price_min: '2500',
+      price_max: '2500',
+      variants: [
+        { id: 'v-bag', color: null, size: null, stock: 4, price_override: null, price: '2500' },
+      ],
+    };
+    server.use(
+      http.get(`${storeApiBase}/products`, () =>
+        HttpResponse.json({ products: [bag], categories: ['bags'] }),
+      ),
+    );
+    const { user } = renderApp(`/s/${STORE_ID}/counter`);
+    await user.click(await screen.findByRole('button', { name: 'Add item' }));
+    await user.click(await screen.findByRole('button', { name: /Leather Bag/ }));
+    expect(await screen.findByText('4 in stock')).toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup', { name: 'Color and size' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add to sale' }));
+    expect(await screen.findByText('×1')).toBeInTheDocument();
   });
 
   it('stops staff below their discount limit', async () => {

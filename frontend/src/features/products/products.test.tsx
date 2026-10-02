@@ -97,34 +97,81 @@ describe('Products', () => {
     expect(await screen.findByRole('heading', { name: 'Stock and prices' })).toBeInTheDocument();
   });
 
-  it('a product without sizes: the grid guides through color, size, stock', async () => {
-    const bare = { ...jacket(), id: 'p-bare', variants: [], total_stock: 0, variant_count: 0 };
+  it('a bag (no color, no size): just one stock counter', async () => {
+    const bag = {
+      ...jacket(),
+      id: 'p-bag',
+      name: 'Leather Bag',
+      variants: [],
+      total_stock: 0,
+      variant_count: 0,
+    };
     let saved: unknown;
     server.use(
-      http.get(`${storeApiBase}/products/p-bare`, () => HttpResponse.json(bare)),
-      http.put(`${storeApiBase}/products/p-bare/variants`, async ({ request }) => {
+      http.get(`${storeApiBase}/products/p-bag`, () => HttpResponse.json(bag)),
+      http.put(`${storeApiBase}/products/p-bag/variants`, async ({ request }) => {
         saved = await request.json();
-        return HttpResponse.json({ product: bare, added: 1, updated: 0, removed: 0, note: '' });
+        return HttpResponse.json({ product: bag, added: 1, updated: 0, removed: 0, note: '' });
       }),
     );
-    const { user } = renderApp(`/s/${STORE_ID}/products/p-bare/stock`);
-    expect(await screen.findByText('Add a color (e.g. Black).')).toBeInTheDocument();
+    const { user } = renderApp(`/s/${STORE_ID}/products/p-bag/stock`);
+    expect(await screen.findByText('Colors and sizes (optional)')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Add color' }));
-    await user.type(screen.getByLabelText('Color name (e.g. Black)'), 'Black');
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Add color' }));
-    // The size question opens by itself.
-    await user.type(await screen.findByLabelText('Size (e.g. M or 42)'), '42');
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Add size' }));
-
-    // The first box is selected: its stock can be set right away.
-    expect(await screen.findByText('Selected: Black · 42')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Stock +1' }));
     await user.click(screen.getByRole('button', { name: 'Stock +1' }));
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() =>
       expect(saved).toEqual({
-        variants: [{ color: 'Black', size: '42', stock: 2, price: null }],
+        variants: [{ color: null, size: null, stock: 2, price: null }],
+        remove: [],
+      }),
+    );
+  });
+
+  it('a belt in colors only: rows of colors, no size needed', async () => {
+    // A belt saved as one variant without color: its first color takes over its stock.
+    const belt = {
+      ...jacket(),
+      id: 'p-belt',
+      name: 'Belt',
+      total_stock: 3,
+      variant_count: 1,
+      variants: [
+        { id: 'v-belt', color: null, size: null, stock: 3, price_override: null, price: '900' },
+      ],
+    };
+    let saved: unknown;
+    server.use(
+      http.get(`${storeApiBase}/products/p-belt`, () => HttpResponse.json(belt)),
+      http.put(`${storeApiBase}/products/p-belt/variants`, async ({ request }) => {
+        saved = await request.json();
+        return HttpResponse.json({ product: belt, added: 1, updated: 1, removed: 0, note: '' });
+      }),
+    );
+    const { user } = renderApp(`/s/${STORE_ID}/products/p-belt/stock`);
+    expect(await screen.findByRole('group', { name: 'Stock' })).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton', { name: 'Stock' })).toHaveValue(3);
+
+    for (const color of ['Black', 'Brown']) {
+      await user.click(screen.getByRole('button', { name: 'Add color' }));
+      await user.type(screen.getByLabelText('Color name (e.g. Black)'), color);
+      await user.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: 'Add color' }),
+      );
+    }
+    // Black has the 3 from before; Brown is new.
+    expect(await screen.findByRole('button', { name: 'Black: 3' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /\d/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Brown$/ }));
+    await user.click(screen.getByRole('button', { name: 'Stock +1' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(saved).toEqual({
+        variants: [
+          { id: 'v-belt', color: 'Black', size: null, stock: 3, price: null },
+          { color: 'Brown', size: null, stock: 1, price: null },
+        ],
         remove: [],
       }),
     );

@@ -85,7 +85,7 @@ export function ItemSheet({ line, onClose, onSave }: ItemSheetProps) {
     onSave({
       variantId: variant.id,
       productName: product.name,
-      label: variantLabel(variant.color, variant.size) || t('grid.noSize'),
+      label: variantLabel(variant.color, variant.size),
       color: variant.color,
       photoUrl: product.photo_url,
       quantity,
@@ -144,6 +144,8 @@ export function ItemSheet({ line, onClose, onSave }: ItemSheetProps) {
   }
 
   // Step 2: color and size, quantity, price.
+  const only = product.variants.length === 1 ? product.variants[0] : undefined;
+  const plain = only !== undefined && !only.color && !only.size;
   return (
     <Sheet
       open
@@ -168,35 +170,45 @@ export function ItemSheet({ line, onClose, onSave }: ItemSheetProps) {
         )}
       </div>
 
-      <p className={s.lineSub} style={{ fontWeight: 600, margin: '4px 0 8px' }}>
-        {t('counter.chooseVariant')}
-      </p>
-      <div className={s.variants} role="radiogroup" aria-label={t('counter.chooseVariant')}>
-        {product.variants.map((v) => (
-          <button
-            key={v.id}
-            type="button"
-            role="radio"
-            aria-checked={v.id === variantId}
-            className={`${s.variant} ${v.id === variantId ? s.variantOn : ''}`}
-            disabled={v.stock === 0}
-            onClick={() => {
-              haptic.select();
-              setVariantId(v.id);
-              setQuantity(1);
-              setHeldAccepted(false);
-            }}
-          >
-            <span className={s.variantLabel}>
-              {v.color && <span className={s.dot} style={{ background: swatch(v.color) }} />}
-              {variantLabel(v.color, v.size) || t('grid.noSize')}
-            </span>
-            <span className={s.variantStock}>
-              {v.stock > 0 ? t('counter.inStock', { count: v.stock }) : t('counter.noneInStock')}
-            </span>
-          </button>
-        ))}
-      </div>
+      {plain ? (
+        <p className={s.lineSub} style={{ margin: '4px 0 14px' }}>
+          {t('counter.inStock', { count: product.variants[0]?.stock ?? 0 })}
+        </p>
+      ) : (
+        <>
+          <p className={s.lineSub} style={{ fontWeight: 600, margin: '4px 0 8px' }}>
+            {t('counter.chooseVariant')}
+          </p>
+          <div className={s.variants} role="radiogroup" aria-label={t('counter.chooseVariant')}>
+            {product.variants.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                role="radio"
+                aria-checked={v.id === variantId}
+                className={`${s.variant} ${v.id === variantId ? s.variantOn : ''}`}
+                disabled={v.stock === 0}
+                onClick={() => {
+                  haptic.select();
+                  setVariantId(v.id);
+                  setQuantity(1);
+                  setHeldAccepted(false);
+                }}
+              >
+                <span className={s.variantLabel}>
+                  {v.color && <span className={s.dot} style={{ background: swatch(v.color) }} />}
+                  {variantLabel(v.color, v.size) || t('grid.noSize')}
+                </span>
+                <span className={s.variantStock}>
+                  {v.stock > 0
+                    ? t('counter.inStock', { count: v.stock })
+                    : t('counter.noneInStock')}
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       {variant && (
         <>
