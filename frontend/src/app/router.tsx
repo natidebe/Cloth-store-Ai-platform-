@@ -22,6 +22,18 @@ const stockGrid = () =>
   import('@/features/products/StockGridScreen').then((m) => ({ default: m.StockGridScreen }));
 const orders = () =>
   import('@/features/orders/OrdersScreen').then((m) => ({ default: m.OrdersScreen }));
+const analytics = () =>
+  import('@/features/orders/AnalyticsScreen').then((m) => ({ default: m.AnalyticsScreen }));
+const counterItems = () =>
+  import('@/features/counter/CounterScreens').then((m) => ({ default: m.CounterItemsScreen }));
+const counterPay = () =>
+  import('@/features/counter/CounterScreens').then((m) => ({ default: m.CounterPayScreen }));
+const counterDone = () =>
+  import('@/features/counter/CounterScreens').then((m) => ({ default: m.CounterDoneScreen }));
+const staffDiscount = () =>
+  import('@/features/settings/StaffDiscountScreen').then((m) => ({
+    default: m.StaffDiscountScreen,
+  }));
 const settings = () =>
   import('@/features/settings/SettingsScreen').then((m) => ({ default: m.SettingsScreen }));
 const storeProfile = () =>
@@ -54,10 +66,15 @@ export const routes: RouteObject[] = [
           { path: 'products/:productId', ...screen(productDetails) },
           { path: 'products/:productId/stock', ...screen(stockGrid) },
           { path: 'orders', ...screen(orders) },
+          { path: 'analytics', ...screen(analytics) },
+          { path: 'counter', ...screen(counterItems) },
+          { path: 'counter/pay', ...screen(counterPay) },
+          { path: 'counter/done', ...screen(counterDone) },
           { path: 'settings', ...screen(settings) },
           { path: 'settings/profile', ...screen(storeProfile) },
           { path: 'settings/connect', ...screen(connect) },
           { path: 'settings/bot', ...screen(changeBot) },
+          { path: 'settings/discount', ...screen(staffDiscount) },
         ],
       },
       {

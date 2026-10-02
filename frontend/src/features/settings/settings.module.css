@@ -108,3 +108,71 @@
 .connectedName {
   flex: 1;
 }
+
+/* --- Staff discount limit (Phase 12) ------------------------------------------- */
+
+.lead {
+  color: var(--text-muted);
+  margin: 0 0 14px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border: none;
+  border-bottom: 1px solid var(--divider);
+  background: none;
+  text-align: left;
+}
+
+.choice:last-child {
+  border-bottom: none;
+}
+
+.radio {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--field-border);
+  flex: none;
+}
+
+.radioOn {
+  border: 7px solid var(--primary);
+}
+
+.choiceMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.choiceTitle {
+  font-weight: 600;
+}
+
+.choiceHint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.discountRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.discountValue {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.discountExample {
+  margin: 12px 0 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}

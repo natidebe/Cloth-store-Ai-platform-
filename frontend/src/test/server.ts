@@ -17,6 +17,16 @@ export const handlers = [
   http.get(`${base}/analytics`, () => HttpResponse.json(analytics())),
   http.get(`${base}/orders`, () => HttpResponse.json({ orders: [order()], more: false })),
   http.get(`${base}/settings`, () => HttpResponse.json(settings())),
+  http.get(`${base}/variants/:id/availability`, ({ params }) =>
+    HttpResponse.json({
+      variant_id: params.id,
+      stock: 5,
+      held: 0,
+      available: 5,
+      listed_price: '3500',
+      holds: [],
+    }),
+  ),
   http.get(`${base}/connections`, () =>
     HttpResponse.json({
       staff_group: { id: -500, title: 'nati fashion staff', bot_can_see: true },

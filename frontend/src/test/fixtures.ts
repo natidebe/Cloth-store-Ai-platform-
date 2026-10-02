@@ -14,6 +14,8 @@ export function me(role: Me['role'] = 'owner'): Me {
       bot_username: 'nati_fashion_bot',
       staff_group_linked: true,
       channel_linked: false,
+      staff_discount_percent: '10',
+      payment_methods: ['Cash', 'Telebirr'],
     },
   };
 }
@@ -97,6 +99,12 @@ export function analytics(): Analytics {
     low_stock: [],
     ai_calls_today: 4,
     ai_daily_limit: 300,
+    telegram_orders: 2,
+    in_shop_sales: 1,
+    in_shop_revenue: '4500',
+    discount_total: '500',
+    discounted_items: 1,
+    sellers: [{ telegram_id: 7, name: 'Sara', sales: 1, revenue: '4500', discount: '500' }],
   };
 }
 
@@ -120,8 +128,14 @@ export function order(): Order {
         size: 'M',
         quantity: 2,
         price: 3650,
+        list_price: 3650,
       },
     ],
+    channel: 'telegram',
+    payment_method: null,
+    payment_note: null,
+    sold_by: null,
+    note: null,
   };
 }
 
@@ -133,6 +147,7 @@ export function settings(): StoreSettings {
     location: 'Bole, Edna Mall',
     pickup_instructions: null,
     return_policy: null,
+    staff_discount_percent: '10',
     payment_instructions: 'Telebirr: 0911 000 000',
     delivery_info: 'Bole: 150 ETB',
     opening_hours: null,
