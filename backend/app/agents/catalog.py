@@ -61,7 +61,10 @@ def caption(product: Product, variants: list[VariantMatch]) -> str:
     if prices:
         price = format_price(prices[0])
         lines.append(f"💰 {'ከ / from ' if len(prices) > 1 else ''}{price}")
-    if in_stock:
+    # Colors and sizes are optional (a bag, a belt, jewelry): only what exists is shown.
+    has_colors = any(v.color for v in in_stock)
+    has_sizes = any(v.size for v in in_stock)
+    if has_colors and has_sizes:
         lines.append("")
         lines.append("🎨 ቀለም እና ቁጥር / Colors & sizes:")
         colors: dict[str, list[str]] = {}
@@ -71,6 +74,12 @@ def caption(product: Product, variants: list[VariantMatch]) -> str:
                 colors[v.color or "—"].append(v.size)
         for color, sizes in colors.items():
             lines.append(f"• {color}: {', '.join(sizes)}" if sizes else f"• {color}")
+    elif has_colors:
+        lines.append("")
+        lines.append(f"🎨 ቀለም / Colors: {', '.join(dict.fromkeys(v.color for v in in_stock if v.color))}")
+    elif has_sizes:
+        lines.append("")
+        lines.append(f"📏 ቁጥር / Sizes: {', '.join(dict.fromkeys(v.size for v in in_stock if v.size))}")
     if product.description:
         lines.append("")
         lines.append(product.description.strip())

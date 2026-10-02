@@ -133,6 +133,20 @@ def test_caption_of_a_sold_out_product():
     assert text.startswith(SOLD_OUT) and "Colors" not in text
 
 
+def test_caption_of_a_bag_without_color_or_size():
+    text = caption(FakeDb().products[AF1], [_variant(None, None, 3)])
+    assert "Colors" not in text and "Sizes" not in text and "•" not in text and "—" not in text
+    assert "5,000" in text and SOLD_OUT not in text
+
+
+def test_caption_with_colors_only_or_sizes_only():
+    belt = caption(FakeDb().products[AF1], [_variant("Black", None, 2), _variant("Brown", None, 1),
+                                            _variant("Tan", None, 0)])
+    assert "🎨 ቀለም / Colors: Black, Brown" in belt and "Tan" not in belt and "Sizes" not in belt
+    rings = caption(FakeDb().products[AF1], [_variant(None, "7", 1), _variant(None, "8", 1)])
+    assert "📏 ቁጥር / Sizes: 7, 8" in rings and "Colors" not in rings
+
+
 def test_several_prices_show_from():
     text = caption(FakeDb().products[AF1], [_variant("White", "42", 1, "5000"), _variant("Gold", "42", 1, "6500")])
     assert "from" in text and "5,000" in text and "6,500" not in text

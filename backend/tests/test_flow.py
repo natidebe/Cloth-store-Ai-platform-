@@ -10,7 +10,7 @@ import pytest
 
 from app.agents.messages import t
 from app.agents.orchestrator import Orchestrator
-from app.agents.tools import delivery_message, order_number, payment_message
+from app.agents.tools import delivery_message, describe, order_number, payment_message
 from app.agents.flow import product_link_code
 from app.models.schemas import (Customer, OrderItemDetail, OrderWithItems, Product, ProductPost, Store,
                                 VariantMatch)
@@ -892,6 +892,19 @@ async def test_product_without_a_photo_gets_a_text_question():
     await world.say("/start p_P102")  # Samba: one color, one size
     assert world.draft.step == "ask_quantity"
     assert world.telegram.calls[-1][0] == "sendMessage"
+
+
+async def test_a_bag_without_color_or_size_goes_straight_to_quantity():
+    world = World()
+    bag_id, bag_variant = uuid4(), uuid4()
+    bag, _ = _v(bag_variant, bag_id, "Leather Bag", None, "bags", None, None, 3, "2500")
+    world.db.variants[bag_variant] = bag
+    world.db.store_of[bag_id] = STORE.id
+    world.db.keywords[bag_id] = ""
+    world.db.codes[bag_id] = "P104"
+    await world.say("/start p_P104")
+    assert world.draft.step == "ask_quantity" and world.draft.variant_id == bag_variant
+    assert describe(bag) == "Leather Bag"  # no color, no "size" in the summary
 
 
 async def test_link_before_the_language_opens_after_choosing_it():
