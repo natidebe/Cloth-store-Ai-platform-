@@ -162,4 +162,5 @@ async def test_the_numbers_count_shop_sales_and_discounts(world):
     numbers = await store_analytics(db, a, "today", ai_daily_limit=300)
     assert numbers["in_shop_sales"] >= 3 and numbers["telegram_orders"] >= 1
     assert numbers["discount_total"] >= Decimal("5500")  # 1,000 (Abdi) + 4,500 (owner)
-    assert any(s["name"] == "Abdi" and s["sales"] >= 3 for s in numbers["sellers"])
+    [abdi] = [s for s in numbers["sellers"] if s["name"] == "Abdi"]
+    assert abdi["sales"] >= 3 and abdi["discount"] >= Decimal("5500")

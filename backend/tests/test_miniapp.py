@@ -203,10 +203,11 @@ class FakeDb:
         self.uploads.append((store_id, name, len(data), content_type))
         return f"https://storage.example/product-photos/{store_id}/{name}"
 
-    async def list_orders(self, store_id, payment_status=None, limit=30, before=None):
-        self.order_queries.append((store_id, payment_status, limit, before))
+    async def list_orders(self, store_id, payment_status=None, limit=30, before=None, channel=None):
+        self.order_queries.append((store_id, payment_status, limit, before, channel))
         rows = [o for o in self.orders if o["store_id"] == str(store_id)
-                and (payment_status is None or o["payment_status"] == payment_status)]
+                and (payment_status is None or o["payment_status"] == payment_status)
+                and (channel is None or o.get("channel", "telegram") == channel)]
         return rows[:limit]
 
     # platform
@@ -652,6 +653,8 @@ def test_orders_list_for_staff(world):
     assert order["number"] and order["customer"] == {"name": "Abebe", "phone": "0911223344"}
     client.get(url("/orders?status=paid&limit=5"), headers=headers(MEMBER))
     assert db.order_queries[-1][1:3] == ("paid", 5)
+    assert client.get(url("/orders?channel=in_shop"), headers=headers(MEMBER)).json()["orders"] == []
+    assert db.order_queries[-1][4] == "in_shop"
     assert client.get(url("/orders"), headers=headers(STRANGER)).status_code == 403
 
 

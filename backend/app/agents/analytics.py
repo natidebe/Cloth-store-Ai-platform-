@@ -1,7 +1,8 @@
 """The dashboard's numbers (Phase 10b): how the store is doing.
 
 Periods are Addis Ababa days (UTC+3, no daylight saving): "today" starts at
-midnight in Addis, "7d" and "30d" include today. The database computes the
+midnight in Addis, "week" on Monday, "month" on the 1st, and "7d" and
+"30d" include today. The database computes the
 order and payment numbers in one call (store_analytics, migration 010);
 here we add what can be derived, the current low stock, and today's AI use.
 """
@@ -14,16 +15,22 @@ from app.agents.inventory import LOW_STOCK_AT
 from app.services.supabase_service import SupabaseService
 
 ADDIS = timezone(timedelta(hours=3), "EAT")
-Period = Literal["today", "7d", "30d"]
+Period = Literal["today", "week", "month", "7d", "30d"]
 PERIOD_DAYS = {"today": 1, "7d": 7, "30d": 30}
 
 
 def period_bounds(period: Period, now: datetime | None = None) -> tuple[datetime, datetime]:
-    """[start, end) of the period: from Addis midnight N-1 days ago until the
-    end of today (Addis)."""
+    """[start, end) of the period, until the end of today (Addis): from this
+    Monday ("week"), the 1st of this month ("month"), or midnight N-1 days ago."""
     local = (now or datetime.now(timezone.utc)).astimezone(ADDIS)
     today = local.replace(hour=0, minute=0, second=0, microsecond=0)
-    return today - timedelta(days=PERIOD_DAYS[period] - 1), today + timedelta(days=1)
+    if period == "week":
+        start = today - timedelta(days=today.weekday())
+    elif period == "month":
+        start = today.replace(day=1)
+    else:
+        start = today - timedelta(days=PERIOD_DAYS[period] - 1)
+    return start, today + timedelta(days=1)
 
 
 def _number(value: Any) -> Decimal:
@@ -34,6 +41,7 @@ async def store_analytics(db: SupabaseService, store_id: UUID, period: Period,
                           ai_daily_limit: int | None, now: datetime | None = None) -> dict[str, Any]:
     start, end = period_bounds(period, now)
     raw = await db.store_analytics(store_id, start, end)
+    discounts = await db.shop_discounts_by_seller(store_id, start, end) if raw.get("sellers") else {}
     revenue, payments = _number(raw.get("revenue")), int(raw.get("payments") or 0)
     placed, paid = int(raw.get("orders_placed") or 0), int(raw.get("orders_paid") or 0)
     today = (now or datetime.now(timezone.utc)).astimezone(ADDIS).date().isoformat()
@@ -57,7 +65,9 @@ async def store_analytics(db: SupabaseService, store_id: UUID, period: Period,
         "discount_total": _number(raw.get("discount_total")),
         "discounted_items": int(raw.get("discounted_items") or 0),
         "sellers": [{"telegram_id": s.get("telegram_id"), "name": s.get("name"), "sales": int(s["sales"]),
-                     "revenue": _number(s["revenue"])} for s in raw.get("sellers") or []],
+                     "revenue": _number(s["revenue"]),
+                     "discount": discounts.get(s.get("telegram_id"), Decimal(0))}
+                    for s in raw.get("sellers") or []],
         "per_day": [{"day": d["day"], "placed": int(d["placed"]), "paid": int(d["paid"]),
                      "revenue": _number(d["revenue"])} for d in raw.get("per_day") or []],
         "top_products": [{"product_id": t["product_id"], "name": t["name"], "code": t.get("code"),
