@@ -981,7 +981,7 @@ platform bot and approve it.
 
 ---
 
-### Phase 11 — Ready to deploy ✅ Built and the image tested; nothing deployed yet (waiting for my hosting choice)
+### Phase 11 — Ready to deploy ✅ Done: live on Render (October 2026)
 
 **Goal:** everything needed to put it online.
 
@@ -1001,6 +1001,14 @@ platform bot and approve it.
   user, Docker reports it healthy, serves the React app at `/app/` (deep
   links too, old assets 404), and has no `.env` or tests inside. Fixed on
   the way: the image now uses npm 11.11 (the one that made the lock file).
+- **Deployed (2026-10-02)** on Render, chosen for the pilot: Starter,
+  Frankfurt, one instance, from `main` (both branches merged) via
+  `render.yaml`. https://cloth-store-ai-platform.onrender.com (health
+  check OK); every store's bot and the platform bot point there
+  (`connect_all`); the laptop server and ngrok are stopped. Still to do
+  from the go-live checklist (docs/deployment.md §4): the Supabase catalog
+  webhooks to the Render address, the remaining exposed secrets (Gemini
+  key, webhook secret, platform bot token), Supabase Pro, uptime monitor.
 - `scripts/connect_all.py`: points every store's bot and the platform bot
   at `PUBLIC_BASE_URL` (after a deploy or a new ngrok address); `--check`
   shows where each one sends its messages.
