@@ -851,7 +851,7 @@ then the AI isn't limited (the counter isn't there yet).
 
 ---
 
-### Phase 10b — Telegram Mini App (the store dashboard) 📝 Planned (D41–D47)
+### Phase 10b — Telegram Mini App (the store dashboard) 🟡 Backend built; waiting for migration 010 and the design (frontend)
 
 **Goal:** shop owners and staff manage their store inside Telegram, with no
 web dashboard: see how the store is doing, manage products and stock, and
@@ -928,6 +928,36 @@ back, as today. Order statuses (delivered, cancelled) come later.
 3. Products & stock (incl. photo upload).
 4. Store settings and link codes.
 5. Platform bot: sign-up and platform admin.
+
+**How the backend was built** (the API is in `docs/mini-app-api.md`):
+- `core/telegram_auth.py`: checks Telegram's signed `initData` (the
+  `X-Telegram-Init-Data` header) with the bot's token; at most a day old.
+- `agents/miniapp.py`: the role from the staff group (`getChatMember`,
+  remembered 5 minutes; if Telegram is down, the last known answer), and
+  `/dashboard` (private chat: the Mini App button for staff only; staff
+  group: a link to the private chat).
+- `agents/inventory.py`: the inventory rules (the grid matched by id or
+  color + size, stock changes through `adjust_stock`, never below 0;
+  ordered variants/products are taken off sale instead of deleted).
+- `agents/analytics.py`: periods in Addis Ababa days; revenue, orders,
+  paid rate, average order, per day, top products, low stock, AI use.
+- `api/v1/miniapp.py` (store dashboard) and `api/v1/platform_app.py`
+  (sign-up, platform admin, the platform bot's webhook).
+- `/app/` serves the built React app (`frontend/dist`), or a placeholder
+  page that shows who you are until it exists.
+- `scripts/connect_platform_bot.py` connects the platform bot.
+- Tests: `test_miniapp.py` (logins, roles, every endpoint's permissions,
+  inventory, cross-store) and `test_miniapp_db.py` (the real database).
+
+**Manual steps:**
+1. Run `010_mini_app.sql`, then add yourself as a platform admin by
+   Telegram id (from @userinfobot):
+   `insert into platform_admin_telegram (telegram_id, name) values (<id>, 'Me');`
+2. Create the platform bot in @BotFather, put its token in `.env` as
+   `PLATFORM_BOT_TOKEN`, restart, run `python -m scripts.connect_platform_bot`.
+3. Store dashboard: send `/dashboard` to a store's bot (as a staff-group
+   member): the placeholder page shows your name and role.
+4. The React app: after the design.
 
 **Check:** from a phone: open the dashboard from the staff group; see
 today's numbers after placing and paying an order; add a product with a

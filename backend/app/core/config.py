@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # Messages one customer may send per minute; the rest are ignored.
     customer_messages_per_minute: int = Field(default=20, ge=1)
 
+    # Phase 10b: the platform bot (yours) for store sign-up and the platform
+    # admin screen in its Mini App (D44). Empty: sign-up there is off.
+    platform_bot_token: SecretStr = SecretStr("")
+
     @field_validator("supabase_url")
     @classmethod
     def _project_url_only(cls, value: str) -> str:

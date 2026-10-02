@@ -121,6 +121,16 @@ class Onboarding:
     # --- 1. Create a store --------------------------------------------------------
 
     async def create_store(self, user: AuthUser, name: str, bot_token: str) -> BotConnection:
+        """From the dashboard login (Supabase): the user becomes the owner."""
+        return await self._create(name, bot_token, lambda *bot: self.db.create_store(*bot, user.id))
+
+    async def create_store_for_telegram(self, telegram_id: int, name: str, bot_token: str) -> BotConnection:
+        """From the platform bot's Mini App (Phase 10b, D44): this Telegram
+        account is the owner."""
+        return await self._create(name, bot_token,
+                                  lambda *bot: self.db.create_store_for_telegram(*bot, telegram_id))
+
+    async def _create(self, name: str, bot_token: str, save) -> BotConnection:
         name = " ".join(name.split())
         if not 2 <= len(name) <= 80:
             raise OnboardingError("The store name must be 2 to 80 characters.")
@@ -129,8 +139,7 @@ class Onboarding:
             raise OnboardingError(f"@{bot.username} is already used by another store. "
                                   "Create a new bot in @BotFather for this store.", 409)
         try:
-            store_id = await self.db.create_store(name, bot_token.strip(), bot.bot_id, bot.username,
-                                                  secrets.token_urlsafe(32), user.id)
+            store_id = await save(name, bot_token.strip(), bot.bot_id, bot.username, secrets.token_urlsafe(32))
         except DuplicateError:
             raise OnboardingError(f"@{bot.username} is already used by another store.", 409)
         store = await self.db.get_store_any_status(store_id)

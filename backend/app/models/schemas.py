@@ -92,6 +92,7 @@ class Store(DbModel):
     status: StoreStatus = "active"
     telegram_bot_id: int | None = None
     telegram_bot_username: str | None = None
+    owner_telegram_id: int | None = None  # who created it in the Mini App (migration 010)
 
     @property
     def profile(self) -> StoreProfile:

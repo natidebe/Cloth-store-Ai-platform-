@@ -1,12 +1,14 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 
 from app.agents.catalog import Catalog
 from app.agents.orchestrator import Orchestrator
-from app.api.v1 import admin, catalog, health, platform, stores, webhook
+from app.api.v1 import admin, catalog, health, miniapp, platform, platform_app, stores, webhook
 from app.core.config import get_settings
 from app.services.conversation_service import DatabaseConversationStore, RateLimiter
 from app.services.llm_service import create_provider
@@ -89,3 +91,22 @@ app.include_router(admin.router, prefix="/api/v1")
 app.include_router(catalog.router, prefix="/api/v1")
 app.include_router(stores.router, prefix="/api/v1")
 app.include_router(platform.router, prefix="/api/v1")
+app.include_router(miniapp.router, prefix="/api/v1")
+app.include_router(platform_app.router, prefix="/api/v1")
+
+
+# The Mini App (Phase 10b): the built React app from frontend/dist, or a
+# placeholder page until it's built. Any path under /app/ that isn't a file
+# gets index.html, so the app's own pages (e.g. /app/platform) work.
+FRONTEND_BUILD = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+PLACEHOLDER = Path(__file__).resolve().parent / "static" / "miniapp"
+
+
+@app.get("/app", include_in_schema=False)
+@app.get("/app/{path:path}", include_in_schema=False)
+async def mini_app(path: str = "") -> FileResponse:
+    root = FRONTEND_BUILD if (FRONTEND_BUILD / "index.html").is_file() else PLACEHOLDER
+    file = (root / path).resolve()
+    if path and file.is_file() and file.is_relative_to(root.resolve()):
+        return FileResponse(file)
+    return FileResponse(root / "index.html", headers={"Cache-Control": "no-cache"})

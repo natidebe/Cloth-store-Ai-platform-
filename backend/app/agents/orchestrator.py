@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 from app.agents.flow import OrderFlow, Reply, product_link_code
+from app.agents.miniapp import MiniAppAccess
 from app.agents.messages import Language, both, detect_language, message_language, t
 from app.agents.staff import StaffDesk
 from app.agents.tools import StaffAlert, ToolContext
@@ -130,6 +131,7 @@ class Orchestrator:
         self.staff = staff or StaffDesk(db, conversations, telegram)
         self.flow = flow or OrderFlow(db, llm, ai_daily_limit)
         self.rate_limit = rate_limit or RateLimiter(DEFAULT_MESSAGES_PER_MINUTE)
+        self.app_access = MiniAppAccess(telegram)  # who may open the Mini App (Phase 10b)
         self.catalog = catalog
         self._tasks: set[asyncio.Task] = set()
 

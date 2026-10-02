@@ -27,11 +27,15 @@ def _cut(text: str, limit: int) -> str:
 
 
 Button = tuple[str, str]  # (label, data)
+WEB_APP_PREFIX = "webapp:"  # ("📊 Dashboard", "webapp:https://…") opens a Mini App
 
 
-def _button(label: str, data: str) -> dict[str, str]:
+def _button(label: str, data: str) -> dict[str, Any]:
     # A link opens in Telegram (e.g. the channel post's "Order" button, which
-    # opens the sales bot on that product); anything else is sent back to us.
+    # opens the sales bot on that product); "webapp:<https link>" opens a Mini
+    # App (private chats only); anything else is sent back to us.
+    if data.startswith(WEB_APP_PREFIX):
+        return {"text": label, "web_app": {"url": data.removeprefix(WEB_APP_PREFIX)}}
     if data.startswith("https://"):
         return {"text": label, "url": data}
     return {"text": label, "callback_data": data}
@@ -272,6 +276,27 @@ class TelegramService:
                          {"short_description": short_description[:120]})
         await self._call(bot_token, "setMyCommands", {
             "commands": [{"command": name, "description": text[:256]} for name, text in commands],
+        })
+
+    async def get_chat_member_status(self, bot_token: str, chat_id: int, user_id: int) -> str | None:
+        """The user's status in a group: "creator", "administrator", "member",
+        "restricted", "left" or "kicked"; None if Telegram doesn't know them
+        there. Raises TelegramError if Telegram can't be reached."""
+        try:
+            member = await self._call(bot_token, "getChatMember", {"chat_id": chat_id, "user_id": user_id})
+        except TelegramError as error:
+            if error.status == 400:  # e.g. "user not found", "PARTICIPANT_ID_INVALID"
+                return None
+            raise
+        status = member.get("status")
+        if status == "restricted" and not member.get("is_member", True):
+            return "left"  # restricted, but no longer in the group
+        return status
+
+    async def set_menu_button(self, bot_token: str, text: str, url: str) -> None:
+        """The button next to the message box that opens a Mini App (all private chats)."""
+        await self._call(bot_token, "setChatMenuButton", {
+            "menu_button": {"type": "web_app", "text": text[:64], "web_app": {"url": url}},
         })
 
     async def delete_webhook(self, bot_token: str) -> None:

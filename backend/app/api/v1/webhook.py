@@ -79,7 +79,7 @@ async def telegram_webhook(
         return {"ok": True}
 
     # 4. Setup commands work for every store, even one waiting for approval:
-    #    /link <code> (Phase 9b) and /chatid. Otherwise a store that isn't
+    #    /link <code> (Phase 9b), /chatid, and /dashboard (Phase 10b). Otherwise a store that isn't
     #    active (D14) only tells customers it isn't taking orders yet.
     if link_command(update) is not None:
         onboarding = Onboarding(db, orchestrator.telegram, get_settings().public_base_url)
@@ -87,6 +87,10 @@ async def telegram_webhook(
         return {"ok": True}
     if orchestrator.staff.is_chat_id_request(update):
         background.add_task(orchestrator.staff.send_chat_id, store, update)
+        return {"ok": True}
+    if orchestrator.app_access.is_dashboard_request(store, update):  # the Mini App (Phase 10b)
+        background.add_task(orchestrator.app_access.answer_dashboard, store, update,
+                            get_settings().public_base_url)
         return {"ok": True}
     if store.status != "active":
         message = parse_update(store.id, update)
