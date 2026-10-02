@@ -458,6 +458,10 @@ def test_staff_manage_products_and_stock_but_not_prices(world):
                                                 "variants": [{"color": "Red", "size": "One", "stock": 3}]},
                         headers=headers(MEMBER))
     assert added.status_code == 201 and added.json()["total_stock"] == 3
+    # An owner's product without colors or sizes still shows its price.
+    bare = client.post(url("/products"), json={"product": {"name": "Cap", "base_price": 900}},
+                       headers=headers(OWNER)).json()
+    assert bare["price_min"] == bare["price_max"] == "900" and bare["variant_count"] == 0
     assert client.post(url("/products"), json={"product": {"name": "X", "base_price": 10}},
                        headers=headers(MEMBER)).status_code == 403
     assert client.post(url("/products"), json={"product": {"name": "X"},

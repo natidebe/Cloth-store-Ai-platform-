@@ -82,6 +82,8 @@ def summarize(product: dict[str, Any]) -> dict[str, Any]:
     """A product row (with product_variants) as the Mini App's list shows it."""
     variants = product.get("product_variants") or []
     prices = [p for p in (effective_price(v, product) for v in variants) if p is not None]
+    if not prices and product.get("base_price") is not None:
+        prices = [effective_price({}, product)]  # no colors or sizes yet: the product's own price
     total = sum(int(v.get("stock_quantity") or 0) for v in variants)
     return {
         "id": product["id"], "code": product.get("code"), "name": product["name"],
