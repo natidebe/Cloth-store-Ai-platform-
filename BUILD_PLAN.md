@@ -1023,7 +1023,7 @@ platform bot and approve it.
 
 ---
 
-### Phase 12 — Sales in the shop (counter sales and price negotiation) 📝 Planned (D53–D57)
+### Phase 12 — Sales in the shop (counter sales and price negotiation) 🟡 Backend built; waiting for migration 012 and my design (frontend)
 
 **Goal:** a customer who walks into the shop is part of the system too:
 stock stays right, the sale counts in the numbers, and the shop can agree a
@@ -1098,6 +1098,26 @@ can't be filled: the last Airmax 42 was sold in the shop. Call the customer."
 - Tests: the price rule (staff limit, owner, never above the listed price),
   stock and holds, the all-or-nothing save, analytics with both kinds,
   cross-store.
+
+**How the backend was built:**
+- Migration `012_counter_sales.sql`: orders get `channel` (telegram /
+  in_shop), payment method and note, who sold it, a note; order lines get
+  `list_price`; stores get `staff_discount_percent` (default 10);
+  `record_counter_sale()` checks every line (the variant is the store's,
+  price ≤ listed, ≥ the staff limit, enough stock, online holds), then
+  saves the order (paid, delivered), its lines, the stock and the payment
+  in one transaction, once per `request_id`; `store_analytics()` adds
+  Telegram vs in shop, discounts and sellers.
+- `backend/app/agents/counter.py`: the role rule (owner: no limit, staff:
+  the store's), clear refusals, the staff group note with listed price and
+  discount, "call this customer" for an online order whose held item was
+  sold.
+- Endpoints: `POST /counter-sales`, `GET /variants/{id}/availability`;
+  `GET /me` adds the staff limit and the payment methods; `PUT /settings`
+  takes `staff_discount_percent`; orders show channel, seller, method,
+  listed price. API: `docs/mini-app-api.md`.
+- Tests: `test_counter.py` (endpoints, roles, notes) and
+  `test_counter_db.py` (the database's rules, after migration 012).
 
 **Not in this phase (later, if needed):** returns and exchanges at the
 counter; a printed or Telegram receipt for the walk-in customer; a

@@ -13,6 +13,8 @@ created the store). Members are "staff", the group's admins "owners":
                PATCH /api/v1/app/stores/{store}/products/{product}        details (staff: not the price)
                POST /api/v1/app/stores/{store}/photos                     upload a photo -> its link
                GET  /api/v1/app/stores/{store}/orders?status=all|unpaid|paid   view only
+               POST /api/v1/app/stores/{store}/counter-sales              a sale in the shop (Phase 12)
+               GET  /api/v1/app/stores/{store}/variants/{variant}/availability   stock + online holds
                POST /api/v1/app/stores/{store}/products                   a product + its grid (staff: no prices)
                PUT  /api/v1/app/stores/{store}/products/{product}/variants   save the grid (staff: no prices)
     owners
@@ -35,6 +37,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.agents.analytics import Period, store_analytics
 from app.agents.catalog import Catalog
+from app.agents.counter import CounterSaleError, CounterSales, SaleLine, SaleRequest
 from app.agents.inventory import GridRow, Inventory, InventoryError, summarize
 from app.agents.miniapp import AppAccess
 from app.agents.onboarding import LINK_CODE_MINUTES, LINK_COMMAND, Onboarding, OnboardingError
@@ -188,6 +191,8 @@ class SettingsIn(BaseModel):
     location: str | None = Field(default=None, max_length=1000)
     pickup_instructions: str | None = Field(default=None, max_length=1000)
     return_policy: str | None = Field(default=None, max_length=1000)
+    # Counter sales (D53): how far below the listed price staff may go, in percent.
+    staff_discount_percent: Decimal | None = Field(default=None, ge=0, le=100)
 
 
 class BotTokenIn(BaseModel):
@@ -206,8 +211,21 @@ async def me(access: AppAccess = Depends(app_access)) -> dict[str, Any]:
         "store": {"id": store.id, "name": store.name, "status": store.status, "plan": store.plan,
                   "bot_username": store.telegram_bot_username,
                   "staff_group_linked": store.staff_chat_id is not None,
-                  "channel_linked": store.channel_id is not None},
+                  "channel_linked": store.channel_id is not None,
+                  # Counter sales (Phase 12): staff's lowest price, and how walk-ins can pay.
+                  "staff_discount_percent": store.staff_discount_percent,
+                  "payment_methods": payment_methods(store)},
     }
+
+
+def payment_methods(store: Store) -> list[str]:
+    """Cash, then the store's own payment accounts (D56: anything else is "Other")."""
+    names = ["Cash"]
+    for account in store.payment_accounts:
+        name = str(account.get("name") or "").strip()
+        if name and name.lower() not in {n.lower() for n in names}:
+            names.append(name)
+    return names
 
 
 # --- Analytics --------------------------------------------------------------------------
@@ -386,7 +404,8 @@ def _order(row: dict[str, Any]) -> dict[str, Any]:
         product = variant.get("products") or {}
         items.append({"name": product.get("name"), "code": product.get("code"),
                       "color": variant.get("color"), "size": variant.get("size"),
-                      "quantity": item["quantity"], "price": item["price"]})
+                      "quantity": item["quantity"], "price": item["price"],
+                      "list_price": item.get("list_price")})
     address = row.get("delivery_address")
     return {
         "id": row["id"], "number": order_number(UUID(row["id"])),
@@ -396,6 +415,10 @@ def _order(row: dict[str, Any]) -> dict[str, Any]:
         "customer": {"name": row.get("contact_name"), "phone": row.get("contact_phone")},
         "delivery_address": None if address == ADDRESS_TO_ARRANGE else address,
         "created_at": row["created_at"], "items": items,
+        # Phase 12: where it was sold; for counter sales who sold it and how it was paid.
+        "channel": row.get("channel") or "telegram",
+        "payment_method": row.get("payment_method"), "payment_note": row.get("payment_note"),
+        "sold_by": row.get("sold_by_name"), "note": row.get("note"),
     }
 
 
@@ -413,6 +436,69 @@ async def list_orders(
     return {"orders": orders, "more": len(orders) == limit}
 
 
+# --- Counter sales (Phase 12, D53–D57) ----------------------------------------------------
+
+class CounterLineIn(BaseModel):
+    variant_id: UUID
+    quantity: int = Field(ge=1, le=1000)
+    price: Decimal = Field(ge=0, le=10_000_000)  # the price agreed at the counter, per item
+
+
+class CounterSaleIn(BaseModel):
+    items: list[CounterLineIn] = Field(min_length=1, max_length=50)
+    payment_method: str = Field(min_length=1, max_length=60)  # "Cash", "Telebirr", "Other"...
+    payment_note: str | None = Field(default=None, max_length=300)
+    customer_name: str | None = Field(default=None, max_length=80)
+    customer_phone: str | None = Field(default=None, max_length=30)
+    note: str | None = Field(default=None, max_length=500)
+    allow_held: bool = False  # sell even what an online order is holding (D55)
+    request_id: UUID  # made by the app per sale: pressing Confirm twice saves once
+
+    @field_validator("payment_method", "payment_note", "customer_name", "customer_phone", "note")
+    @classmethod
+    def _text(cls, value: str | None) -> str | None:
+        return (value or "").strip() or None
+
+
+def get_counter(db: SupabaseService = Depends(get_db),
+                orchestrator: Orchestrator = Depends(get_orchestrator)) -> CounterSales:
+    return CounterSales(db, orchestrator.telegram)
+
+
+@router.get("/variants/{variant_id}/availability")
+async def availability(variant_id: UUID, access: AppAccess = Depends(app_access),
+                       counter: CounterSales = Depends(get_counter)) -> dict[str, Any]:
+    """Before a counter sale: stock, and online orders holding it (D55)."""
+    try:
+        return await counter.availability(access.store, variant_id)
+    except CounterSaleError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message)
+
+
+@router.post("/counter-sales", status_code=201)
+async def counter_sale(body: CounterSaleIn, access: AppAccess = Depends(app_access),
+                       counter: CounterSales = Depends(get_counter)) -> dict[str, Any]:
+    """A sale in the shop: staff and owners (staff within the discount limit,
+    checked by the database). Errors: 403 discount too large, 409 not enough
+    stock / held by an online order (send again with allow_held: true)."""
+    if body.payment_method is None:
+        raise HTTPException(status_code=422, detail="choose how the customer paid")
+    sale = SaleRequest(
+        lines=[SaleLine(i.variant_id, i.quantity, i.price) for i in body.items],
+        payment_method=body.payment_method, request_id=str(body.request_id),
+        payment_note=body.payment_note, customer_name=body.customer_name,
+        customer_phone=body.customer_phone, note=body.note, allow_held=body.allow_held,
+    )
+    try:
+        result = await counter.sell(access, sale)
+    except CounterSaleError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message,
+                            headers={"X-Error-Code": error.code})
+    return {"order_id": result.order_id, "number": result.number, "total": result.total,
+            "list_total": result.list_total, "discount": result.discount,
+            "already_saved": result.already_saved, "held_orders": result.held_orders}
+
+
 # --- Store settings (owners) ------------------------------------------------------------
 
 def _settings(store: Store) -> dict[str, Any]:
@@ -420,7 +506,7 @@ def _settings(store: Store) -> dict[str, Any]:
     and for older stores whose profile is still text only)."""
     return {
         "payment_accounts": store.payment_accounts, "delivery_areas": store.delivery_areas,
-        "opening_week": store.opening_week,
+        "opening_week": store.opening_week, "staff_discount_percent": store.staff_discount_percent,
         **{name: getattr(store, name) for name in PROFILE_FIELDS},
     }
 
@@ -438,6 +524,8 @@ async def save_store_settings(body: SettingsIn, access: AppAccess = Depends(owne
     for name in ("location", "pickup_instructions", "return_policy"):
         if name in sent:
             changes[name] = (getattr(body, name) or "").strip() or None
+    if "staff_discount_percent" in sent and body.staff_discount_percent is not None:
+        changes["staff_discount_percent"] = body.staff_discount_percent
     if "payment_accounts" in sent:
         accounts = body.payment_accounts or []
         changes["payment_accounts"] = [a.model_dump(exclude_none=True) for a in accounts]

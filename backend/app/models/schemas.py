@@ -98,6 +98,9 @@ class Store(DbModel):
     payment_accounts: list[dict] = Field(default_factory=list)
     delivery_areas: list[dict] = Field(default_factory=list)
     opening_week: dict | None = None
+    # Counter sales (migration 012, D53): staff may sell this much below the
+    # listed price at most (percent); the owner any price.
+    staff_discount_percent: Decimal = Decimal("10")
 
     @property
     def profile(self) -> StoreProfile:

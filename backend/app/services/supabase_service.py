@@ -86,6 +86,8 @@ _OUT_OF_STOCK = {"out_of_stock", "insufficient_stock"}
 _REJECTED = {
     "empty_order", "invalid_quantity", "price_missing", "invalid_fulfillment",
     "address_required", "order_cancelled", "already_paid", "incomplete_order",
+    # Counter sales (migration 012)
+    "duplicate_item", "invalid_price", "price_above_list", "discount_too_large", "held_by_online_order",
 }
 _UNIQUE_VIOLATION = "23505"
 
@@ -297,7 +299,8 @@ class SupabaseService:
             self._db.table("orders")
             .select("id, status, payment_status, total_price, currency, fulfillment_method, "
                     "contact_name, contact_phone, delivery_address, created_at, reserved_until, "
-                    "order_items(quantity, price, product_variants(color, size, products(name, code)))")
+                    "channel, payment_method, payment_note, sold_by_name, note, "
+                    "order_items(quantity, price, list_price, product_variants(color, size, products(name, code)))")
             .eq("store_id", str(store_id)).order("created_at", desc=True).limit(limit)
         )
         if payment_status:
@@ -305,6 +308,43 @@ class SupabaseService:
         if before is not None:
             request = request.lt("created_at", before.isoformat())
         return await self._run(request)
+
+    # Counter sales (Phase 12, migration 012)
+
+    async def record_counter_sale(
+        self, store_id: UUID, items: list[dict[str, Any]], *, payment_method: str,
+        payment_note: str | None, sold_by_telegram_id: int, sold_by_name: str,
+        contact_name: str | None, contact_phone: str | None, note: str | None,
+        max_discount_percent: Decimal | None, allow_held: bool, idempotency_key: str,
+    ) -> dict[str, Any]:
+        """A sale in the shop, all or nothing (see migration 012). `items`:
+        [{"variant_id", "quantity", "price"}]. max_discount_percent: None for
+        the owner, the store's limit for staff. Raises OutOfStockError,
+        NotFoundError or OrderRejectedError (code: discount_too_large,
+        price_above_list, held_by_online_order, ...)."""
+        return await self._run(self._db.rpc("record_counter_sale", {
+            "p_store_id": str(store_id),
+            "p_items": [{"variant_id": str(i["variant_id"]), "quantity": int(i["quantity"]),
+                         "price": str(i["price"])} for i in items],
+            "p_payment_method": payment_method, "p_payment_note": payment_note,
+            "p_sold_by_telegram_id": sold_by_telegram_id, "p_sold_by_name": sold_by_name,
+            "p_contact_name": contact_name, "p_contact_phone": contact_phone, "p_note": note,
+            "p_max_discount_percent": str(max_discount_percent) if max_discount_percent is not None else None,
+            "p_allow_held": allow_held, "p_idempotency_key": idempotency_key,
+        }))
+
+    async def holds_on_variant(self, store_id: UUID, variant_id: UUID) -> list[dict[str, Any]]:
+        """Online orders holding this variant right now (unpaid, within their
+        hold, D19): [{"order_id", "quantity", "reserved_until"}]."""
+        rows = await self._run(
+            self._db.table("order_items")
+            .select("quantity, orders!inner(id, store_id, status, payment_status, reserved_until)")
+            .eq("variant_id", str(variant_id))
+            .eq("orders.store_id", str(store_id)).eq("orders.status", "pending")
+            .eq("orders.payment_status", "unpaid").gt("orders.reserved_until", _now().isoformat())
+        )
+        return [{"order_id": r["orders"]["id"], "quantity": r["quantity"],
+                 "reserved_until": r["orders"]["reserved_until"]} for r in rows]
 
     # Products and stock (inventory, docs/inventory-management.md)
 
@@ -401,7 +441,9 @@ class SupabaseService:
     async def update_store_profile(self, store_id: UUID, fields: dict[str, Any]) -> None:
         """Change the store's profile: the texts (PROFILE_FIELDS) and the lists
         the Mini App edits (migration 011). Nothing else on the store."""
-        changes = {k: v for k, v in fields.items() if k in PROFILE_FIELDS or k in PROFILE_LISTS}
+        changes = {k: v for k, v in fields.items()
+                   if k in PROFILE_FIELDS or k in PROFILE_LISTS or k == "staff_discount_percent"}
+        changes = _json_safe(changes)
         if not changes:
             return
         rows = await self._run(self._db.table("stores").update(changes).eq("id", str(store_id)))
