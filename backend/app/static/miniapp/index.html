@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Store dashboard</title>
+  <!-- Placeholder until the React app (frontend/) is built: shows who you are,
+       to test the Mini App login (Phase 10b, step 1). -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px;
+           background: var(--tg-theme-bg-color, #fff); color: var(--tg-theme-text-color, #111); }
+    .card { padding: 12px 14px; border-radius: 12px; margin: 12px 0;
+            background: var(--tg-theme-secondary-bg-color, #f2f2f2); }
+    .muted { color: var(--tg-theme-hint-color, #777); font-size: 14px; }
+    pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h2 id="title">Store dashboard</h2>
+  <div class="card" id="out">Loading…</div>
+  <p class="muted">The full dashboard is coming soon. / ሙሉ ዳሽቦርዱ በቅርቡ ይመጣል።</p>
+  <script>
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if (tg) { tg.ready(); tg.expand(); }
+    const out = document.getElementById("out");
+    const platform = location.pathname.replace(/\/+$/, "").endsWith("/platform");
+    const store = new URLSearchParams(location.search).get("store");
+    const url = platform ? "/api/v1/platform-app/me" : `/api/v1/app/stores/${store}/me`;
+    const show = (html) => { out.innerHTML = html; };
+    if (!tg || !tg.initData) {
+      show("Open this page from the bot in Telegram.");
+    } else if (!platform && !store) {
+      show("Missing store.");
+    } else {
+      fetch(url, { headers: { "X-Telegram-Init-Data": tg.initData } })
+        .then(async (r) => ({ ok: r.ok, body: await r.json() }))
+        .then(({ ok, body }) => {
+          if (!ok) return show(`❌ ${body.detail || "Not allowed"}`);
+          if (platform) {
+            document.getElementById("title").textContent = "Platform";
+            return show(`👋 ${body.user.name}<br>Platform admin: <b>${body.is_platform_admin ? "yes" : "no"}</b>` +
+                        `<br>Your stores: ${body.stores.map(s => `${s.name} (${s.status})`).join(", ") || "none"}`);
+          }
+          document.getElementById("title").textContent = body.store.name;
+          show(`👋 ${body.user.name}<br>Role: <b>${body.role}</b><br>Store: ${body.store.status}` +
+               `, staff group ${body.store.staff_group_linked ? "✅" : "❌"}` +
+               `, channel ${body.store.channel_linked ? "✅" : "❌"}`);
+        })
+        .catch((e) => show(`❌ ${e}`));
+    }
+  </script>
+</body>
+</html>

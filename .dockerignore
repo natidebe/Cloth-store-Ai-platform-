@@ -1,0 +1,18 @@
+# Never in the image: secrets, local environments, build output, tests' caches.
+.git
+**/.env
+!**/.env.example
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+frontend/node_modules
+frontend/dist
+frontend/coverage
+dashboard ui design
+.claude
+docs
+db
+backend/tests
+*.md
+!frontend/README.md

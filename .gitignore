@@ -7,3 +7,8 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# The frontend lives on the Front-end branch; its packages and build may
+# stay on disk here (the backend serves frontend/dist at /app/).
+frontend/node_modules/
+frontend/dist/
