@@ -37,6 +37,9 @@ services:
         sync: false
       - key: SUPPORT_USERNAME
         sync: false
+      # Error tracking (optional): Sentry → Project Settings → Client Keys
+      - key: SENTRY_DSN
+        sync: false
       - key: AI_DAILY_CALLS_PER_STORE
         value: "300"
       - key: CUSTOMER_MESSAGES_PER_MINUTE

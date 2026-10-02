@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     # "Contact support" in the platform app: a Telegram username, e.g. nati_support.
     support_username: str = ""
 
+    # Error tracking (Sentry). Empty: off. The DSN is from Sentry → Project
+    # Settings → Client Keys; the environment separates the live server's errors.
+    sentry_dsn: SecretStr = SecretStr("")
+    sentry_environment: str = "production"
+
     @field_validator("supabase_url")
     @classmethod
     def _project_url_only(cls, value: str) -> str:
