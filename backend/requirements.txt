@@ -3,4 +3,5 @@ pydantic-settings==2.15.0
 supabase==2.31.0
 httpx==0.28.1
 openai==3.19.2
+sentry-sdk[fastapi]==2.70.0
 pytest==9.1.1

@@ -10,6 +10,7 @@ from app.agents.catalog import Catalog
 from app.agents.orchestrator import Orchestrator
 from app.api.v1 import admin, catalog, health, miniapp, platform, platform_app, stores, webhook
 from app.core.config import get_settings
+from app.core.monitoring import init_sentry
 from app.services.conversation_service import DatabaseConversationStore, RateLimiter
 from app.services.llm_service import create_provider
 from app.services.supabase_service import SupabaseService
@@ -82,6 +83,9 @@ async def lifespan(app: FastAPI):
         await app.state.db.close()
     logger.info("shutting down")
 
+
+# Before the app exists, so Sentry hooks into FastAPI (off without SENTRY_DSN).
+init_sentry(get_settings())
 
 app = FastAPI(title="Cloth Store AI Platform", lifespan=lifespan)
 

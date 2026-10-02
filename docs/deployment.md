@@ -121,6 +121,15 @@ Logs: Render → the service → Logs.
 4. **Monitoring** (free): an uptime check on `https://<address>/api/v1/health`
    every 5 minutes (UptimeRobot or Better Stack) that alerts you on
    Telegram or by email when it's down.
+   **Error tracking** (Sentry, free Developer plan): sentry.io → create a
+   project (platform: FastAPI) → copy its **DSN** (Project Settings →
+   Client Keys) → Render → Environment → `SENTRY_DSN` = the DSN → save
+   (Render redeploys). Every crash, 5xx and `logger.error` then arrives in
+   Sentry with the exact error, grouped, with the commit that caused it;
+   it emails you by default (Alerts → add a rule for "a new issue" for
+   instant mail). Nothing secret is sent: no request bodies, no local
+   variables, and bot tokens, keys, Mini App login data and customers'
+   phone numbers are removed (`app/core/monitoring.py`). Empty DSN: off.
 5. **One instance only**, always on.
 6. Tell every shop: **check the money arrived** in Telebirr/the bank before
    pressing Confirm payment (screenshots can be fake).
