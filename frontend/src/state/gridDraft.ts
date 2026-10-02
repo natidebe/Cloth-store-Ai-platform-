@@ -6,6 +6,9 @@ import type { GridRow, Product } from '@/api/types';
  * The "Stock and prices" grid while it's being edited: colors × sizes, the
  * stock and own price of each cell, which cell is selected, and what will be
  * removed. Nothing reaches the server until Save (one PUT of the whole grid).
+ *
+ * Colors and sizes are optional: a bag or a belt is one cell with neither
+ * ("" here, null on the server), a belt in two colors has colors only.
  */
 export interface Cell {
   id?: string; // an existing variant
@@ -54,6 +57,31 @@ export function sortSizes(sizes: string[]): string[] {
 }
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** The grid's rows or columns: "" (none) when nothing was added. */
+export const axis = (names: string[]) => (names.length > 0 ? names : ['']);
+
+type Keyed = Pick<GridDraft, 'cells' | 'removed' | 'selected'>;
+
+/**
+ * The first color (or size) of a product that had none: what was set without
+ * one moves to it (the same variants, so their stock and orders stay).
+ */
+function nameTheBlank(s: Keyed, part: 0 | 1, name: string): Keyed {
+  const move = (key: string) => {
+    const parts = splitKey(key);
+    if (parts[part] !== '') return key;
+    parts[part] = name;
+    return cellKey(parts[0], parts[1]);
+  };
+  const rekey = <T>(record: Record<string, T>) =>
+    Object.fromEntries(Object.entries(record).map(([key, value]) => [move(key), value]));
+  return {
+    cells: rekey(s.cells),
+    removed: rekey(s.removed),
+    selected: s.selected === null ? null : move(s.selected),
+  };
+}
 
 export const useGridDraft = create<GridDraft>()((set, get) => ({
   productId: null,
@@ -133,14 +161,22 @@ export const useGridDraft = create<GridDraft>()((set, get) => ({
   addColor: (color) => {
     const name = color.trim();
     if (!name || get().colors.some((c) => same(c, name))) return false;
-    set((s) => ({ colors: [...s.colors, name], dirty: true }));
+    set((s) =>
+      s.colors.every((c) => c === '')
+        ? { ...nameTheBlank(s, 0, name), colors: [name], dirty: true }
+        : { colors: [...s.colors, name], dirty: true },
+    );
     return true;
   },
 
   addSize: (size) => {
     const name = size.trim();
     if (!name || get().sizes.some((x) => same(x, name))) return false;
-    set((s) => ({ sizes: sortSizes([...s.sizes, name]), dirty: true }));
+    set((s) =>
+      s.sizes.every((x) => x === '')
+        ? { ...nameTheBlank(s, 1, name), sizes: [name], dirty: true }
+        : { sizes: sortSizes([...s.sizes, name]), dirty: true },
+    );
     return true;
   },
 

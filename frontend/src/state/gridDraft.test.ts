@@ -49,6 +49,36 @@ describe('the stock grid draft', () => {
   });
 });
 
+describe('colors and sizes are optional', () => {
+  const plain = () => ({
+    ...jacket(),
+    variants: [
+      { id: 'v-1', color: null, size: null, stock: 4, price_override: null, price: '900' },
+    ],
+  });
+
+  it('a product with neither is one cell, saved without color and size', () => {
+    grid().load(plain());
+    expect(grid().rows()).toEqual([{ id: 'v-1', color: null, size: null, stock: 4, price: null }]);
+  });
+
+  it('the first size takes over the stock set without one', () => {
+    grid().load(plain());
+    grid().addSize('42');
+    grid().addSize('43');
+    expect(grid().sizes).toEqual(['42', '43']);
+    expect(grid().cells[cellKey('', '42')]).toEqual({ id: 'v-1', stock: 4, price: '' });
+    expect(grid().selected).toBe(cellKey('', '42'));
+  });
+
+  it('a product that already has colors keeps them when one is added', () => {
+    grid().load(jacket());
+    grid().addColor('Black');
+    expect(grid().colors).toEqual(['Blue', 'Black']);
+    expect(grid().cells[cellKey('Blue', 'M')]?.id).toBe('v-blue-m');
+  });
+});
+
 describe('sortSizes', () => {
   it('orders clothing sizes, then shoe sizes, then anything else', () => {
     expect(sortSizes(['XL', '42', 'S', 'One size', '40', 'M'])).toEqual([

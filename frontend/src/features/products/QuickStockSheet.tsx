@@ -96,7 +96,7 @@ export function QuickStockSheet({
       )}
       {variants.map((variant) => {
         const value = draft[variant.id] ?? variant.stock;
-        const label = variantLabel(variant.color, variant.size) || t('grid.noSize');
+        const label = variantLabel(variant.color, variant.size) || t('grid.inStock');
         return (
           <div key={variant.id} className={s.stockRow}>
             {variant.color && (
