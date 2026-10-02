@@ -1,0 +1,69 @@
+# Tests on every pull request into main (and on main itself), so a broken
+# change is caught before Render deploys it. Three checks:
+#   backend   pytest (the live-database tests skip: CI has no Supabase keys,
+#             on purpose, so it never writes test data into the real database)
+#   frontend  typecheck, lint, tests, build (same Node and npm as the Dockerfile)
+#   docker    the production image still builds
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # as in the Dockerfile
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q
+
+  frontend:
+    name: Mini App checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # as in the Dockerfile
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # The npm that made package-lock.json (see the Dockerfile).
+      - run: npm install -g npm@11.11.0 --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --tag cloth-store:ci .

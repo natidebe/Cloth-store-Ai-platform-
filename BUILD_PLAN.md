@@ -793,7 +793,7 @@ Supabase (store row + bot token + my user in `store_staff` as owner).
 
 ---
 
-### Phase 10 — Making it robust ✅ Built (D21); waiting for migration 009
+### Phase 10 — Making it robust ✅ Done (D21, migration 009 run)
 
 **Goal:** the bot behaves well when things go wrong.
 
@@ -851,7 +851,7 @@ then the AI isn't limited (the counter isn't there yet).
 
 ---
 
-### Phase 10b — Telegram Mini App (the store dashboard) 🟡 Built (backend + React app from my design); waiting for migration 011 and my test in Telegram
+### Phase 10b — Telegram Mini App (the store dashboard) ✅ Done (migration 011 run; tested in Telegram as owner and staff)
 
 **Goal:** shop owners and staff manage their store inside Telegram, with no
 web dashboard: see how the store is doing, manage products and stock, and
@@ -1023,7 +1023,7 @@ platform bot and approve it.
 
 ---
 
-### Phase 12 — Sales in the shop (counter sales and price negotiation) 🟡 Backend built and migration 012 run (database tests pass); frontend from my design next
+### Phase 12 — Sales in the shop (counter sales and price negotiation) ✅ Done (migration 012 run; backend + Mini App screens live on Render, tested in Telegram: counter sale, Telegram / in-shop filter, this week / month)
 
 **Goal:** a customer who walks into the shop is part of the system too:
 stock stays right, the sale counts in the numbers, and the shop can agree a
