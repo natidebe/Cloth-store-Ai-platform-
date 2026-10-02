@@ -981,7 +981,7 @@ platform bot and approve it.
 
 ---
 
-### Phase 11 — Ready to deploy 🟡 Built; the image still to be test-built (Docker Desktop off), nothing deployed
+### Phase 11 — Ready to deploy ✅ Built and the image tested; nothing deployed yet (waiting for my hosting choice)
 
 **Goal:** everything needed to put it online.
 
@@ -996,6 +996,11 @@ platform bot and approve it.
   not root, a health check on `/api/v1/health`, ONE uvicorn worker (the
   locks and spam limits are in memory), `PORT` from the host.
   `.dockerignore` keeps secrets, local environments and tests out.
+- Image tested (October 2026) from backend-scaffold + Front-end merged (they
+  merge without conflicts), like `main`: builds (232 MB), runs as a non-root
+  user, Docker reports it healthy, serves the React app at `/app/` (deep
+  links too, old assets 404), and has no `.env` or tests inside. Fixed on
+  the way: the image now uses npm 11.11 (the one that made the lock file).
 - `scripts/connect_all.py`: points every store's bot and the platform bot
   at `PUBLIC_BASE_URL` (after a deploy or a new ngrok address); `--check`
   shows where each one sends its messages.
