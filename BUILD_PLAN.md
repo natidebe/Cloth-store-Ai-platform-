@@ -981,7 +981,7 @@ platform bot and approve it.
 
 ---
 
-### Phase 11 — Ready to deploy
+### Phase 11 — Ready to deploy 🟡 Built; the image still to be test-built (Docker Desktop off), nothing deployed
 
 **Goal:** everything needed to put it online.
 
@@ -989,6 +989,24 @@ platform bot and approve it.
 - Update `README.md`: setup, running locally, running tests.
 - 2–3 low-cost hosting options with pros and cons. Nothing gets deployed
   without asking me.
+
+**How it was built:**
+- `Dockerfile` (repo root): stage 1 builds the Mini App if `frontend/` is
+  there (it is on `main`), stage 2 is Python 3.12 slim with the backend,
+  not root, a health check on `/api/v1/health`, ONE uvicorn worker (the
+  locks and spam limits are in memory), `PORT` from the host.
+  `.dockerignore` keeps secrets, local environments and tests out.
+- `scripts/connect_all.py`: points every store's bot and the platform bot
+  at `PUBLIC_BASE_URL` (after a deploy or a new ngrok address); `--check`
+  shows where each one sends its messages.
+- `README.md` rewritten: what it is, folders and branches, running it
+  locally, tests, scripts.
+- `docs/deployment.md`: Render ($7) / Fly.io (~$2–5) / Hetzner (€5.99),
+  plus Supabase Pro ($25: the free plan pauses after a week and has no
+  backups); recommended for the pilot: Render + Supabase Pro ≈ $32/month
+  plus the AI. Step-by-step for Render, and the go-live checklist
+  (replace the exposed secrets, Pro, migrations, uptime monitoring, one
+  instance, "check the money before confirming").
 
 ---
 

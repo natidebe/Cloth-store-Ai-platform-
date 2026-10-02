@@ -681,6 +681,16 @@ class SupabaseService:
         )
         return [Product.model_validate(row) for row in rows]
 
+    async def stores_to_connect(self) -> list[Store]:
+        """Pending and active stores that have a bot: the ones whose bot must
+        point at this server (scripts/connect_all.py, after the address
+        changed). Looks across stores on purpose; each is then handled alone."""
+        rows = await self._run(
+            self._db.table("stores").select("*")
+            .in_("status", ["pending", "active"]).not_.is_("telegram_bot_token", "null")
+        )
+        return [Store.model_validate(row) for row in rows]
+
     async def stores_with_channel(self) -> list[Store]:
         """Active stores that have a channel. Looks across stores on purpose:
         it only finds work for the post check, which is then done per store."""
