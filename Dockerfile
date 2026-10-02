@@ -13,6 +13,9 @@
 
 # --- 1. The Mini App --------------------------------------------------------------
 FROM node:22-alpine AS frontend
+# The npm that made frontend/package-lock.json: npm 10 (Node 22's own) reads
+# its optional test dependencies differently and `npm ci` refuses the lock file.
+RUN npm install -g npm@11.11.0 --no-audit --no-fund
 WORKDIR /src
 COPY . .
 RUN if [ -f frontend/package.json ]; then \
