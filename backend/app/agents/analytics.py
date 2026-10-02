@@ -34,6 +34,7 @@ async def store_analytics(db: SupabaseService, store_id: UUID, period: Period,
                           ai_daily_limit: int | None, now: datetime | None = None) -> dict[str, Any]:
     start, end = period_bounds(period, now)
     raw = await db.store_analytics(store_id, start, end)
+    discounts = await db.shop_discounts_by_seller(store_id, start, end) if raw.get("sellers") else {}
     revenue, payments = _number(raw.get("revenue")), int(raw.get("payments") or 0)
     placed, paid = int(raw.get("orders_placed") or 0), int(raw.get("orders_paid") or 0)
     today = (now or datetime.now(timezone.utc)).astimezone(ADDIS).date().isoformat()
@@ -57,7 +58,9 @@ async def store_analytics(db: SupabaseService, store_id: UUID, period: Period,
         "discount_total": _number(raw.get("discount_total")),
         "discounted_items": int(raw.get("discounted_items") or 0),
         "sellers": [{"telegram_id": s.get("telegram_id"), "name": s.get("name"), "sales": int(s["sales"]),
-                     "revenue": _number(s["revenue"])} for s in raw.get("sellers") or []],
+                     "revenue": _number(s["revenue"]),
+                     "discount": discounts.get(s.get("telegram_id"), Decimal(0))}
+                    for s in raw.get("sellers") or []],
         "per_day": [{"day": d["day"], "placed": int(d["placed"]), "paid": int(d["paid"]),
                      "revenue": _number(d["revenue"])} for d in raw.get("per_day") or []],
         "top_products": [{"product_id": t["product_id"], "name": t["name"], "code": t.get("code"),

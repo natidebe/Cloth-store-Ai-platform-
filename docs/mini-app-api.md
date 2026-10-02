@@ -72,7 +72,7 @@ Days are Addis Ababa days; `7d` and `30d` include today. Money values are string
   "ai_calls_today": 12, "ai_daily_limit": 300,
   "telegram_orders": 5, "in_shop_sales": 3, "in_shop_revenue": "27000",
   "discount_total": "1500", "discounted_items": 2,
-  "sellers": [{"telegram_id": 123, "name": "Abdi", "sales": 3, "revenue": "27000"}]
+  "sellers": [{"telegram_id": 123, "name": "Abdi", "sales": 3, "revenue": "27000", "discount": "1000"}]
 }
 ```
 Every number counts Telegram orders and counter sales together; the last
@@ -149,7 +149,7 @@ Refusals (`detail` is the message to show; the `X-Error-Code` header says which)
 
 The staff limit is changed in `PUT /settings` → `staff_discount_percent` (owners).
 
-### `GET /orders?status=all|unpaid|paid&limit=30&before=<created_at>` (everyone)
+### `GET /orders?channel=all|telegram|in_shop&status=all|unpaid|paid&limit=30&before=<created_at>` (everyone)
 View only (confirming payments stays in the staff group, D46). Newest first;
 for more, pass the last order's `created_at` as `before`.
 ```json

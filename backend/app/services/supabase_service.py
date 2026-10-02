@@ -292,7 +292,8 @@ class SupabaseService:
                  "product_name": r["products"]["name"], "code": r["products"]["code"]} for r in rows]
 
     async def list_orders(self, store_id: UUID, payment_status: str | None = None,
-                          limit: int = 30, before: datetime | None = None) -> list[dict[str, Any]]:
+                          limit: int = 30, before: datetime | None = None,
+                          channel: str | None = None) -> list[dict[str, Any]]:
         """The store's orders, newest first, with their items (product,
         color, size). `before`: older than this (for "load more")."""
         request = (
@@ -305,6 +306,8 @@ class SupabaseService:
         )
         if payment_status:
             request = request.eq("payment_status", payment_status)
+        if channel:  # "telegram" or "in_shop" (Phase 12)
+            request = request.eq("channel", channel)
         if before is not None:
             request = request.lt("created_at", before.isoformat())
         return await self._run(request)
@@ -332,6 +335,24 @@ class SupabaseService:
             "p_max_discount_percent": str(max_discount_percent) if max_discount_percent is not None else None,
             "p_allow_held": allow_held, "p_idempotency_key": idempotency_key,
         }))
+
+    async def shop_discounts_by_seller(self, store_id: UUID, start: datetime, end: datetime) -> dict[Any, Decimal]:
+        """Discount given per seller (Telegram id) in counter sales of [start, end)."""
+        rows = await self._run(
+            self._db.table("orders").select("sold_by_telegram_id, order_items(quantity, price, list_price)")
+            .eq("store_id", str(store_id)).eq("channel", "in_shop").neq("status", "cancelled")
+            .gte("created_at", start.isoformat()).lt("created_at", end.isoformat())
+        )
+        totals: dict[Any, Decimal] = {}
+        for row in rows:
+            for item in row.get("order_items") or []:
+                if item.get("list_price") is None:
+                    continue
+                off = (Decimal(str(item["list_price"])) - Decimal(str(item["price"]))) * item["quantity"]
+                if off > 0:
+                    seller = row.get("sold_by_telegram_id")
+                    totals[seller] = totals.get(seller, Decimal(0)) + off
+        return totals
 
     async def holds_on_variant(self, store_id: UUID, variant_id: UUID) -> list[dict[str, Any]]:
         """Online orders holding this variant right now (unpaid, within their

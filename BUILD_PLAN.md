@@ -1023,7 +1023,7 @@ platform bot and approve it.
 
 ---
 
-### Phase 12 — Sales in the shop (counter sales and price negotiation) 🟡 Backend built; waiting for migration 012 and my design (frontend)
+### Phase 12 — Sales in the shop (counter sales and price negotiation) 🟡 Backend built and migration 012 run (database tests pass); frontend from my design next
 
 **Goal:** a customer who walks into the shop is part of the system too:
 stock stays right, the sale counts in the numbers, and the shop can agree a

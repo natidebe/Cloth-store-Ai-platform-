@@ -425,13 +425,16 @@ def _order(row: dict[str, Any]) -> dict[str, Any]:
 @router.get("/orders")
 async def list_orders(
     status: Literal["all", "unpaid", "paid"] = Query(default="all"),
+    channel: Literal["all", "telegram", "in_shop"] = Query(default="all"),
     before: datetime | None = Query(default=None),
     limit: int = Query(default=30, ge=1, le=100),
     access: AppAccess = Depends(app_access),
     db: SupabaseService = Depends(get_db),
 ) -> dict[str, Any]:
-    """Newest first. For more, pass the last order's created_at as `before`."""
-    rows = await db.list_orders(access.store.id, None if status == "all" else status, limit, before)
+    """Newest first. For more, pass the last order's created_at as `before`.
+    `channel`: Telegram orders or sales in the shop (Phase 12)."""
+    rows = await db.list_orders(access.store.id, None if status == "all" else status, limit, before,
+                                None if channel == "all" else channel)
     orders = [_order(r) for r in rows]
     return {"orders": orders, "more": len(orders) == limit}
 
