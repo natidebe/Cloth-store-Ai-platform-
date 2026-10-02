@@ -1,0 +1,157 @@
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: var(--gap);
+}
+
+.stat {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+
+.statValue {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.statWarn {
+  color: var(--warn-ink);
+}
+
+.statLabel {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search {
+  position: relative;
+  margin-bottom: var(--gap);
+}
+
+.searchIcon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.searchInput {
+  padding-left: 42px;
+  border-color: transparent;
+}
+
+.list {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 2px 14px;
+  box-shadow: var(--shadow);
+}
+
+.product {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border: none;
+  border-bottom: 1px solid var(--divider);
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+
+.product:last-child {
+  border-bottom: none;
+}
+
+.productMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.productName {
+  font-weight: 600;
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.productMeta {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 2px 0;
+}
+
+.productPrice {
+  font-size: 14px;
+}
+
+.productEnd {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex: none;
+}
+
+.stockNumber {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.sheetHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.sheetTitle {
+  font-weight: 600;
+}
+
+.sheetSub {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.stockRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.stockRow:last-child {
+  border-bottom: none;
+}
+
+.dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--field-border);
+  flex: none;
+}
+
+.stockLabel {
+  flex: 1;
+  font-weight: 500;
+}
+
+.sheetActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}

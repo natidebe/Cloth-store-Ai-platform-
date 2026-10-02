@@ -1,0 +1,120 @@
+.scroll {
+  overflow-x: auto;
+  margin: 0 -4px 12px;
+}
+
+.grid {
+  border-collapse: separate;
+  border-spacing: 6px;
+  width: 100%;
+}
+
+.grid thead th {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+  padding-bottom: 2px;
+}
+
+.colorHead {
+  text-align: left;
+  white-space: nowrap;
+  font-weight: 500;
+  font-size: 14px;
+  padding-right: 4px;
+}
+
+.dot {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--field-border);
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+.colorName {
+  vertical-align: middle;
+}
+
+.cell {
+  width: 100%;
+  min-width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  border: 1px solid var(--field-border);
+  background: var(--card);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 0;
+}
+
+.cellStock {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.cellPrice {
+  font-size: 10px;
+  color: var(--text-muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zero {
+  background: var(--danger-bg);
+  border-color: transparent;
+}
+
+.empty {
+  border-style: dashed;
+  background: none;
+}
+
+.cellPlus {
+  color: var(--text-faint);
+  font-size: 20px;
+}
+
+.selected {
+  border: 2px solid var(--primary);
+}
+
+.addRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.emptyText {
+  color: var(--text-muted);
+  margin: 0 0 12px;
+}
+
+.selectedTitle {
+  font-weight: 700;
+  margin: 0 0 14px;
+}
+
+.stockLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.steps {
+  margin-bottom: 14px;
+}

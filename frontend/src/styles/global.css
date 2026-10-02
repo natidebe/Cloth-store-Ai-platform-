@@ -1,0 +1,146 @@
+/*
+ * Design tokens from the Mini App design ("dashboard ui design/"), light and
+ * dark. <html data-theme="dark"> follows Telegram's color scheme (lib/theme.ts).
+ */
+:root {
+  --bg: #efeff4;
+  --card: #ffffff;
+  --card-raised: #ffffff;
+  --text: #111114;
+  --text-muted: #6b6b72;
+  --text-faint: #8e8e93;
+  --divider: #e5e5ea;
+  --field-border: #d9d9df;
+  --field-disabled: #ececf1;
+
+  --primary: #2178c4;
+  --primary-pressed: #1b65a6;
+  --primary-text: #ffffff;
+  --primary-soft: #e2eefa;
+  --primary-ink: #1f6fb6;
+
+  --warn-bg: #fdf0d5;
+  --warn-ink: #8a5a00;
+  --danger-bg: #fbe4e2;
+  --danger-ink: #c0352b;
+  --danger-border: #d64a3f;
+  --success-bg: #e3f3e6;
+  --success-ink: #2b7a3a;
+  --badge-staff-bg: #e5e5ea;
+  --badge-staff-ink: #5b5b62;
+
+  --segment-bg: #e3e3e8;
+  --segment-active: #ffffff;
+  --skeleton: #e4e4ea;
+  --overlay: rgba(0, 0, 0, 0.35);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+
+  --radius-card: 14px;
+  --radius-field: 12px;
+  --radius-pill: 999px;
+  --gap: 12px;
+  --page-x: 16px;
+  --bottom-bar: 88px;
+
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans Ethiopic', 'Nyala', sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --bg: #0e1620;
+  --card: #18212b;
+  --card-raised: #1e2934;
+  --text: #f1f4f8;
+  --text-muted: #9aa5b4;
+  --text-faint: #7b8696;
+  --divider: #2a3542;
+  --field-border: #33404e;
+  --field-disabled: #222c37;
+
+  --primary: #2f73bd;
+  --primary-pressed: #295f9c;
+  --primary-soft: #1d3349;
+  --primary-ink: #5da5ea;
+
+  --warn-bg: #3b2f12;
+  --warn-ink: #f4b740;
+  --danger-bg: #3c2020;
+  --danger-ink: #f08a7e;
+  --danger-border: #d0675c;
+  --success-bg: #183324;
+  --success-ink: #6fcf8a;
+  --badge-staff-bg: #2a3542;
+  --badge-staff-ink: #b6c0cc;
+
+  --segment-bg: #1b2530;
+  --segment-active: #0f1822;
+  --skeleton: #222d39;
+  --overlay: rgba(0, 0, 0, 0.55);
+  --shadow: none;
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: var(--tg-viewport-stable-height, 100dvh);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
