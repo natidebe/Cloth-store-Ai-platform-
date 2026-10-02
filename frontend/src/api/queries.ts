@@ -8,6 +8,7 @@ import {
 
 import { storeApi } from './endpoints';
 import type {
+  CounterSaleInput,
   GridRow,
   OrderFilter,
   Period,
@@ -77,6 +78,30 @@ export function useOrders(storeId: string, filter: OrderFilter) {
     queryFn: ({ pageParam }) => storeApi.orders(storeId, filter, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => (last.more ? last.orders.at(-1)?.created_at : undefined),
+  });
+}
+
+/** Stock and online holds of one variant, fresh each time it's picked (D55). */
+export function useAvailability(storeId: string, variantId: string | null) {
+  return useQuery({
+    queryKey: [...keys.store(storeId), 'availability', variantId ?? ''] as const,
+    queryFn: () => storeApi.availability(storeId, variantId as string),
+    enabled: Boolean(variantId),
+    staleTime: 0,
+  });
+}
+
+/** A sale in the shop: afterwards the orders, the stock and the numbers change. */
+export function useCounterSale(storeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sale: CounterSaleInput) => storeApi.counterSale(storeId, sale),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [...keys.store(storeId), 'orders'] });
+      void queryClient.invalidateQueries({ queryKey: keys.products(storeId) });
+      void queryClient.invalidateQueries({ queryKey: [...keys.store(storeId), 'product'] });
+      void queryClient.invalidateQueries({ queryKey: [...keys.store(storeId), 'analytics'] });
+    },
   });
 }
 
@@ -177,7 +202,11 @@ export function useSaveSettings(storeId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (settings: Partial<StoreSettings>) => storeApi.saveSettings(storeId, settings),
-    onSuccess: (saved) => queryClient.setQueryData(keys.settings(storeId), saved),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(keys.settings(storeId), saved);
+      // /me carries the staff discount limit and the payment methods.
+      void queryClient.invalidateQueries({ queryKey: keys.me(storeId) });
+    },
   });
 }
 

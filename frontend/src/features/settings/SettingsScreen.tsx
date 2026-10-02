@@ -62,6 +62,18 @@ export function SettingsScreen() {
           end={end}
           onClick={go('bot')}
         />
+        <Row
+          icon="card"
+          muted={!isOwner}
+          title={t('settings.staffDiscount')}
+          subtitle={
+            Number(store.staff_discount_percent) > 0
+              ? t('settings.staffDiscountRow', { percent: Number(store.staff_discount_percent) })
+              : t('settings.staffDiscountNone')
+          }
+          end={end}
+          onClick={go('discount')}
+        />
       </Card>
 
       <Card label={t('settings.language')}>

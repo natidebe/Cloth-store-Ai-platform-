@@ -1,6 +1,9 @@
 import { api } from './client';
 import type {
   AdminStore,
+  Availability,
+  CounterSaleInput,
+  CounterSaleResult,
   Analytics,
   BotChange,
   Connections,
@@ -72,11 +75,17 @@ export const storeApi = {
     return api<{ photo_url: string }>(`${store(storeId)}/photos`, { method: 'POST', form });
   },
 
-  orders: (storeId: string, status: OrderFilter, before?: string) => {
-    const query = new URLSearchParams({ status, limit: '20' });
+  orders: (storeId: string, channel: OrderFilter, before?: string) => {
+    const query = new URLSearchParams({ channel, limit: '20' });
     if (before) query.set('before', before);
     return api<OrderPage>(`${store(storeId)}/orders?${query.toString()}`);
   },
+
+  availability: (storeId: string, variantId: string) =>
+    api<Availability>(`${store(storeId)}/variants/${variantId}/availability`),
+
+  counterSale: (storeId: string, sale: CounterSaleInput) =>
+    api<CounterSaleResult>(`${store(storeId)}/counter-sales`, { method: 'POST', body: sale }),
 
   settings: (storeId: string) => api<StoreSettings>(`${store(storeId)}/settings`),
 

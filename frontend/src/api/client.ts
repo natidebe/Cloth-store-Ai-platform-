@@ -7,11 +7,14 @@ import { initData } from '@/lib/telegram';
  */
 export class ApiError extends Error {
   readonly status: number;
+  /** Why it was refused, when the server says (X-Error-Code), e.g. "held_by_online_order". */
+  readonly code: string | null;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code: string | null = null) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.code = code;
   }
 
   /** Not opened from Telegram, or the login is too old. */
@@ -83,7 +86,11 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   const text = await response.text();
   const parsed: unknown = text ? safeJson(text) : undefined;
   if (!response.ok) {
-    throw new ApiError(response.status, detailOf(parsed) ?? response.statusText);
+    throw new ApiError(
+      response.status,
+      detailOf(parsed) ?? response.statusText,
+      response.headers.get('X-Error-Code'),
+    );
   }
   return parsed as T;
 }

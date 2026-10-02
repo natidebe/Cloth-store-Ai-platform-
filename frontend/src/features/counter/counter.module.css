@@ -1,0 +1,260 @@
+/* Counter sale (Phase 12), in the style of the design's Products and Quick stock. */
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 0;
+  border: none;
+  border-bottom: 1px solid var(--divider);
+  background: none;
+  text-align: left;
+}
+
+.line:last-of-type {
+  border-bottom: none;
+}
+
+.lineMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lineName {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lineSub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.lineEnd {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex: none;
+}
+
+.lineTotal {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.struck {
+  font-size: 12px;
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.empty {
+  color: var(--text-muted);
+  margin: 4px 0 12px;
+}
+
+.totals {
+  margin-top: 4px;
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 15px;
+}
+
+.totalRow + .totalRow {
+  border-top: 1px solid var(--divider);
+}
+
+.discount {
+  color: var(--success-ink);
+}
+
+.grandTotal {
+  font-weight: 700;
+  font-size: 18px;
+}
+
+/* --- The item sheet ---------------------------------------------------------- */
+
+.sheetTitle {
+  font-weight: 700;
+  font-size: 18px;
+  margin: 0 0 12px;
+}
+
+.productPick {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 0;
+  border: none;
+  border-bottom: 1px solid var(--divider);
+  background: none;
+  text-align: left;
+}
+
+.productPick:disabled {
+  opacity: 0.5;
+}
+
+.variants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.variant {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 96px;
+  padding: 10px 12px;
+  border-radius: var(--radius-field);
+  border: 1px solid var(--field-border);
+  background: var(--card);
+  text-align: left;
+}
+
+.variant:disabled {
+  opacity: 0.45;
+}
+
+.variantOn {
+  border: 2px solid var(--primary);
+  padding: 9px 11px;
+}
+
+.variantLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--field-border);
+  flex: none;
+}
+
+.variantStock {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.qtyRow,
+.priceRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.listed {
+  font-weight: 700;
+}
+
+.priceInput {
+  max-width: 180px;
+  text-align: right;
+}
+
+.held {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-card);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  margin-bottom: 14px;
+}
+
+.heldTitle {
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.heldBody {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+/* --- Payment ------------------------------------------------------------------ */
+
+.methods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.method {
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-pill);
+  padding: 9px 16px;
+  background: var(--card);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.methodOn {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-text);
+}
+
+.twoFields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* --- Done --------------------------------------------------------------------- */
+
+.done {
+  text-align: center;
+  padding: 24px 8px 8px;
+}
+
+.doneIcon {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 18px;
+  background: var(--success-bg);
+  color: var(--success-ink);
+}
+
+.doneTitle {
+  font-size: 23px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.doneBody {
+  color: var(--text-muted);
+  margin: 0 0 18px;
+}
+
+.doneButtons {
+  display: grid;
+  gap: 10px;
+}

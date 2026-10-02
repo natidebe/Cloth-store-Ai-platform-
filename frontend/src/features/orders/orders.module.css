@@ -194,3 +194,226 @@
   font-size: 17px;
   white-space: nowrap;
 }
+
+/* --- Orders list (design: "Orders with 🏪 mark") ------------------------------ */
+
+.list {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 2px 14px;
+  box-shadow: var(--shadow);
+  margin-bottom: var(--gap);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 0;
+  border: none;
+  border-bottom: 1px solid var(--divider);
+  background: none;
+  text-align: left;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.rowIcon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--segment-bg);
+  color: var(--primary-ink);
+  font-size: 20px;
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rowTitle {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.rowSub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.rowEnd {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.rowTotal {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.todayLink {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  margin-bottom: var(--gap);
+  border: none;
+  border-radius: var(--radius-card);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  text-align: left;
+  color: var(--text-faint);
+}
+
+.todayIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  flex: none;
+}
+
+.todayMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.todayTitle {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.todayTotal {
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.itemLine {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.sheetLine {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-top: 1px solid var(--divider);
+}
+
+.sheetTotal {
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.sheetMeta {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+.sheetMeta p {
+  margin: 4px 0;
+}
+
+/* --- Analytics (design: "Analytics channels and discounts") ------------------- */
+
+.bigNumber {
+  font-size: 30px;
+  font-weight: 700;
+  margin: 2px 0;
+}
+
+.splitBar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  margin: 14px 0 12px;
+  background: var(--divider);
+}
+
+.splitTelegram {
+  background: var(--primary);
+}
+
+.splitShop {
+  background: #b85c00;
+}
+
+.splitCols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.legendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.splitAmount {
+  font-size: 20px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.staffRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.staffAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--segment-bg);
+  color: var(--text-muted);
+  flex: none;
+}
+
+.staffName {
+  flex: 1;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid var(--divider);
+  margin: 14px 0 10px;
+}
