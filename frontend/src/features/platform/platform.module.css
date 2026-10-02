@@ -1,0 +1,137 @@
+.storeCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.storeMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.storeName {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.storeBot {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--skeleton);
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  flex: none;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.actionsOne {
+  grid-template-columns: 1fr;
+}
+
+.progress {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.progress li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  font-weight: 600;
+}
+
+.progressTodo {
+  color: var(--text-muted);
+  font-weight: 400 !important;
+}
+
+.mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.markDone {
+  background: var(--success-ink);
+  color: #fff;
+}
+
+.markNow {
+  border: 7px solid var(--primary);
+}
+
+.markTodo {
+  border: 2px solid var(--field-border);
+}
+
+.waitingHead {
+  text-align: center;
+  padding: 16px 8px 8px;
+}
+
+.clock {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  margin: 0 auto 18px;
+}
+
+.waitingTitle {
+  font-size: 23px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.waitingBody {
+  color: var(--text-muted);
+  margin: 0 0 18px;
+}
+
+.center {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--gap);
+}
+
+.tokenInput {
+  font-family: var(--mono);
+}
+
+.planOption {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  font-weight: 600;
+  border-bottom: 1px solid var(--divider);
+  cursor: pointer;
+}
+
+.planOption input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--primary);
+  margin: 0;
+}

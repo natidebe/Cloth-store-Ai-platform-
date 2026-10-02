@@ -1,0 +1,71 @@
+.photoRow {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.photoButtons {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.uploading {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.selectWrap {
+  position: relative;
+}
+
+.selectIcon {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.keywordsLabel {
+  display: block;
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.keyword {
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 8px 12px;
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  font-size: 14px;
+}
+
+.addKeyword {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px dashed var(--field-border);
+  border-radius: var(--radius-pill);
+  padding: 8px 14px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.keywordInput {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: var(--radius-pill);
+  flex: 1 1 200px;
+}

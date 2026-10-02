@@ -1,0 +1,110 @@
+.dayRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+}
+
+.dayName {
+  width: 58px;
+  font-weight: 600;
+  flex: none;
+}
+
+.times {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.time {
+  min-height: 38px;
+  padding: 6px 8px;
+  width: 104px;
+  font-size: 15px;
+}
+
+.closed {
+  flex: 1;
+  text-align: right;
+  color: var(--text-muted);
+}
+
+.fee {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.sheetButtons {
+  display: flex;
+  gap: 8px;
+}
+
+.codeBox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--segment-bg);
+  border-radius: var(--radius-field);
+  padding: 14px 16px;
+  margin: 4px 0 12px 40px;
+}
+
+.code {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.waiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-top: 12px;
+}
+
+.waitingDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--warn-ink);
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.connected {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+}
+
+.check {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--success-bg);
+  color: var(--success-ink);
+  flex: none;
+}
+
+.connectedName {
+  flex: 1;
+}

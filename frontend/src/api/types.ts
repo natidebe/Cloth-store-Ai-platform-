@@ -1,0 +1,225 @@
+/** The backend's responses (docs/mini-app-api.md). Money comes as strings or numbers. */
+
+export type Role = 'owner' | 'staff';
+export type StoreStatus = 'pending' | 'active' | 'suspended';
+export type Plan = 'free' | 'basic' | 'pro';
+export type Period = 'today' | '7d' | '30d';
+export type Money = string | number;
+
+export interface Me {
+  user: { id: number; name: string; username: string | null; language_code: string | null };
+  role: Role;
+  store: {
+    id: string;
+    name: string;
+    status: StoreStatus;
+    plan: Plan | null;
+    bot_username: string | null;
+    staff_group_linked: boolean;
+    channel_linked: boolean;
+  };
+}
+
+export interface Variant {
+  id: string;
+  color: string | null;
+  size: string | null;
+  stock: number;
+  price_override: Money | null;
+  price: Money | null;
+}
+
+export interface Product {
+  id: string;
+  code: string | null;
+  name: string;
+  brand: string | null;
+  category: string | null;
+  base_price: Money | null;
+  photo_url: string | null;
+  description: string | null;
+  search_keywords: string | null;
+  total_stock: number;
+  variant_count: number;
+  on_sale: boolean;
+  low_stock: boolean;
+  price_min: Money | null;
+  price_max: Money | null;
+  variants: Variant[];
+}
+
+export interface ProductList {
+  products: Product[];
+  categories: string[];
+}
+
+export interface ProductFields {
+  name?: string;
+  brand?: string | null;
+  category?: string | null;
+  base_price?: Money | null;
+  description?: string | null;
+  search_keywords?: string | null;
+  photo_url?: string | null;
+}
+
+export interface GridRow {
+  id?: string;
+  color: string | null;
+  size: string | null;
+  stock: number;
+  price?: Money | null;
+}
+
+export interface GridResult {
+  product: Product;
+  added: number;
+  updated: number;
+  removed: number;
+  note: string;
+}
+
+export interface Analytics {
+  period: Period;
+  from: string;
+  to: string;
+  revenue: Money;
+  payments: number;
+  average_order: Money;
+  orders_placed: number;
+  orders_paid: number;
+  paid_rate: number;
+  unpaid_orders: number;
+  delivery_orders: number;
+  pickup_orders: number;
+  new_customers: number;
+  per_day: { day: string; placed: number; paid: number; revenue: Money }[];
+  top_products: {
+    product_id: string;
+    name: string;
+    code: string | null;
+    quantity: number;
+    revenue: Money;
+  }[];
+  low_stock: {
+    variant_id: string;
+    product_id: string;
+    product_name: string;
+    code: string | null;
+    color: string | null;
+    size: string | null;
+    stock: number;
+  }[];
+  ai_calls_today: number;
+  ai_daily_limit: number | null;
+}
+
+export interface OrderItem {
+  name: string | null;
+  code: string | null;
+  color: string | null;
+  size: string | null;
+  quantity: number;
+  price: Money;
+}
+
+export interface Order {
+  id: string;
+  number: string;
+  status: 'pending' | 'confirmed' | 'out_for_delivery' | 'delivered' | 'cancelled';
+  payment_status: 'unpaid' | 'paid' | 'refunded';
+  total: Money;
+  currency: string;
+  fulfillment: 'delivery' | 'pickup' | null;
+  customer: { name: string | null; phone: string | null };
+  delivery_address: string | null;
+  created_at: string;
+  items: OrderItem[];
+}
+
+export interface OrderPage {
+  orders: Order[];
+  more: boolean;
+}
+
+export type OrderFilter = 'all' | 'unpaid' | 'paid';
+
+export interface PaymentAccount {
+  name: string;
+  number: string;
+  holder?: string | null;
+}
+
+export interface DeliveryArea {
+  area: string;
+  fee: number;
+}
+
+export interface DayHours {
+  open: boolean;
+  from?: string | null;
+  to?: string | null;
+}
+
+export const WEEK_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+export type WeekDay = (typeof WEEK_DAYS)[number];
+export type OpeningWeek = Record<WeekDay, DayHours>;
+
+export interface StoreSettings {
+  payment_accounts: PaymentAccount[];
+  delivery_areas: DeliveryArea[];
+  opening_week: OpeningWeek | null;
+  location: string | null;
+  pickup_instructions: string | null;
+  return_policy: string | null;
+  // The texts customers get (written by the backend from the lists).
+  payment_instructions: string | null;
+  delivery_info: string | null;
+  opening_hours: string | null;
+}
+
+export interface Connections {
+  staff_group: { id: number; title: string | null; bot_can_see: boolean } | null;
+  channel: { id: number; title: string | null; bot_can_see: boolean } | null;
+}
+
+export interface LinkCode {
+  code: string;
+  command: string;
+  minutes: number;
+  expires_at: string;
+}
+
+export interface BotChange {
+  bot_username: string | null;
+  bot_connected: boolean;
+  note: string;
+}
+
+export interface StoreCard {
+  id: string;
+  name: string;
+  status: StoreStatus;
+  plan: Plan | null;
+  bot_username: string | null;
+  staff_group_linked: boolean;
+  channel_linked: boolean;
+  dashboard_url: string;
+}
+
+export interface PlatformMe {
+  user: { id: number; name: string; username: string | null; language_code: string | null };
+  is_platform_admin: boolean;
+  stores: StoreCard[];
+  support_url: string | null;
+}
+
+export interface AdminStore {
+  id: string;
+  name: string;
+  status: StoreStatus;
+  plan: Plan | string;
+  telegram_bot_username: string | null;
+  created_at: string | null;
+  orders: number;
+}
