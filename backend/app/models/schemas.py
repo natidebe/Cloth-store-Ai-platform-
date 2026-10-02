@@ -93,6 +93,11 @@ class Store(DbModel):
     telegram_bot_id: int | None = None
     telegram_bot_username: str | None = None
     owner_telegram_id: int | None = None  # who created it in the Mini App (migration 010)
+    # The profile as lists, edited in the Mini App (migration 011); the bot
+    # sends the text columns above, written from these (agents/store_profile.py).
+    payment_accounts: list[dict] = Field(default_factory=list)
+    delivery_areas: list[dict] = Field(default_factory=list)
+    opening_week: dict | None = None
 
     @property
     def profile(self) -> StoreProfile:

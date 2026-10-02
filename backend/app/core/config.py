@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     # Phase 10b: the platform bot (yours) for store sign-up and the platform
     # admin screen in its Mini App (D44). Empty: sign-up there is off.
     platform_bot_token: SecretStr = SecretStr("")
+    # "Contact support" in the platform app: a Telegram username, e.g. nati_support.
+    support_username: str = ""
 
     @field_validator("supabase_url")
     @classmethod

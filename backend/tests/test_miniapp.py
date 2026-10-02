@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from app.agents.miniapp import MiniAppAccess
 from app.agents.onboarding import Onboarding
 from app.agents.orchestrator import Orchestrator
+from app.agents.tools import ADDRESS_TO_ARRANGE
 from app.api.v1.catalog import get_catalog
 from app.api.v1.miniapp import get_onboarding
 from app.api.v1.platform_app import platform_webhook_secret
@@ -79,6 +80,20 @@ class FakeDb:
         self.uploads = []
         self.analytics_calls = []
         self.links = {}
+        self.order_queries = []
+        self.orders = [
+            {"id": str(uuid4()), "store_id": str(STORE_A.id), "status": "pending", "payment_status": "unpaid",
+             "total_price": 7300, "currency": "ETB", "fulfillment_method": "delivery",
+             "contact_name": "Abebe", "contact_phone": "0911223344",
+             "delivery_address": ADDRESS_TO_ARRANGE, "created_at": "2026-10-02T09:00:00+00:00",
+             "order_items": [{"quantity": 2, "price": 3650,
+                              "product_variants": {"color": "Blue", "size": "M",
+                                                   "products": {"name": "Denim Jacket", "code": "P101"}}}]},
+            {"id": str(uuid4()), "store_id": str(STORE_B.id), "status": "confirmed", "payment_status": "paid",
+             "total_price": 100, "currency": "ETB", "fulfillment_method": "pickup", "contact_name": "B",
+             "contact_phone": "0900000000", "delivery_address": None,
+             "created_at": "2026-10-02T08:00:00+00:00", "order_items": []},
+        ]
 
     # stores
     async def get_store(self, store_id):
@@ -188,6 +203,12 @@ class FakeDb:
         self.uploads.append((store_id, name, len(data), content_type))
         return f"https://storage.example/product-photos/{store_id}/{name}"
 
+    async def list_orders(self, store_id, payment_status=None, limit=30, before=None):
+        self.order_queries.append((store_id, payment_status, limit, before))
+        rows = [o for o in self.orders if o["store_id"] == str(store_id)
+                and (payment_status is None or o["payment_status"] == payment_status)]
+        return rows[:limit]
+
     # platform
     async def is_platform_admin_telegram(self, telegram_id):
         return telegram_id in self.platform_admins
@@ -236,6 +257,11 @@ class FakeTelegram:
             if status is None:
                 return httpx.Response(400, json={"ok": False, "description": "Bad Request: user not found"})
             return httpx.Response(200, json={"ok": True, "result": {"status": status}})
+        if method == "getChat":
+            titles = {GROUP_A: "Selam staff", -100500: "Selam Shoes channel"}
+            if body["chat_id"] not in titles:
+                return httpx.Response(400, json={"ok": False, "description": "Bad Request: chat not found"})
+            return httpx.Response(200, json={"ok": True, "result": {"title": titles[body["chat_id"]]}})
         if method == "getMe":
             return httpx.Response(200, json={"ok": True, "result": {
                 "id": 333, "is_bot": True, "first_name": "New", "username": "new_shop_bot"}})
@@ -429,6 +455,10 @@ def test_staff_cant_add_products_or_change_prices(world):
     pid = jacket(db)["id"]
     assert client.post(url("/products"), json={"product": {"name": "X"}}, headers=headers(MEMBER)).status_code == 403
     assert client.patch(url(f"/products/{pid}"), json={"base_price": 1}, headers=headers(MEMBER)).status_code == 403
+    # Staff edit the details (design: "Staff price locked"), even sending the unchanged price.
+    edited = client.patch(url(f"/products/{pid}"), json={"description": "Soft denim", "base_price": 3500},
+                          headers=headers(MEMBER))
+    assert edited.status_code == 200 and edited.json()["description"] == "Soft denim"
     assert client.put(url(f"/products/{pid}/variants"), json={"variants": []}, headers=headers(MEMBER)).status_code == 403
     assert client.get(url("/settings"), headers=headers(MEMBER)).status_code == 403
     assert jacket(db)["base_price"] == 3500
@@ -506,7 +536,8 @@ def test_photo_upload(world):
     assert db.uploads[-1][0] == STORE_A.id  # always the store's own folder
     assert upload("p.gif", b"GIF89a", "image/gif").status_code == 415
     assert upload("big.jpg", b"x" * (5 * 1024 * 1024 + 1), "image/jpeg").status_code == 413
-    assert upload("p.jpg", b"\xff\xd8", "image/jpeg", who=MEMBER).status_code == 403
+    assert upload("p.jpg", b"\xff\xd8", "image/jpeg", who=MEMBER).status_code == 201  # staff too
+    assert upload("p.jpg", b"\xff\xd8", "image/jpeg", who=STRANGER).status_code == 403
 
 
 # --- Settings (owners) -----------------------------------------------------------------------
@@ -514,10 +545,23 @@ def test_photo_upload(world):
 def test_owner_settings_and_link_code(world):
     db, _, client, _, _ = world
     assert client.get(url("/settings"), headers=headers(ADMIN)).json()["payment_instructions"] == "Telebirr 0911"
-    saved = client.put(url("/settings"), json={"delivery_info": "Bole 150 ETB", "payment_instructions": " "},
-                       headers=headers(ADMIN)).json()
-    assert saved["delivery_info"] == "Bole 150 ETB" and saved["payment_instructions"] is None
-    assert saved["location"] is None  # not sent: unchanged
+    week = {day: {"open": True, "from": "08:30", "to": "19:00"} for day in ("mon", "tue", "wed", "thu", "fri", "sat")}
+    week["sun"] = {"open": False}
+    saved = client.put(url("/settings"), json={
+        "payment_accounts": [{"name": "Telebirr", "number": "0911 000 000"}, {"name": "CBE", "number": "1000 1234"}],
+        "delivery_areas": [{"area": "Bole", "fee": 150}, {"area": "Other areas", "fee": 250}],
+        "opening_week": week, "return_policy": "  Exchange within 3 days ",
+    }, headers=headers(ADMIN)).json()
+    # The lists, and the texts the bot sends written from them.
+    assert saved["payment_accounts"][1] == {"name": "CBE", "number": "1000 1234"}
+    assert saved["payment_instructions"] == "Telebirr: 0911 000 000\nCBE: 1000 1234"
+    assert saved["delivery_info"] == "Bole: 150 ETB\nOther areas: 250 ETB"
+    assert saved["opening_hours"] == "Mon–Sat 08:30–19:00, Sun closed"
+    assert saved["return_policy"] == "Exchange within 3 days" and saved["location"] is None  # not sent: unchanged
+    bad_week = {**week, "mon": {"open": True, "from": "19:00", "to": "08:30"}}
+    assert client.put(url("/settings"), json={"opening_week": bad_week}, headers=headers(ADMIN)).status_code == 422
+    assert client.put(url("/settings"), json={"delivery_areas": [{"area": "X", "fee": -1}]},
+                      headers=headers(ADMIN)).status_code == 422
     code = client.post(url("/link-code"), headers=headers(OWNER)).json()
     assert code["command"] == f"/link {code['code']}" and db.links[STORE_A.id] == code["code"]
     assert client.post(url("/link-code"), headers=headers(MEMBER)).status_code == 403
@@ -571,6 +615,45 @@ def test_mini_app_page_is_served(world):
     _, _, client, _, _ = world
     assert "telegram-web-app.js" in client.get(f"/app/?store={STORE_A.id}").text
     assert client.get("/app/platform").status_code == 200
+
+
+# --- Orders (view only) and connections ------------------------------------------------------
+
+def test_orders_list_for_staff(world):
+    db, _, client, _, _ = world
+    body = client.get(url("/orders"), headers=headers(MEMBER)).json()
+    [order] = body["orders"]  # never store B's
+    assert order["payment_status"] == "unpaid" and order["total"] == 7300 and order["fulfillment"] == "delivery"
+    assert order["delivery_address"] is None  # "to be arranged" isn't an address
+    assert order["items"] == [{"name": "Denim Jacket", "code": "P101", "color": "Blue", "size": "M",
+                               "quantity": 2, "price": 3650}]
+    assert order["number"] and order["customer"] == {"name": "Abebe", "phone": "0911223344"}
+    client.get(url("/orders?status=paid&limit=5"), headers=headers(MEMBER))
+    assert db.order_queries[-1][1:3] == ("paid", 5)
+    assert client.get(url("/orders"), headers=headers(STRANGER)).status_code == 403
+
+
+def test_connections_show_names(world):
+    db, _, client, _, _ = world
+    body = client.get(url("/connections"), headers=headers(OWNER)).json()
+    assert body["staff_group"] == {"id": GROUP_A, "title": "Selam staff", "bot_can_see": True}
+    assert body["channel"]["title"] == "Selam Shoes channel"
+    db.stores[STORE_A.id] = STORE_A.model_copy(update={"channel_id": None})
+    assert client.get(url("/connections"), headers=headers(OWNER)).json()["channel"] is None
+    assert client.get(url("/connections"), headers=headers(MEMBER)).status_code == 403
+
+
+def test_approval_tells_the_creator_in_the_platform_bot(world, monkeypatch):
+    db, telegram, client, _, _ = world
+    monkeypatch.setattr(get_settings(), "support_username", "@nati_support")
+    created = client.post("/api/v1/platform-app/stores",
+                          json={"name": "Nati Fashion", "bot_token": TOKEN_B[:10] + "Z" * 35},
+                          headers=platform(MEMBER)).json()
+    assert client.get("/api/v1/platform-app/me", headers=platform(MEMBER)).json()["support_url"] == \
+        "https://t.me/nati_support"
+    client.post(f"/api/v1/platform-app/admin/stores/{created['id']}/approve", headers=platform(OWNER))
+    told = [b for t, m, b in telegram.calls if t == PLATFORM_TOKEN and m == "sendMessage" and b["chat_id"] == MEMBER]
+    assert told and told[-1]["text"].startswith("✅ Nati Fashion is approved")
 
 
 @pytest.fixture

@@ -92,11 +92,13 @@ def _store_card(store) -> dict[str, Any]:
 @router.get("/platform-app/me")
 async def me(user: MiniAppUser = Depends(platform_user),
              db: SupabaseService = Depends(get_db)) -> dict[str, Any]:
+    support = get_settings().support_username.strip().lstrip("@")
     return {
         "user": {"id": user.id, "name": user.full_name, "username": user.username,
                  "language_code": user.language_code},
         "is_platform_admin": await db.is_platform_admin_telegram(user.id),
         "stores": [_store_card(s) for s in await db.stores_created_by(user.id)],
+        "support_url": f"https://t.me/{support}" if support else None,
     }
 
 
@@ -122,26 +124,51 @@ async def admin_stores(_: MiniAppUser = Depends(platform_admin),
     return await db.list_all_stores()
 
 
-async def _set_status(store_id: UUID, status: str, db: SupabaseService, onboarding: Onboarding) -> dict:
+async def _set_status(store_id: UUID, status: str, db: SupabaseService, onboarding: Onboarding,
+                      background: BackgroundTasks) -> dict:
     store = await db.get_store_any_status(store_id)
     if store is None:
         raise HTTPException(status_code=404, detail="store not found")
+    changed = store.status != status
     await onboarding.set_status(store, status)
+    if changed and store.owner_telegram_id is not None:
+        # The creator signed up in the platform bot: tell them there.
+        background.add_task(_tell_creator, onboarding.telegram, store.owner_telegram_id, store.name, status)
     return {"store_id": store.id, "status": status, "plan": store.plan}
 
 
+STATUS_MESSAGES = {
+    "active": "✅ {name} is approved! Customers can now order from your bot.\n"
+              "✅ {name} ጸድቋል! ደንበኞች አሁን ከቦትዎ ማዘዝ ይችላሉ።",
+    "suspended": "⛔ {name} is suspended: the bot doesn't take orders for now. Contact support.\n"
+                 "⛔ {name} ታግዷል፤ ቦቱ ለጊዜው ትዕዛዝ አይቀበልም። ድጋፍ ያግኙ።",
+}
+
+
+async def _tell_creator(telegram: TelegramService, chat_id: int, name: str, status: str) -> None:
+    text = STATUS_MESSAGES.get(status)
+    token = get_settings().platform_bot_token.get_secret_value()
+    if not text or not token:
+        return
+    try:
+        await telegram.send_message(token, chat_id, text.format(name=name))
+    except TelegramError as error:  # e.g. they never started the platform bot
+        logger.warning("store owner not told", extra={"error": error.description})
+
+
 @router.post("/platform-app/admin/stores/{store_id}/approve")
-async def approve(store_id: UUID, _: MiniAppUser = Depends(platform_admin),
+async def approve(store_id: UUID, background: BackgroundTasks, _: MiniAppUser = Depends(platform_admin),
                   db: SupabaseService = Depends(get_db),
                   onboarding: Onboarding = Depends(get_onboarding)) -> dict[str, Any]:
-    return await _set_status(store_id, "active", db, onboarding)
+    """Approve a pending store, or reactivate a suspended one."""
+    return await _set_status(store_id, "active", db, onboarding, background)
 
 
 @router.post("/platform-app/admin/stores/{store_id}/suspend")
-async def suspend(store_id: UUID, _: MiniAppUser = Depends(platform_admin),
+async def suspend(store_id: UUID, background: BackgroundTasks, _: MiniAppUser = Depends(platform_admin),
                   db: SupabaseService = Depends(get_db),
                   onboarding: Onboarding = Depends(get_onboarding)) -> dict[str, Any]:
-    return await _set_status(store_id, "suspended", db, onboarding)
+    return await _set_status(store_id, "suspended", db, onboarding, background)
 
 
 @router.put("/platform-app/admin/stores/{store_id}/plan")

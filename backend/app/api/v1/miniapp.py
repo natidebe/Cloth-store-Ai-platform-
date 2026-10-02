@@ -10,20 +10,23 @@ created the store). Members are "staff", the group's admins "owners":
                GET  /api/v1/app/stores/{store}/products[?search=&category=]
                GET  /api/v1/app/stores/{store}/products/{product}
                POST /api/v1/app/stores/{store}/variants/{variant}/stock   {"change": 5} or {"set": 12}
+               PATCH /api/v1/app/stores/{store}/products/{product}        details (staff: not the price)
+               POST /api/v1/app/stores/{store}/photos                     upload a photo -> its link
+               GET  /api/v1/app/stores/{store}/orders?status=all|unpaid|paid   view only
     owners     POST /api/v1/app/stores/{store}/products                   a product + its color × size grid
-               PATCH /api/v1/app/stores/{store}/products/{product}        name, price, photo, ...
                PUT  /api/v1/app/stores/{store}/products/{product}/variants   save the grid
                POST /api/v1/app/stores/{store}/products/{product}/off-sale
                DELETE /api/v1/app/stores/{store}/products/{product}       never-ordered products only
                POST /api/v1/app/stores/{store}/products/{product}/publish to the channel
-               POST /api/v1/app/stores/{store}/photos                     upload a photo -> its link
                GET/PUT /api/v1/app/stores/{store}/settings                payment accounts, delivery, ...
+               GET  /api/v1/app/stores/{store}/connections                the linked group and channel
                POST /api/v1/app/stores/{store}/link-code                  /link code for the group/channel
                PUT  /api/v1/app/stores/{store}/bot-token                  change the bot (D17)
 """
 import secrets
+from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
@@ -34,13 +37,23 @@ from app.agents.catalog import Catalog
 from app.agents.inventory import GridRow, Inventory, InventoryError, summarize
 from app.agents.miniapp import AppAccess
 from app.agents.onboarding import LINK_CODE_MINUTES, LINK_COMMAND, Onboarding, OnboardingError
+from app.agents.store_profile import (
+    DeliveryArea,
+    OpeningWeek,
+    PaymentAccount,
+    delivery_text,
+    hours_text,
+    payment_text,
+)
+from app.agents.tools import ADDRESS_TO_ARRANGE, order_number
 from app.agents.orchestrator import Orchestrator
 from app.api.v1.catalog import get_catalog
 from app.api.v1.webhook import get_db, get_orchestrator
 from app.core.config import get_settings
 from app.core.telegram_auth import INIT_DATA_HEADER, check_init_data
-from app.models.schemas import PROFILE_FIELDS
+from app.models.schemas import PROFILE_FIELDS, Store
 from app.services.supabase_service import SupabaseService
+from app.services.telegram_service import TelegramError
 
 router = APIRouter(prefix="/app/stores/{store_id}", tags=["mini app"])
 
@@ -81,6 +94,10 @@ async def owner_access(access: AppAccess = Depends(app_access)) -> AppAccess:
 def get_onboarding(db: SupabaseService = Depends(get_db),
                    orchestrator: Orchestrator = Depends(get_orchestrator)) -> Onboarding:
     return Onboarding(db, orchestrator.telegram, get_settings().public_base_url)
+
+
+def _price(value: Any) -> Decimal | None:
+    return Decimal(str(value)) if value is not None else None
 
 
 def _refused(error: InventoryError | OnboardingError) -> HTTPException:
@@ -162,12 +179,13 @@ class StockChange(BaseModel):
 
 
 class SettingsIn(BaseModel):
-    """The store's profile texts (sent to customers). Empty text clears one."""
-    opening_hours: str | None = Field(default=None, max_length=1000)
+    """The Store profile screen. Only the fields sent change; an empty text
+    clears one. The lists also rewrite the texts the bot sends (migration 011)."""
+    payment_accounts: list[PaymentAccount] | None = Field(default=None, max_length=10)
+    delivery_areas: list[DeliveryArea] | None = Field(default=None, max_length=30)
+    opening_week: OpeningWeek | None = None
     location: str | None = Field(default=None, max_length=1000)
-    delivery_info: str | None = Field(default=None, max_length=1000)
     pickup_instructions: str | None = Field(default=None, max_length=1000)
-    payment_instructions: str | None = Field(default=None, max_length=1000)
     return_policy: str | None = Field(default=None, max_length=1000)
 
 
@@ -251,14 +269,18 @@ async def create_product(body: NewProduct, access: AppAccess = Depends(owner_acc
 
 
 @router.patch("/products/{product_id}")
-async def update_product(product_id: UUID, body: ProductFields, access: AppAccess = Depends(owner_access),
+async def update_product(product_id: UUID, body: ProductFields, access: AppAccess = Depends(app_access),
                          db: SupabaseService = Depends(get_db)) -> dict[str, Any]:
+    """Owners change anything; staff change the details but not the price."""
     inventory = Inventory(db)
     try:
-        await inventory.product(access.store.id, product_id)
+        current = await inventory.product(access.store.id, product_id)
         changes = body.model_dump(exclude_unset=True)
         if "name" in changes and not changes["name"]:
             raise HTTPException(status_code=422, detail="the product needs a name")
+        if not access.is_owner and "base_price" in changes and \
+                _price(changes["base_price"]) != _price(current.get("base_price")):
+            raise HTTPException(status_code=403, detail="only the owner can change prices")
         await db.update_product(access.store.id, product_id, changes)
         return summarize(await inventory.product(access.store.id, product_id))
     except InventoryError as error:
@@ -332,7 +354,7 @@ async def publish(product_id: UUID, access: AppAccess = Depends(owner_access),
 
 
 @router.post("/photos", status_code=201)
-async def upload_photo(file: UploadFile = File(...), access: AppAccess = Depends(owner_access),
+async def upload_photo(file: UploadFile = File(...), access: AppAccess = Depends(app_access),
                        db: SupabaseService = Depends(get_db)) -> dict[str, str]:
     """A product photo (JPEG, PNG or WebP, up to 5 MB) -> its public link,
     to put in the product's photo_url."""
@@ -349,20 +371,99 @@ async def upload_photo(file: UploadFile = File(...), access: AppAccess = Depends
     return {"photo_url": url}
 
 
+# --- Orders (view only, D46: confirming stays in the staff group) ------------------------
+
+def _order(row: dict[str, Any]) -> dict[str, Any]:
+    items = []
+    for item in row.get("order_items") or []:
+        variant = item.get("product_variants") or {}
+        product = variant.get("products") or {}
+        items.append({"name": product.get("name"), "code": product.get("code"),
+                      "color": variant.get("color"), "size": variant.get("size"),
+                      "quantity": item["quantity"], "price": item["price"]})
+    address = row.get("delivery_address")
+    return {
+        "id": row["id"], "number": order_number(UUID(row["id"])),
+        "status": row["status"], "payment_status": row["payment_status"],
+        "total": row["total_price"], "currency": row.get("currency") or "ETB",
+        "fulfillment": row.get("fulfillment_method"),
+        "customer": {"name": row.get("contact_name"), "phone": row.get("contact_phone")},
+        "delivery_address": None if address == ADDRESS_TO_ARRANGE else address,
+        "created_at": row["created_at"], "items": items,
+    }
+
+
+@router.get("/orders")
+async def list_orders(
+    status: Literal["all", "unpaid", "paid"] = Query(default="all"),
+    before: datetime | None = Query(default=None),
+    limit: int = Query(default=30, ge=1, le=100),
+    access: AppAccess = Depends(app_access),
+    db: SupabaseService = Depends(get_db),
+) -> dict[str, Any]:
+    """Newest first. For more, pass the last order's created_at as `before`."""
+    rows = await db.list_orders(access.store.id, None if status == "all" else status, limit, before)
+    orders = [_order(r) for r in rows]
+    return {"orders": orders, "more": len(orders) == limit}
+
+
 # --- Store settings (owners) ------------------------------------------------------------
+
+def _settings(store: Store) -> dict[str, Any]:
+    """The lists for the screen, plus the texts customers get (for a preview,
+    and for older stores whose profile is still text only)."""
+    return {
+        "payment_accounts": store.payment_accounts, "delivery_areas": store.delivery_areas,
+        "opening_week": store.opening_week,
+        **{name: getattr(store, name) for name in PROFILE_FIELDS},
+    }
+
 
 @router.get("/settings")
 async def get_store_settings(access: AppAccess = Depends(owner_access)) -> dict[str, Any]:
-    return {name: getattr(access.store, name) for name in PROFILE_FIELDS}
+    return _settings(access.store)
 
 
 @router.put("/settings")
 async def save_store_settings(body: SettingsIn, access: AppAccess = Depends(owner_access),
                               db: SupabaseService = Depends(get_db)) -> dict[str, Any]:
-    changes = {k: ((v or "").strip() or None) for k, v in body.model_dump(exclude_unset=True).items()}
+    sent = body.model_fields_set
+    changes: dict[str, Any] = {}
+    for name in ("location", "pickup_instructions", "return_policy"):
+        if name in sent:
+            changes[name] = (getattr(body, name) or "").strip() or None
+    if "payment_accounts" in sent:
+        accounts = body.payment_accounts or []
+        changes["payment_accounts"] = [a.model_dump(exclude_none=True) for a in accounts]
+        changes["payment_instructions"] = payment_text(accounts)
+    if "delivery_areas" in sent:
+        areas = body.delivery_areas or []
+        changes["delivery_areas"] = [{"area": a.area, "fee": float(a.fee)} for a in areas]
+        changes["delivery_info"] = delivery_text(areas)
+    if "opening_week" in sent:
+        changes["opening_week"] = body.opening_week.as_json() if body.opening_week else None
+        changes["opening_hours"] = hours_text(body.opening_week)
     await db.update_store_profile(access.store.id, changes)
-    store = await db.get_store_any_status(access.store.id)
-    return {name: getattr(store, name) for name in PROFILE_FIELDS}
+    return _settings(await db.get_store_any_status(access.store.id))
+
+
+@router.get("/connections")
+async def connections(access: AppAccess = Depends(owner_access),
+                      orchestrator: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
+    """The linked staff group and channel with their names (the Connect
+    screen asks again every few seconds while a /link code is waiting)."""
+    store, token = access.store, access.store.telegram_bot_token.get_secret_value()
+
+    async def chat(chat_id: int | None) -> dict[str, Any] | None:
+        if chat_id is None:
+            return None
+        try:
+            title = await orchestrator.telegram.get_chat_title(token, chat_id)
+        except TelegramError:
+            title = None
+        return {"id": chat_id, "title": title, "bot_can_see": title is not None}
+
+    return {"staff_group": await chat(store.staff_chat_id), "channel": await chat(store.channel_id)}
 
 
 @router.post("/link-code")

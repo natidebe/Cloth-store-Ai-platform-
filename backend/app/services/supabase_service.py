@@ -90,6 +90,7 @@ _REJECTED = {
 _UNIQUE_VIOLATION = "23505"
 
 PHOTO_BUCKET = "product-photos"  # public; one folder per store (migration 007)
+PROFILE_LISTS = ("payment_accounts", "delivery_areas", "opening_week")  # migration 011
 
 # Give up on a database call after this long, so a slow database can't
 # leave a customer waiting forever.
@@ -282,6 +283,23 @@ class SupabaseService:
                  "stock": r["stock_quantity"], "product_id": r["products"]["id"],
                  "product_name": r["products"]["name"], "code": r["products"]["code"]} for r in rows]
 
+    async def list_orders(self, store_id: UUID, payment_status: str | None = None,
+                          limit: int = 30, before: datetime | None = None) -> list[dict[str, Any]]:
+        """The store's orders, newest first, with their items (product,
+        color, size). `before`: older than this (for "load more")."""
+        request = (
+            self._db.table("orders")
+            .select("id, status, payment_status, total_price, currency, fulfillment_method, "
+                    "contact_name, contact_phone, delivery_address, created_at, reserved_until, "
+                    "order_items(quantity, price, product_variants(color, size, products(name, code)))")
+            .eq("store_id", str(store_id)).order("created_at", desc=True).limit(limit)
+        )
+        if payment_status:
+            request = request.eq("payment_status", payment_status)
+        if before is not None:
+            request = request.lt("created_at", before.isoformat())
+        return await self._run(request)
+
     # Products and stock (inventory, docs/inventory-management.md)
 
     async def list_products_with_variants(self, store_id: UUID) -> list[dict[str, Any]]:
@@ -375,8 +393,9 @@ class SupabaseService:
             raise DatabaseError("storage_error", str(error)[:200]) from error
 
     async def update_store_profile(self, store_id: UUID, fields: dict[str, Any]) -> None:
-        """Change the store's profile texts (only the PROFILE_FIELDS)."""
-        changes = {k: v for k, v in fields.items() if k in PROFILE_FIELDS}
+        """Change the store's profile: the texts (PROFILE_FIELDS) and the lists
+        the Mini App edits (migration 011). Nothing else on the store."""
+        changes = {k: v for k, v in fields.items() if k in PROFILE_FIELDS or k in PROFILE_LISTS}
         if not changes:
             return
         rows = await self._run(self._db.table("stores").update(changes).eq("id", str(store_id)))

@@ -293,6 +293,16 @@ class TelegramService:
             return "left"  # restricted, but no longer in the group
         return status
 
+    async def get_chat_title(self, bot_token: str, chat_id: int) -> str | None:
+        """A group's or channel's name, or None if the bot can't see it (removed)."""
+        try:
+            chat = await self._call(bot_token, "getChat", {"chat_id": chat_id})
+        except TelegramError as error:
+            if error.status in (400, 403):
+                return None
+            raise
+        return chat.get("title")
+
     async def set_menu_button(self, bot_token: str, text: str, url: str) -> None:
         """The button next to the message box that opens a Mini App (all private chats)."""
         await self._call(bot_token, "setChatMenuButton", {
