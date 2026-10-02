@@ -85,7 +85,9 @@ async def test_sign_up_from_the_platform_bot(world):
 async def test_inventory_on_the_real_tables(world):
     db, a, b = world["db"], world["a"], world["b"]
     inventory = Inventory(db)
-    product_id = await db.create_product(a, {"name": "Polo", "category": "clothing", "base_price": "1800"})
+    # Decimal, as the Mini App endpoint sends it (a bug once: Decimal isn't JSON).
+    product_id = await db.create_product(a, {"name": "Polo", "category": "clothing", "base_price": Decimal("1800")})
+    await db.update_product(a, product_id, {"base_price": Decimal("1850.50")})
     await inventory.save_grid(a, product_id, [GridRow("White", "M", 5), GridRow("Navy", "XL", 2, Decimal("2000"))])
     product = await inventory.product(a, product_id)
     assert product["code"] and len(product["product_variants"]) == 2
