@@ -6,7 +6,7 @@ THIS store's bot, and the user must be in the store's staff group (or have
 created the store). Members are "staff", the group's admins "owners":
 
     everyone   GET  /api/v1/app/stores/{store}/me
-               GET  /api/v1/app/stores/{store}/analytics?period=today|7d|30d
+               GET  /api/v1/app/stores/{store}/analytics?period=today|week|month|7d|30d
                GET  /api/v1/app/stores/{store}/products[?search=&category=]
                GET  /api/v1/app/stores/{store}/products/{product}
                POST /api/v1/app/stores/{store}/variants/{variant}/stock   {"change": 5} or {"set": 12}

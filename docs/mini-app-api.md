@@ -56,8 +56,8 @@ The backend serves the built app (`frontend/dist`) for every path under
 ```
 `status`: `pending` (waiting for approval: show a banner), `active`, `suspended`.
 
-### `GET /analytics?period=today|7d|30d` (everyone)
-Days are Addis Ababa days; `7d` and `30d` include today. Money values are strings.
+### `GET /analytics?period=today|week|month|7d|30d` (everyone)
+Days are Addis Ababa days: `week` starts on Monday, `month` on the 1st, and `7d` and `30d` include today. Money values are strings.
 ```json
 {
   "period": "7d", "from": "2026-09-26T00:00:00+03:00", "to": "2026-10-03T00:00:00+03:00",
