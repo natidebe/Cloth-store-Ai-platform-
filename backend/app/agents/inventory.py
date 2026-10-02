@@ -11,6 +11,8 @@ The rules, in one place:
   staff members changing the same variant at once can't lose a change.
 - Every change is picked up by the channel sync (Phase 8d): posts update
   themselves.
+- Staff manage stock and sizes too, but never prices (design: "Staff price
+  locked"): with prices_locked, a row may not set or change a price.
 """
 import logging
 from dataclasses import dataclass, field
@@ -59,6 +61,12 @@ def _label(row: dict[str, Any]) -> str:
     return " ".join(part for part in (row.get("color"), row.get("size")) if part) or "variant"
 
 
+def _same_price(new: Decimal | None, current: Any) -> bool:
+    if new is None or current is None:
+        return new is None and current is None
+    return Decimal(str(new)) == Decimal(str(current))
+
+
 def effective_price(variant: dict[str, Any], product: dict[str, Any]) -> Decimal | None:
     """What a customer pays: the variant's own price, else the product's."""
     price = variant.get("price_override")
@@ -102,7 +110,7 @@ class Inventory:
         return row
 
     async def save_grid(self, store_id: UUID, product_id: UUID, rows: list[GridRow],
-                        remove: list[UUID] | None = None) -> GridResult:
+                        remove: list[UUID] | None = None, *, prices_locked: bool = False) -> GridResult:
         """Save a product's color × size grid (see the module notes)."""
         product = await self.product(store_id, product_id)
         existing = {UUID(v["id"]): v for v in product.get("product_variants") or []}
@@ -117,6 +125,10 @@ class Inventory:
             target = row.id if row.id in existing else by_key.get(key)
             if row.id is not None and row.id not in existing:
                 raise InventoryError("A variant in the grid doesn't belong to this product.", 404)
+            if prices_locked:
+                current = existing[target].get("price_override") if target is not None else None
+                if _same_price(row.price, current) is False:
+                    raise InventoryError("Only the owner can change prices.", 403)
             if target is None:
                 await self.db.add_variant(store_id, product_id, row.color, row.size, row.stock, row.price)
                 result.added += 1

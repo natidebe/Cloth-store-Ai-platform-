@@ -851,7 +851,7 @@ then the AI isn't limited (the counter isn't there yet).
 
 ---
 
-### Phase 10b — Telegram Mini App (the store dashboard) 🟡 Backend built; waiting for migration 010 and the design (frontend)
+### Phase 10b — Telegram Mini App (the store dashboard) 🟡 Built (backend + React app from my design); waiting for migration 011 and my test in Telegram
 
 **Goal:** shop owners and staff manage their store inside Telegram, with no
 web dashboard: see how the store is doing, manage products and stock, and
@@ -957,7 +957,20 @@ back, as today. Order statuses (delivered, cancelled) come later.
    `PLATFORM_BOT_TOKEN`, restart, run `python -m scripts.connect_platform_bot`.
 3. Store dashboard: send `/dashboard` to a store's bot (as a staff-group
    member): the placeholder page shows your name and role.
-4. The React app: after the design.
+4. Run `011_store_profile_structured.sql` (the store profile as lists).
+5. Build the app: `cd frontend`, `npm install`, `npm run build`, then
+   restart the backend. Open it with `/dashboard`.
+
+**The React app (from my design, "dashboard ui design/"):** `frontend/`,
+see `frontend/README.md`. React 19 + TypeScript + Vite; TanStack Query for
+server data, Zustand for app state (language, the stock grid draft,
+toasts); React Router (each screen loaded when first opened);
+react-hook-form + zod; i18next (Amharic and English, Settings → Language);
+CSS Modules with the design's colors, light and dark from Telegram.
+Tested with Vitest + Testing Library + MSW. Differences from the first
+plan, decided with the design (D48–D52): an Orders tab (view only) with the
+analytics on top; staff add products and change stock but never prices;
+the store profile as lists; the map pin skipped for now.
 
 **Check:** from a phone: open the dashboard from the staff group; see
 today's numbers after placing and paying an order; add a product with a
@@ -1031,7 +1044,12 @@ Answer each before the phase listed, and record the answer here.
 | D44 | How do new stores sign up? | Phase 10b | In a platform bot's Mini App: name + bot token, then pending → approval (D14) |
 | D45 | How are platform admins identified in the Mini App? | Phase 10b | By Telegram id (added by SQL, like D15) |
 | D46 | Orders in the Mini App? | Phase 10b | Not now: confirming, replying and handing back stay in the staff group |
-| D47 | How is the Mini App built? | Phase 10b | React + Vite + TypeScript in `frontend/`, built to static files served by the backend at `/app/` |
+| D47 | How is the Mini App built? | Phase 10b | React + Vite + TypeScript in `frontend/`, built to static files served by the backend at `/app/`; TanStack Query (server data) + Zustand (app state) |
+| D48 | Orders in the Mini App (the design has an Orders tab)? | Phase 10b | A view-only list (filter unpaid / paid, items, customer, total); confirming payments stays in the staff group (D46) |
+| D49 | Where do the analytics go (not in the design)? | Phase 10b | At the top of the Orders tab: Today / 7 / 30 days, revenue, orders, % paid, average, sales per day, top products |
+| D50 | What may staff do with products (design: "Staff price locked")? | Phase 10b | Add products, edit details and photos, change stock and sizes; never prices; no settings |
+| D51 | How is the store profile edited (design: lists)? | Phase 10b | As lists: payment accounts, delivery areas with fees, hours per day (migration 011); the bot's texts are written from them |
+| D52 | "Pick on map" for the location? | Phase 10b | Skipped for now: the address as text |
 
 ---
 

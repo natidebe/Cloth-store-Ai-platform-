@@ -3,7 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
 from app.agents.catalog import Catalog
@@ -108,5 +108,10 @@ async def mini_app(path: str = "") -> FileResponse:
     root = FRONTEND_BUILD if (FRONTEND_BUILD / "index.html").is_file() else PLACEHOLDER
     file = (root / path).resolve()
     if path and file.is_file() and file.is_relative_to(root.resolve()):
-        return FileResponse(file)
+        # Built files have a hash in their name: they never change, cache them.
+        cache = "public, max-age=31536000, immutable" if path.startswith("assets/") else "no-cache"
+        return FileResponse(file, headers={"Cache-Control": cache})
+    if path.startswith("assets/"):
+        # A file from an older build: a real 404, so the app can reload itself.
+        raise HTTPException(status_code=404, detail="not found")
     return FileResponse(root / "index.html", headers={"Cache-Control": "no-cache"})

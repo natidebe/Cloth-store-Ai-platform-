@@ -37,7 +37,9 @@ The backend serves the built app (`frontend/dist`) for every path under
 ## Roles (D42)
 
 - **owner**: the store's creator, or an admin of its staff group: everything.
-- **staff**: a member of the staff group: analytics, products (read), stock changes.
+- **staff**: a member of the staff group: analytics, orders, products and stock
+  (add products, change stock and sizes, edit details, upload photos), but
+  never prices (403 "only the owner can change prices") and no settings.
 
 ---
 
@@ -100,7 +102,19 @@ One product, same shape as a list item.
 ```
 → `{"variant_id": "…", "stock": 12}`. Never below 0 (409).
 
-### `POST /products` (owners)
+### `GET /orders?status=all|unpaid|paid&limit=30&before=<created_at>` (everyone)
+View only (confirming payments stays in the staff group, D46). Newest first;
+for more, pass the last order's `created_at` as `before`.
+```json
+{"orders": [{"id": "…", "number": "AB12CD", "status": "pending", "payment_status": "unpaid",
+             "total": 7300, "currency": "ETB", "fulfillment": "delivery",
+             "customer": {"name": "Abebe", "phone": "0911223344"}, "delivery_address": null,
+             "created_at": "…", "items": [{"name": "Classic Denim Jacket", "code": "P102",
+             "color": "Blue", "size": "M", "quantity": 2, "price": 3650}]}],
+ "more": false}
+```
+
+### `POST /products` (everyone; staff: no prices)
 ```json
 {
   "product": {"name": "Polo T-Shirt", "brand": "Lacoste", "category": "clothing",
@@ -113,10 +127,10 @@ One product, same shape as a list item.
 → 201, the product (as above). The code (P105…) is generated. If the store
 is active and has a channel, it's posted there automatically.
 
-### `PATCH /products/{product_id}` (owners)
+### `PATCH /products/{product_id}` (everyone; staff: not the price)
 Any of the product fields; only those sent change.
 
-### `PUT /products/{product_id}/variants` (owners): the color × size grid
+### `PUT /products/{product_id}/variants` (everyone; staff: no price changes): the color × size grid
 ```json
 {
   "variants": [{"id": "…", "color": "Blue", "size": "M", "stock": 10},
@@ -138,17 +152,28 @@ Only never-ordered products; otherwise 409 "take it off sale instead".
 ### `POST /products/{product_id}/publish` (owners)
 Post to the channel, or update its post. 409 if the store isn't approved or has no channel.
 
-### `POST /photos` (owners)
+### `POST /photos` (everyone)
 `multipart/form-data` with `file` (JPEG, PNG or WebP, up to 5 MB) →
 `{"photo_url": "https://…/product-photos/<store>/<random>.jpg"}`; then save it
 as the product's `photo_url`.
 
 ### `GET /settings`, `PUT /settings` (owners)
+The Store profile screen, as lists (migration 011):
 ```json
-{"opening_hours": "Mon-Sat 8:30-19:00", "location": "Bole, Edna Mall", "delivery_info": "Bole 150 ETB",
- "pickup_instructions": "…", "payment_instructions": "Telebirr 0911 …", "return_policy": "…"}
+{"payment_accounts": [{"name": "Telebirr", "number": "0911 000 000", "holder": "nati fashion"}],
+ "delivery_areas": [{"area": "Bole", "fee": 150}],
+ "opening_week": {"mon": {"open": true, "from": "08:30", "to": "19:00"}, "…": "…", "sun": {"open": false}},
+ "location": "Bole, Edna Mall", "pickup_instructions": "…", "return_policy": "…",
+ "payment_instructions": "Telebirr: 0911 000 000 (nati fashion)", "delivery_info": "Bole: 150 ETB",
+ "opening_hours": "Mon–Sat 08:30–19:00, Sun closed"}
 ```
-PUT: only the fields sent change; an empty text clears one.
+PUT: only the fields sent change; an empty text clears one. Saving the lists
+also writes the texts customers get (`payment_instructions`, `delivery_info`,
+`opening_hours`), so the bot works unchanged.
+
+### `GET /connections` (owners)
+`{"staff_group": {"id": -500, "title": "nati fashion staff", "bot_can_see": true}, "channel": null}`.
+The Connect screen asks every 3 seconds while a `/link` code waits.
 
 ### `POST /link-code` (owners)
 → `{"code": "K5W3BJPA", "command": "/link K5W3BJPA", "minutes": 30, "expires_at": "…"}`.
@@ -164,7 +189,7 @@ After a different bot, the app must be reopened from the new bot.
 
 ### `GET /me` (anyone)
 ```json
-{"user": {"id": 123, "name": "…"}, "is_platform_admin": true,
+{"user": {"id": 123, "name": "…"}, "is_platform_admin": true, "support_url": "https://t.me/…",
  "stores": [{"id": "…", "name": "nati fashion", "status": "pending", "plan": "free",
              "bot_username": "…", "staff_group_linked": false, "channel_linked": false,
              "dashboard_url": "https://…/app/?store=…"}]}

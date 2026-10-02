@@ -13,8 +13,9 @@ created the store). Members are "staff", the group's admins "owners":
                PATCH /api/v1/app/stores/{store}/products/{product}        details (staff: not the price)
                POST /api/v1/app/stores/{store}/photos                     upload a photo -> its link
                GET  /api/v1/app/stores/{store}/orders?status=all|unpaid|paid   view only
-    owners     POST /api/v1/app/stores/{store}/products                   a product + its color × size grid
-               PUT  /api/v1/app/stores/{store}/products/{product}/variants   save the grid
+               POST /api/v1/app/stores/{store}/products                   a product + its grid (staff: no prices)
+               PUT  /api/v1/app/stores/{store}/products/{product}/variants   save the grid (staff: no prices)
+    owners
                POST /api/v1/app/stores/{store}/products/{product}/off-sale
                DELETE /api/v1/app/stores/{store}/products/{product}       never-ordered products only
                POST /api/v1/app/stores/{store}/products/{product}/publish to the channel
@@ -251,14 +252,17 @@ async def get_product(product_id: UUID, access: AppAccess = Depends(app_access),
 
 
 @router.post("/products", status_code=201)
-async def create_product(body: NewProduct, access: AppAccess = Depends(owner_access),
+async def create_product(body: NewProduct, access: AppAccess = Depends(app_access),
                          db: SupabaseService = Depends(get_db)) -> dict[str, Any]:
     """Saving a product of an active store with a linked channel posts it
     there automatically (Phase 8d), with its variants (they're saved within
-    the next moment, before the post is made)."""
+    the next moment, before the post is made). Staff add products without
+    prices; the owner sets them."""
     fields = body.product.model_dump(exclude_none=True)
     if not fields.get("name"):
         raise HTTPException(status_code=422, detail="the product needs a name")
+    if not access.is_owner and ("base_price" in fields or any(v.price is not None for v in body.variants)):
+        raise HTTPException(status_code=403, detail="only the owner can change prices")
     inventory = Inventory(db)
     product_id = await db.create_product(access.store.id, fields)
     try:
@@ -288,15 +292,17 @@ async def update_product(product_id: UUID, body: ProductFields, access: AppAcces
 
 
 @router.put("/products/{product_id}/variants")
-async def save_variants(product_id: UUID, body: GridIn, access: AppAccess = Depends(owner_access),
+async def save_variants(product_id: UUID, body: GridIn, access: AppAccess = Depends(app_access),
                         db: SupabaseService = Depends(get_db)) -> dict[str, Any]:
     """Save the color × size grid: rows are matched to existing variants (by
     id, else color + size), updated or added; `remove` deletes variants that
-    were never ordered and takes the others off sale (stock 0)."""
+    were never ordered and takes the others off sale (stock 0). Staff may
+    change stock and sizes, not prices (403)."""
     inventory = Inventory(db)
     try:
         result = await inventory.save_grid(access.store.id, product_id,
-                                           [v.row() for v in body.variants], body.remove)
+                                           [v.row() for v in body.variants], body.remove,
+                                           prices_locked=not access.is_owner)
         product = summarize(await inventory.product(access.store.id, product_id))
     except InventoryError as error:
         raise _refused(error)

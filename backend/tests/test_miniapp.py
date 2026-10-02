@@ -450,16 +450,33 @@ def test_owner_adds_a_product_with_its_grid(world):
     assert {v["price"] for v in product["variants"]} == {"1800", "2000"}
 
 
-def test_staff_cant_add_products_or_change_prices(world):
+def test_staff_manage_products_and_stock_but_not_prices(world):
     db, _, client, _, _ = world
     pid = jacket(db)["id"]
-    assert client.post(url("/products"), json={"product": {"name": "X"}}, headers=headers(MEMBER)).status_code == 403
+    # Staff add a product and its sizes without prices (the owner sets them).
+    added = client.post(url("/products"), json={"product": {"name": "Scarf"},
+                                                "variants": [{"color": "Red", "size": "One", "stock": 3}]},
+                        headers=headers(MEMBER))
+    assert added.status_code == 201 and added.json()["total_stock"] == 3
+    assert client.post(url("/products"), json={"product": {"name": "X", "base_price": 10}},
+                       headers=headers(MEMBER)).status_code == 403
+    assert client.post(url("/products"), json={"product": {"name": "X"},
+                                               "variants": [{"color": "R", "size": "S", "stock": 1, "price": 9}]},
+                       headers=headers(MEMBER)).status_code == 403
     assert client.patch(url(f"/products/{pid}"), json={"base_price": 1}, headers=headers(MEMBER)).status_code == 403
     # Staff edit the details (design: "Staff price locked"), even sending the unchanged price.
     edited = client.patch(url(f"/products/{pid}"), json={"description": "Soft denim", "base_price": 3500},
                           headers=headers(MEMBER))
     assert edited.status_code == 200 and edited.json()["description"] == "Soft denim"
-    assert client.put(url(f"/products/{pid}/variants"), json={"variants": []}, headers=headers(MEMBER)).status_code == 403
+    # The grid: stock changes and a new size are fine; a price change isn't.
+    blue_m, blue_xl = jacket(db)["product_variants"]
+    grid = {"variants": [{"id": blue_m["id"], "color": "Blue", "size": "M", "stock": 9},
+                         {"id": blue_xl["id"], "color": "Blue", "size": "XL", "stock": 2, "price": 3800},
+                         {"color": "Blue", "size": "L", "stock": 4}]}
+    assert client.put(url(f"/products/{pid}/variants"), json=grid, headers=headers(MEMBER)).status_code == 200
+    grid["variants"][1]["price"] = 3000
+    assert client.put(url(f"/products/{pid}/variants"), json=grid, headers=headers(MEMBER)).status_code == 403
+    assert client.post(url(f"/products/{pid}/off-sale"), headers=headers(MEMBER)).status_code == 403
     assert client.get(url("/settings"), headers=headers(MEMBER)).status_code == 403
     assert jacket(db)["base_price"] == 3500
 
