@@ -1,0 +1,45 @@
+# Render Blueprint (Phase 11, docs/deployment.md): Render → New → Blueprint →
+# this repository. It creates the web service below; you fill in the secret
+# values (marked sync: false) in Render's form, they are never in this file.
+services:
+  - type: web
+    name: cloth-store
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    branch: main # main has both the backend and the Mini App (frontend/)
+    plan: starter # always on ($7/month); the free plan sleeps and misses messages
+    region: frankfurt # the closest Render region to Ethiopia
+    numInstances: 1 # exactly one: customer locks and spam limits live in memory
+    healthCheckPath: /api/v1/health
+    autoDeploy: true # every push to main deploys
+    envVars:
+      # Supabase: Project Settings -> API (use the NEW keys, docs/deployment.md §4)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # The AI (e.g. gemini + your model + a NEW key)
+      - key: LLM_PROVIDER
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      # This service's https address, e.g. https://cloth-store.onrender.com
+      # (known after the first deploy: set it, then redeploy)
+      - key: PUBLIC_BASE_URL
+        sync: false
+      # Supabase's catalog webhooks send it (a NEW long random text)
+      - key: CATALOG_WEBHOOK_SECRET
+        sync: false
+      # The platform bot (sign-up) and the "Contact support" username
+      - key: PLATFORM_BOT_TOKEN
+        sync: false
+      - key: SUPPORT_USERNAME
+        sync: false
+      - key: AI_DAILY_CALLS_PER_STORE
+        value: "300"
+      - key: CUSTOMER_MESSAGES_PER_MINUTE
+        value: "20"
+      - key: LOG_LEVEL
+        value: INFO

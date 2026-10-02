@@ -61,37 +61,47 @@ shops. Move to Hetzner later if the bill matters more than the effort.
 
 ## 3. Deploying on Render (option A), step by step
 
-1. **Merge the branches into `main`** (GitHub pull requests):
-   `backend-scaffold` → `main`, then `Front-end` → `main`. The `Dockerfile`
-   builds both: `main` is what you deploy.
-2. Render → New → **Web Service** → connect the GitHub repo, branch `main`.
-   Runtime: **Docker** (it finds the `Dockerfile`). Instance: **Starter**.
-   Health check path: `/api/v1/health`. Instances: **1** (no autoscaling).
-3. **Environment variables** (Render → Environment), the same as
-   `backend/.env`:
+**Chosen for the pilot (October 2026).** The service is described in
+`render.yaml` (a Render "Blueprint"): Docker, Starter plan, Frankfurt, one
+instance, health check, auto-deploy from `main`. Secrets are typed into
+Render's form, never committed.
+
+1. **Push both branches**, then **merge them into `main`** on GitHub
+   (Pull requests → New: `backend-scaffold` → `main`, merge; then
+   `Front-end` → `main`, merge). They merge without conflicts.
+2. **New secrets first** (§4, item 1), so the server starts with the new ones.
+3. Render → **New → Blueprint** → connect GitHub → choose this repository.
+   Render reads `render.yaml` and asks for the secret values:
 
    | Variable | Value |
    |---|---|
-   | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | from Supabase (the new keys, see §4) |
+   | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API (the new key) |
    | `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY` | e.g. `gemini`, your model, the new key |
-   | `PUBLIC_BASE_URL` | the Render address, e.g. `https://cloth-store.onrender.com` |
-   | `CATALOG_WEBHOOK_SECRET` | a new long random text (also in Supabase's webhooks) |
-   | `PLATFORM_BOT_TOKEN`, `SUPPORT_USERNAME` | the platform bot; your support username |
-   | `AI_DAILY_CALLS_PER_STORE`, `CUSTOMER_MESSAGES_PER_MINUTE` | optional (300, 20) |
-   | `LOG_LEVEL` | `INFO` |
+   | `PUBLIC_BASE_URL` | leave a placeholder for now (e.g. `https://example.com`), see step 5 |
+   | `CATALOG_WEBHOOK_SECRET` | a new long random text |
+   | `PLATFORM_BOT_TOKEN`, `SUPPORT_USERNAME` | the platform bot's token; your support username (no @) |
 
-   Render sets `PORT` itself; the image uses it.
-4. Deploy. Open `https://<your address>/api/v1/health` → `{"status": "ok"}`.
-5. **Point every bot at the new address**, from your computer (with
-   `PUBLIC_BASE_URL` in `backend/.env` set to the Render address):
-   `python -m scripts.connect_all`, then check with `--check`.
-6. **Supabase → Database → Webhooks**: change both catalog webhooks' URL
-   from the ngrok address to `https://<your address>/api/v1/catalog/webhook`
-   (and the `X-Webhook-Secret` header if you changed the secret).
-7. Test: message a store's bot, place an order, open `/dashboard`, change a
-   stock number and see the channel post update.
+   Apply → Render builds the image (a few minutes) and starts it.
+4. Open `https://<service>.onrender.com/api/v1/health` → `{"status":"ok"}`.
+5. Set `PUBLIC_BASE_URL` to that exact address (Render → the service →
+   Environment), save: it redeploys.
+6. **Stop the server on your computer and ngrok.** Only ONE copy may run
+   against the database (two would both handle messages and run the
+   sweeps).
+7. **Point every bot at Render**, from your computer: put the Render
+   address and the new keys in `backend/.env`, then
+   `python -m scripts.connect_all`, and check with `--check`. (Or in Render
+   → Shell: `cd /srv/backend && python -m scripts.connect_all`.)
+8. **Supabase → Database → Webhooks**: in both catalog webhooks, change the
+   URL to `https://<service>.onrender.com/api/v1/catalog/webhook` and the
+   `X-Webhook-Secret` header to the new `CATALOG_WEBHOOK_SECRET`.
+9. **Test**: message a store's bot, place an order, confirm the payment in
+   the staff group, open `/dashboard`, change a stock number and see the
+   channel post update, open the platform bot.
+10. **Uptime monitor** (§4, item 4).
 
-Later updates: push to `main` → Render builds and restarts by itself.
+Later updates: merge into `main` → Render builds and restarts by itself.
+Logs: Render → the service → Logs.
 
 ---
 
