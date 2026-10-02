@@ -69,9 +69,14 @@ Days are Addis Ababa days; `7d` and `30d` include today. Money values are string
                     "quantity": 3, "revenue": "10500"}],
   "low_stock": [{"variant_id": "…", "product_id": "…", "product_name": "Polo T-Shirt", "code": "P104",
                  "color": "Navy", "size": "XL", "stock": 1}],
-  "ai_calls_today": 12, "ai_daily_limit": 300
+  "ai_calls_today": 12, "ai_daily_limit": 300,
+  "telegram_orders": 5, "in_shop_sales": 3, "in_shop_revenue": "27000",
+  "discount_total": "1500", "discounted_items": 2,
+  "sellers": [{"telegram_id": 123, "name": "Abdi", "sales": 3, "revenue": "27000"}]
 }
 ```
+Every number counts Telegram orders and counter sales together; the last
+block splits them (Phase 12, D57).
 - revenue = money staff confirmed in the period; `paid_rate` 0.6 = 60 % of orders were paid.
 - `low_stock`: 2 or fewer left right now (0 = sold out), fewest first.
 
@@ -102,6 +107,48 @@ One product, same shape as a list item.
 ```
 → `{"variant_id": "…", "stock": 12}`. Never below 0 (409).
 
+### Counter sales (Phase 12, D53–D57)
+
+A walk-in customer buys in the shop. The listed price never changes; each
+item keeps the listed price and the agreed price (the difference is the
+discount). The owner may agree any price up to the listed one; staff down
+to the store's limit (`staff_discount_percent`, in `GET /me` → `store`).
+
+#### `GET /variants/{variant_id}/availability` (everyone)
+Before selling, especially the last piece:
+```json
+{"variant_id": "…", "stock": 1, "held": 1, "available": 0, "listed_price": "10000",
+ "holds": [{"order_number": "AB12CD", "quantity": 1, "minutes_left": 3}]}
+```
+`available` 0 with `holds`: an online order is holding it (D55): show the
+warning; if staff still sell it, send `allow_held: true`.
+
+#### `POST /counter-sales` (everyone; staff within the limit)
+```json
+{"items": [{"variant_id": "…", "quantity": 1, "price": 9000}],
+ "payment_method": "Cash", "payment_note": null,
+ "customer_name": null, "customer_phone": null, "note": "agreed 9,000",
+ "allow_held": false, "request_id": "<a new uuid per sale>"}
+```
+- `payment_method`: any text (D56); `GET /me` → `store.payment_methods` gives
+  "Cash" plus the store's payment accounts; "Other" + `payment_note` for the rest.
+- `request_id`: made once per sale by the app, so pressing Confirm twice
+  saves once (`already_saved: true` the second time).
+
+→ 201 `{"order_id", "number": "AB12CD", "total": "9000", "list_total": "10000",
+"discount": "1000", "already_saved": false, "held_orders": []}`. Stock goes
+down, the channel post updates, the staff group gets a note.
+
+Refusals (`detail` is the message to show; the `X-Error-Code` header says which):
+| Status | `X-Error-Code` | When |
+|---|---|---|
+| 403 | `discount_too_large` | staff below the limit ("at most 10% off… ask the owner") |
+| 409 | `held_by_online_order` | an online order holds it: ask, then send again with `allow_held: true` |
+| 409 | `insufficient_stock` | not enough in stock |
+| 422 | `price_above_list`, `duplicate_item`, … | check the input |
+
+The staff limit is changed in `PUT /settings` → `staff_discount_percent` (owners).
+
 ### `GET /orders?status=all|unpaid|paid&limit=30&before=<created_at>` (everyone)
 View only (confirming payments stays in the staff group, D46). Newest first;
 for more, pass the last order's `created_at` as `before`.
@@ -110,9 +157,12 @@ for more, pass the last order's `created_at` as `before`.
              "total": 7300, "currency": "ETB", "fulfillment": "delivery",
              "customer": {"name": "Abebe", "phone": "0911223344"}, "delivery_address": null,
              "created_at": "…", "items": [{"name": "Classic Denim Jacket", "code": "P102",
-             "color": "Blue", "size": "M", "quantity": 2, "price": 3650}]}],
+             "color": "Blue", "size": "M", "quantity": 2, "price": 3650, "list_price": null}],
+             "channel": "telegram", "payment_method": null, "sold_by": null, "note": null}],
  "more": false}
 ```
+Counter sales come in the same list with `"channel": "in_shop"`, `sold_by`,
+`payment_method`, and each item's `list_price` next to the `price` paid.
 
 ### `POST /products` (everyone; staff: no prices)
 ```json

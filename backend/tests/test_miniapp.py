@@ -647,7 +647,8 @@ def test_orders_list_for_staff(world):
     assert order["payment_status"] == "unpaid" and order["total"] == 7300 and order["fulfillment"] == "delivery"
     assert order["delivery_address"] is None  # "to be arranged" isn't an address
     assert order["items"] == [{"name": "Denim Jacket", "code": "P101", "color": "Blue", "size": "M",
-                               "quantity": 2, "price": 3650}]
+                               "quantity": 2, "price": 3650, "list_price": None}]
+    assert order["channel"] == "telegram" and order["sold_by"] is None
     assert order["number"] and order["customer"] == {"name": "Abebe", "phone": "0911223344"}
     client.get(url("/orders?status=paid&limit=5"), headers=headers(MEMBER))
     assert db.order_queries[-1][1:3] == ("paid", 5)

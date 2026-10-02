@@ -981,7 +981,7 @@ platform bot and approve it.
 
 ---
 
-### Phase 11 — Ready to deploy ✅ Built and the image tested; nothing deployed yet (waiting for my hosting choice)
+### Phase 11 — Ready to deploy ✅ Done: live on Render (October 2026)
 
 **Goal:** everything needed to put it online.
 
@@ -1001,6 +1001,14 @@ platform bot and approve it.
   user, Docker reports it healthy, serves the React app at `/app/` (deep
   links too, old assets 404), and has no `.env` or tests inside. Fixed on
   the way: the image now uses npm 11.11 (the one that made the lock file).
+- **Deployed (2026-10-02)** on Render, chosen for the pilot: Starter,
+  Frankfurt, one instance, from `main` (both branches merged) via
+  `render.yaml`. https://cloth-store-ai-platform.onrender.com (health
+  check OK); every store's bot and the platform bot point there
+  (`connect_all`); the laptop server and ngrok are stopped. Still to do
+  from the go-live checklist (docs/deployment.md §4): the Supabase catalog
+  webhooks to the Render address, the remaining exposed secrets (Gemini
+  key, webhook secret, platform bot token), Supabase Pro, uptime monitor.
 - `scripts/connect_all.py`: points every store's bot and the platform bot
   at `PUBLIC_BASE_URL` (after a deploy or a new ngrok address); `--check`
   shows where each one sends its messages.
@@ -1012,6 +1020,115 @@ platform bot and approve it.
   plus the AI. Step-by-step for Render, and the go-live checklist
   (replace the exposed secrets, Pro, migrations, uptime monitoring, one
   instance, "check the money before confirming").
+
+---
+
+### Phase 12 — Sales in the shop (counter sales and price negotiation) 🟡 Backend built; waiting for migration 012 and my design (frontend)
+
+**Goal:** a customer who walks into the shop is part of the system too:
+stock stays right, the sale counts in the numbers, and the shop can agree a
+lower price face to face, without ever changing the listed price.
+
+**Why:** today a counter sale is only "Quick stock −1": the stock is right,
+but the sale is missing from revenue and top products, nobody knows who
+sold what, and a negotiated price can't be recorded at all.
+
+**The listed price never changes (D54).** Not in the database, not in the
+channel post, not for online customers (the bot always uses the listed
+price, and haggling in the chat still goes to staff). A counter sale records
+two prices per item:
+- the **listed price**, taken from the database at that moment;
+- the **final price** agreed at the counter.
+
+The difference is the **discount**, saved with who gave it. Revenue counts
+what was actually paid.
+
+**Who may give a lower price (D53):**
+- **Owner:** any final price (from 0 up to the listed price).
+- **Staff:** down to a limit the owner sets in Settings, e.g. **10 % off**
+  (default 10 %, 0 = no discounts for staff). Below that, the owner does the
+  sale. The server checks it, not only the screen.
+- Never above the listed price.
+
+**A counter sale, step by step (in the Mini App):**
+1. 🏪 **Counter sale** → search or pick the product → color, size → quantity
+   (only what's in stock). Several items in one sale.
+2. Each item shows the listed price; tap it to enter the agreed price
+   (staff: the screen shows their lowest allowed price).
+3. **How they paid (D56): any method.** Cash, or one of the store's payment
+   accounts (Telebirr, CBE…, from the Store profile), or "Other" with a note.
+4. Optional: the customer's name or phone, and a note (e.g. "agreed 9,000 for
+   two").
+5. **Confirm** → in one step (all or nothing): stock goes down, the sale is
+   saved as paid and completed, sold **in the shop**, and the channel post
+   updates.
+
+**The last piece held by an online order (D55):** the screen warns ("An
+online order is holding this, 3 minutes left"). Staff can still sell it;
+then that online customer's payment can't be confirmed (the system already
+refuses it as sold out), and the staff group gets a note: "📞 Order #AB12
+can't be filled: the last Airmax 42 was sold in the shop. Call the customer."
+
+**What changes elsewhere:**
+- **Orders tab:** counter sales appear in the list, marked 🏪 (with the
+  listed price, the final price and who sold it).
+- **Analytics:** every number counts both; plus **Telegram vs in shop**
+  (e.g. "Today: 8 sales: 5 Telegram, 3 in shop"), **discounts given**
+  (total and how many), and sales per staff member.
+- **Staff group note** for every counter sale: "🏪 Abdi sold Airmax Black 42
+  × 1: 9,000 ETB (listed 10,000, −10 %), cash."
+- **Settings (owner):** the staff discount limit.
+
+**What to build:**
+- Migration `012_counter_sales.sql` (I approve it first):
+  - orders: where it was sold (`telegram` / `in_shop`), the payment method
+    and note, who sold it (Telegram id and name);
+  - order lines: the listed price next to the paid price;
+  - stores: the staff discount limit (percent);
+  - a `record_counter_sale` function: checks stock, saves the order as
+    paid and completed with its lines, reduces stock, in one transaction;
+    reports any online order whose hold it overrode;
+  - `store_analytics` adds Telegram vs in shop, discounts, and per seller.
+- Backend: `POST /api/v1/app/stores/{store}/counter-sales` (staff and
+  owners; the price rule checked by the server), the hold warning
+  (`GET` availability for a variant), the staff group note, the setting.
+- Frontend (my design first, like Phase 10b): the Counter sale screens
+  (pick items, price, payment, confirm, done), the 🏪 mark in Orders, the
+  new analytics numbers, the discount limit in Settings.
+- Tests: the price rule (staff limit, owner, never above the listed price),
+  stock and holds, the all-or-nothing save, analytics with both kinds,
+  cross-store.
+
+**How the backend was built:**
+- Migration `012_counter_sales.sql`: orders get `channel` (telegram /
+  in_shop), payment method and note, who sold it, a note; order lines get
+  `list_price`; stores get `staff_discount_percent` (default 10);
+  `record_counter_sale()` checks every line (the variant is the store's,
+  price ≤ listed, ≥ the staff limit, enough stock, online holds), then
+  saves the order (paid, delivered), its lines, the stock and the payment
+  in one transaction, once per `request_id`; `store_analytics()` adds
+  Telegram vs in shop, discounts and sellers.
+- `backend/app/agents/counter.py`: the role rule (owner: no limit, staff:
+  the store's), clear refusals, the staff group note with listed price and
+  discount, "call this customer" for an online order whose held item was
+  sold.
+- Endpoints: `POST /counter-sales`, `GET /variants/{id}/availability`;
+  `GET /me` adds the staff limit and the payment methods; `PUT /settings`
+  takes `staff_discount_percent`; orders show channel, seller, method,
+  listed price. API: `docs/mini-app-api.md`.
+- Tests: `test_counter.py` (endpoints, roles, notes) and
+  `test_counter_db.py` (the database's rules, after migration 012).
+
+**Not in this phase (later, if needed):** returns and exchanges at the
+counter; a printed or Telegram receipt for the walk-in customer; a
+negotiated price for an online customer (today staff handle it by phone).
+
+**Check:** sell one item at the counter at a lower price as staff (within
+the limit) and see: stock −1, the channel post updated, the sale in Orders
+with both prices, revenue counting the paid price, the discount in the
+numbers, the note in the staff group; try below the limit as staff
+(refused) and as owner (allowed); sell the last piece while an online order
+holds it and see the warning and the staff note.
 
 ---
 
@@ -1073,6 +1190,11 @@ Answer each before the phase listed, and record the answer here.
 | D50 | What may staff do with products (design: "Staff price locked")? | Phase 10b | Add products, edit details and photos, change stock and sizes; never prices; no settings |
 | D51 | How is the store profile edited (design: lists)? | Phase 10b | As lists: payment accounts, delivery areas with fees, hours per day (migration 011); the bot's texts are written from them |
 | D52 | "Pick on map" for the location? | Phase 10b | Skipped for now: the address as text |
+| D53 | At the counter, who may sell below the listed price? | Phase 12 | The owner: any price. Staff: down to a limit the owner sets (default 10 % off). Never above the listed price. The server checks it |
+| D54 | How is a negotiated price kept without changing the price? | Phase 12 | The listed price never changes (database, channel, bot). A counter sale saves the listed and the final price per item; the difference is the discount, with who gave it |
+| D55 | A walk-in wants the last piece an online order is holding? | Phase 12 | Warn, then staff decide; if they sell it, the staff group is told to call the online customer |
+| D56 | How do walk-in customers pay? | Phase 12 | Any method: cash, one of the store's payment accounts, or "other" with a note |
+| D57 | Are counter sales in the analytics? | Phase 12 | Yes: every number counts both, plus Telegram vs in shop, discounts given, and per seller |
 
 ---
 
