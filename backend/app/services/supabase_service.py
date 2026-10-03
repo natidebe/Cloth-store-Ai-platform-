@@ -135,7 +135,7 @@ def _search_words(text: str | None) -> list[str]:
 
 _VARIANT_COLUMNS = (
     "id, product_id, color, size, stock_quantity, price_override, "
-    "products!inner(name, brand, category, base_price)"
+    "products!inner(name, brand, category, base_price, condition, warranty_months)"
 )
 
 
@@ -152,6 +152,8 @@ def _to_variant_match(row: dict[str, Any]) -> VariantMatch:
         size=row["size"],
         stock_quantity=row["stock_quantity"],
         price=price,
+        condition=product.get("condition"),
+        warranty_months=product.get("warranty_months"),
     )
 
 
@@ -165,6 +167,8 @@ def _to_order_with_items(row: dict[str, Any]) -> OrderWithItems:
             product_name=product.get("name"),
             color=variant.get("color"),
             size=variant.get("size"),
+            condition=product.get("condition"),
+            warranty_months=product.get("warranty_months"),
         ))
     return OrderWithItems(**row, items=items)
 
@@ -463,7 +467,8 @@ class SupabaseService:
         """Change the store's profile: the texts (PROFILE_FIELDS) and the lists
         the Mini App edits (migration 011). Nothing else on the store."""
         changes = {k: v for k, v in fields.items()
-                   if k in PROFILE_FIELDS or k in PROFILE_LISTS or k == "staff_discount_percent"}
+                   if k in PROFILE_FIELDS or k in PROFILE_LISTS
+                   or k in ("staff_discount_percent", "shop_type", "option_labels")}
         changes = _json_safe(changes)
         if not changes:
             return
@@ -951,7 +956,7 @@ class SupabaseService:
             self._db.table("orders")
             .select(
                 "*, order_items(id, order_id, variant_id, quantity, price, "
-                "product_variants(color, size, products(name)))"
+                "product_variants(color, size, products(name, condition, warranty_months)))"
             )
             .eq("store_id", str(store_id))
             .eq("customer_id", str(customer_id))
@@ -966,7 +971,7 @@ class SupabaseService:
             self._db.table("orders")
             .select(
                 "*, order_items(id, order_id, variant_id, quantity, price, "
-                "product_variants(color, size, products(name)))"
+                "product_variants(color, size, products(name, condition, warranty_months)))"
             )
             .eq("store_id", str(store_id))
             .eq("id", str(order_id))

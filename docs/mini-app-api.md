@@ -56,6 +56,19 @@ The backend serves the built app (`frontend/dist`) for every path under
 ```
 `status`: `pending` (waiting for approval: show a banner), `active`, `suspended`.
 
+**Shop type (Phase 13, D58–D62).** `store` also has the shop's words for a
+product's two options (stored as `color` and `size`), with the owner's renames:
+```json
+"shop_type": "electronics",
+"option1": {"en": "Color", "am": "ቀለም", "plural": "Colors", "icon": "🎨"},
+"option2": {"en": "Storage", "am": "ማከማቻ", "plural": "Storage", "icon": "💾"},
+"categories": ["Phones", "Laptops", "Tablets", "Accessories"],
+"condition_and_warranty": true
+```
+Use these words instead of "Color" and "Size" everywhere (grid, product form,
+quick stock, counter sale, orders). `categories`: suggestions for the product
+form. `condition_and_warranty`: show Condition and Warranty in the product form.
+
 ### `GET /analytics?period=today|week|month|7d|30d` (everyone)
 Days are Addis Ababa days: `week` starts on Monday, `month` on the 1st, and `7d` and `30d` include today. Money values are strings.
 ```json
@@ -177,6 +190,10 @@ Counter sales come in the same list with `"channel": "in_shop"`, `sold_by`,
 → 201, the product (as above). The code (P105…) is generated. If the store
 is active and has a channel, it's posted there automatically.
 
+Electronics (Phase 13): the product may also have `"condition": "new" | "used"`
+(or null) and `"warranty_months": 0–120` (null or 0 = none). Products return
+both fields.
+
 ### `PATCH /products/{product_id}` (everyone; staff: not the price)
 Any of the product fields; only those sent change.
 
@@ -221,6 +238,21 @@ PUT: only the fields sent change; an empty text clears one. Saving the lists
 also writes the texts customers get (`payment_instructions`, `delivery_info`,
 `opening_hours`), so the bot works unchanged.
 
+**Shop type & words (Phase 13, D59/D61).** GET also returns `shop_type`,
+`option_labels` (the owner's renames, or null) and `shop_types`: every type
+with its own words:
+```json
+"shop_types": [{"type": "electronics", "names": {"en": "Electronics & phones", "am": "ኤሌክትሮኒክስና ስልክ"},
+                "option1": {"en": "Color", "am": "ቀለም", "plural": "Colors", "icon": "🎨"},
+                "option2": {"en": "Storage", "am": "ማከማቻ", "plural": "Storage", "icon": "💾"},
+                "categories": ["Phones", "…"], "condition_and_warranty": true}, "…"]
+```
+PUT accepts `"shop_type": "clothing" | "electronics" | "cosmetics" | "general"`
+and `"option_labels": {"option1": {"en": "…", "am": "…"}, "option2": {…}}`
+(up to 20 characters each; empty = the type's word; `null` = no renames).
+Only the words change; products and stock stay. The bot's description in
+Telegram is rewritten, and channel posts follow within a minute.
+
 ### `GET /connections` (owners)
 `{"staff_group": {"id": -500, "title": "nati fashion staff", "bot_can_see": true}, "channel": null}`.
 The Connect screen asks every 3 seconds while a `/link` code waits.
@@ -246,9 +278,11 @@ After a different bot, the app must be reopened from the new bot.
 ```
 Show "Create your store" if `stores` is empty; each store links to its
 dashboard (open it from the store's bot: `t.me/<bot_username>?start=dashboard`).
+Also `shop_types` (as in `GET /settings` above): for "What kind of shop?".
 
 ### `POST /stores` (anyone)
-`{"name": "nati fashion", "bot_token": "<from @BotFather>"}` → 201, a store as
+`{"name": "nati fashion", "bot_token": "<from @BotFather>", "shop_type": "electronics"}`
+(`shop_type` asked first; default `clothing`) → 201, a store as
 above plus `bot_connected` and `note`. 400: the token doesn't work; 409: the
 bot already belongs to a store.
 

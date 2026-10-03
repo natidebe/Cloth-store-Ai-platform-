@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from app.agents.messages import bot_profile
+from app.agents.shop_types import DEFAULT_TYPE
 from app.models.schemas import AuthUser, Store, TelegramUpdate
 from app.services.supabase_service import DuplicateError, SupabaseService
 from app.services.telegram_service import TelegramError, TelegramService
@@ -108,7 +109,7 @@ class Onboarding:
         token = store.telegram_bot_token.get_secret_value()
         url = f"{self.public_base_url}/api/v1/webhook/{store.id}"
         await self.telegram.set_webhook(token, url, store.webhook_secret.get_secret_value())
-        await self.telegram.set_profile(token, *bot_profile(store.name))
+        await self.telegram.set_profile(token, *bot_profile(store.name, store))
 
     async def _connect(self, store: Store) -> bool:
         try:
@@ -124,13 +125,15 @@ class Onboarding:
         """From the dashboard login (Supabase): the user becomes the owner."""
         return await self._create(name, bot_token, lambda *bot: self.db.create_store(*bot, user.id))
 
-    async def create_store_for_telegram(self, telegram_id: int, name: str, bot_token: str) -> BotConnection:
+    async def create_store_for_telegram(self, telegram_id: int, name: str, bot_token: str,
+                                        shop_type: str = DEFAULT_TYPE) -> BotConnection:
         """From the platform bot's Mini App (Phase 10b, D44): this Telegram
-        account is the owner."""
+        account is the owner. `shop_type` (Phase 13, D58): what kind of shop."""
         return await self._create(name, bot_token,
-                                  lambda *bot: self.db.create_store_for_telegram(*bot, telegram_id))
+                                  lambda *bot: self.db.create_store_for_telegram(*bot, telegram_id),
+                                  shop_type)
 
-    async def _create(self, name: str, bot_token: str, save) -> BotConnection:
+    async def _create(self, name: str, bot_token: str, save, shop_type: str = DEFAULT_TYPE) -> BotConnection:
         name = " ".join(name.split())
         if not 2 <= len(name) <= 80:
             raise OnboardingError("The store name must be 2 to 80 characters.")
@@ -142,6 +145,8 @@ class Onboarding:
             store_id = await save(name, bot_token.strip(), bot.bot_id, bot.username, secrets.token_urlsafe(32))
         except DuplicateError:
             raise OnboardingError(f"@{bot.username} is already used by another store.", 409)
+        if shop_type != DEFAULT_TYPE:  # before the bot's description is written
+            await self.db.update_store_profile(store_id, {"shop_type": shop_type})
         store = await self.db.get_store_any_status(store_id)
         logger.info("store created", extra={"store_id": str(store_id), "bot": bot.username})
         connected = await self._connect(store)

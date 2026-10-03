@@ -141,7 +141,7 @@ class CounterSales:
     def _refusal(self, error: DatabaseError, store: Store, variants: dict[UUID, VariantMatch]) -> CounterSaleError:
         code = error.code
         item = variants.get(UUID(error.detail)) if error.detail and len(error.detail) == 36 else None
-        label = describe(item) if item else "This item"
+        label = describe(item, store=store) if item else "This item"
         if isinstance(error, OutOfStockError):
             return CounterSaleError(f"{label}: not enough in stock.", 409, "insufficient_stock")
         if isinstance(error, NotFoundError):
@@ -175,7 +175,7 @@ class CounterSales:
         for line in sale.lines:
             variant = variants.get(line.variant_id)
             listed = variant.price if variant and variant.price is not None else line.price
-            text = f"• {describe(variant) if variant else 'item'} × {line.quantity}: {format_price(line.price * line.quantity)}"
+            text = f"• {describe(variant, store=store) if variant else 'item'} × {line.quantity}: {format_price(line.price * line.quantity)}"
             if line.price < listed:
                 text += f" (listed {format_price(listed * line.quantity)}{_percent_off(listed, line.price)})"
             lines.append(text)

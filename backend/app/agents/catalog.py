@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from app.agents.messages import format_price
+from app.agents.shop_types import condition_text, labels, lower_word, warranty_text
 from app.models.schemas import Product, ProductPost, Store, VariantMatch
 from app.services.supabase_service import SupabaseService
 from app.services.telegram_service import MAX_CAPTION_LENGTH, TelegramError, TelegramService
@@ -49,8 +50,8 @@ def order_link(bot_username: str, code: str) -> str:
     return f"https://t.me/{bot_username}?start=p_{code}"
 
 
-def caption(product: Product, variants: list[VariantMatch]) -> str:
-    """The channel post's text, from the database."""
+def caption(product: Product, variants: list[VariantMatch], store: object | None = None) -> str:
+    """The channel post's text, from the database, in the shop's words (Phase 13)."""
     in_stock = [v for v in variants if v.stock_quantity > 0 and v.price is not None]
     title = product.name + (f" ({product.brand})" if product.brand else "")
     lines = []
@@ -61,12 +62,20 @@ def caption(product: Product, variants: list[VariantMatch]) -> str:
     if prices:
         price = format_price(prices[0])
         lines.append(f"💰 {'ከ / from ' if len(prices) > 1 else ''}{price}")
-    # Colors and sizes are optional (a bag, a belt, jewelry): only what exists is shown.
+    # Electronics (D60): new or used, and the warranty.
+    extras = [(condition_text(product.condition, "am"), condition_text(product.condition, "en")),
+              (warranty_text(product.warranty_months, "am"), warranty_text(product.warranty_months, "en"))]
+    extras = [f"{am} / {en}" for am, en in extras if en]
+    if extras:
+        lines.append(("✨ " if product.condition == "new" else "🛡️ ") + " · ".join(extras))
+    # The two options are optional (a bag, a belt, jewelry): only what exists is
+    # shown, under the shop's names for them (Phase 13: Colors & sizes, Storage…).
+    first, second = labels(store)
     has_colors = any(v.color for v in in_stock)
     has_sizes = any(v.size for v in in_stock)
     if has_colors and has_sizes:
         lines.append("")
-        lines.append("🎨 ቀለም እና ቁጥር / Colors & sizes:")
+        lines.append(f"{first.icon} {first.am} እና {second.am} / {first.plural} & {lower_word(second.plural)}:")
         colors: dict[str, list[str]] = {}
         for v in in_stock:
             colors.setdefault(v.color or "—", [])
@@ -76,10 +85,12 @@ def caption(product: Product, variants: list[VariantMatch]) -> str:
             lines.append(f"• {color}: {', '.join(sizes)}" if sizes else f"• {color}")
     elif has_colors:
         lines.append("")
-        lines.append(f"🎨 ቀለም / Colors: {', '.join(dict.fromkeys(v.color for v in in_stock if v.color))}")
+        lines.append(f"{first.icon} {first.am} / {first.plural}: "
+                     f"{', '.join(dict.fromkeys(v.color for v in in_stock if v.color))}")
     elif has_sizes:
         lines.append("")
-        lines.append(f"📏 ቁጥር / Sizes: {', '.join(dict.fromkeys(v.size for v in in_stock if v.size))}")
+        lines.append(f"{second.icon} {second.am} / {second.plural}: "
+                     f"{', '.join(dict.fromkeys(v.size for v in in_stock if v.size))}")
     if product.description:
         lines.append("")
         lines.append(product.description.strip())
@@ -124,7 +135,7 @@ class Catalog:
             return PublishResult(True, f"{product.code} was already posted; its post is up to date.")
 
         variants = await self.db.get_product_variants(store.id, product.id)
-        text = caption(product, variants)
+        text = caption(product, variants, store)
         link = order_link(await self.bot_username(store), product.code)
         token = store.telegram_bot_token.get_secret_value()
         buttons = [(ORDER_LABEL, link)]
@@ -145,7 +156,7 @@ class Catalog:
         if product is None or not posts:
             return 0
         variants = await self.db.get_product_variants(store.id, product.id)
-        text = caption(product, variants)
+        text = caption(product, variants, store)
         link = order_link(await self.bot_username(store), product.code)
         return await self._edit(store, posts, text, [(ORDER_LABEL, link)], fingerprint(text, link))
 

@@ -90,6 +90,7 @@ def summarize(product: dict[str, Any]) -> dict[str, Any]:
         "brand": product.get("brand"), "category": product.get("category"),
         "base_price": product.get("base_price"), "photo_url": product.get("photo_url"),
         "description": product.get("description"), "search_keywords": product.get("search_keywords"),
+        "condition": product.get("condition"), "warranty_months": product.get("warranty_months"),
         "total_stock": total, "variant_count": len(variants), "on_sale": total > 0,
         "price_min": min(prices) if prices else None, "price_max": max(prices) if prices else None,
         "low_stock": any(int(v.get("stock_quantity") or 0) <= LOW_STOCK_AT for v in variants),
