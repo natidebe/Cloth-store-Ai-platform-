@@ -16,6 +16,7 @@ import type {
   Period,
   Plan,
   PlatformMe,
+  ShopType,
   Product,
   ProductFields,
   ProductList,
@@ -103,10 +104,10 @@ export const storeApi = {
 export const platformApi = {
   me: () => api<PlatformMe>('/platform-app/me'),
 
-  createStore: (name: string, botToken: string) =>
+  createStore: (name: string, botToken: string, shopType: ShopType) =>
     api<StoreCard & { bot_connected: boolean; note: string }>('/platform-app/stores', {
       method: 'POST',
-      body: { name, bot_token: botToken },
+      body: { name, bot_token: botToken, shop_type: shopType },
     }),
 
   adminStores: () => api<AdminStore[]>('/platform-app/admin/stores'),

@@ -5,7 +5,7 @@ import { useBlocker, useParams } from 'react-router';
 import { usePublish, useProduct, useSaveGrid, useTakeOffSale } from '@/api/queries';
 import type { Product } from '@/api/types';
 import { ErrorScreen } from '@/app/AccessScreens';
-import { useBackButton, useErrorText, useLanguage, useStore } from '@/app/hooks';
+import { useBackButton, useErrorText, useLanguage, useStore, useShopWords } from '@/app/hooks';
 import {
   BottomBar,
   Button,
@@ -47,6 +47,7 @@ export function StockGridScreen() {
 
 function Grid({ product }: { product: Product }) {
   const { t } = useTranslation();
+  const words = useShopWords();
   const errorText = useErrorText();
   const { storeId, role, isOwner } = useStore();
   const save = useSaveGrid(storeId, product.id);
@@ -107,7 +108,7 @@ function Grid({ product }: { product: Product }) {
   };
 
   const onTakeOffSale = async () => {
-    if (!(await confirmAction(t('grid.takeOffSaleConfirm')))) return;
+    if (!(await confirmAction(t('grid.takeOffSaleConfirm', words)))) return;
     offSale.mutate(undefined, {
       onSuccess: () => toast.info(t('grid.offSale')),
       onError: (error) => toast.error(errorText(error)),
@@ -141,7 +142,7 @@ function Grid({ product }: { product: Product }) {
                     <th aria-hidden="true" />
                     {sizes.map((size) => (
                       <th key={size} scope="col">
-                        {size || t('grid.noSize')}
+                        {size || t('grid.noSize', words)}
                       </th>
                     ))}
                   </tr>
@@ -151,7 +152,7 @@ function Grid({ product }: { product: Product }) {
                     <tr key={color}>
                       <th scope="row" className={s.colorHead}>
                         {color && <span className={s.dot} style={{ background: swatch(color) }} />}
-                        <span className={s.colorName}>{color || t('grid.noColor')}</span>
+                        <span className={s.colorName}>{color || t('grid.noColor', words)}</span>
                       </th>
                       {sizes.map((size) => {
                         const key = cellKey(color, size);
@@ -170,7 +171,9 @@ function Grid({ product }: { product: Product }) {
                                 .filter(Boolean)
                                 .join(' ')}
                               aria-label={
-                                cell ? `${label}: ${cell.stock}` : `${t('grid.addSize')} ${label}`
+                                cell
+                                  ? `${label}: ${cell.stock}`
+                                  : `${t('grid.addSize', words)} ${label}`
                               }
                               aria-pressed={draft.selected === key}
                               onClick={() => {
@@ -215,14 +218,14 @@ function Grid({ product }: { product: Product }) {
         </>
       )}
 
-      <Card label={t('grid.optionalTitle')}>
-        <p className={s.emptyText}>{t('grid.optionalHint')}</p>
+      <Card label={t('grid.optionalTitle', words)}>
+        <p className={s.emptyText}>{t('grid.optionalHint', words)}</p>
         <div className={s.addRow}>
           <Button icon="plus" block onClick={() => setAdding('color')}>
-            {t('grid.addColor')}
+            {t('grid.addColor', words)}
           </Button>
           <Button icon="plus" block onClick={() => setAdding('size')}>
-            {t('grid.addSize')}
+            {t('grid.addSize', words)}
           </Button>
         </div>
       </Card>
@@ -347,13 +350,14 @@ function AddSheet({
   onAdd: (name: string) => boolean;
 }) {
   const { t } = useTranslation();
+  const words = useShopWords();
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const submit = () => {
     if (!name.trim()) return;
     if (!onAdd(name)) setError(t('grid.exists'));
   };
-  const label = kind === 'color' ? t('grid.addColor') : t('grid.addSize');
+  const label = kind === 'color' ? t('grid.addColor', words) : t('grid.addSize', words);
   return (
     <Sheet
       open={kind !== null}
@@ -365,7 +369,10 @@ function AddSheet({
         </Button>
       }
     >
-      <Field label={kind === 'color' ? t('grid.colorPrompt') : t('grid.sizePrompt')} error={error}>
+      <Field
+        label={kind === 'color' ? t('grid.colorPrompt', words) : t('grid.sizePrompt', words)}
+        error={error}
+      >
         {(id) => (
           <TextInput
             id={id}

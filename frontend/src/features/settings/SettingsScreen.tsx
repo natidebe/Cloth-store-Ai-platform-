@@ -63,6 +63,14 @@ export function SettingsScreen() {
           onClick={go('bot')}
         />
         <Row
+          icon="store"
+          muted={!isOwner}
+          title={t('settings.shopType')}
+          subtitle={`${store.option1[language]} · ${store.option2[language]}`}
+          end={end}
+          onClick={go('type')}
+        />
+        <Row
           icon="card"
           muted={!isOwner}
           title={t('settings.staffDiscount')}

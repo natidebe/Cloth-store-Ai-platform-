@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { platformApi } from './endpoints';
-import type { Plan } from './types';
+import type { Plan, ShopType } from './types';
 
 export const platformKeys = {
   me: ['platform', 'me'] as const,
@@ -15,8 +15,8 @@ export function usePlatformMe() {
 export function useCreateStore() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, token }: { name: string; token: string }) =>
-      platformApi.createStore(name, token),
+    mutationFn: ({ name, token, shopType }: { name: string; token: string; shopType: ShopType }) =>
+      platformApi.createStore(name, token, shopType),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: platformKeys.me }),
   });
 }

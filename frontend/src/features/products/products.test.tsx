@@ -155,7 +155,7 @@ describe('Products', () => {
 
     for (const color of ['Black', 'Brown']) {
       await user.click(screen.getByRole('button', { name: 'Add color' }));
-      await user.type(screen.getByLabelText('Color name (e.g. Black)'), color);
+      await user.type(screen.getByLabelText('Color (e.g. Black)'), color);
       await user.click(
         within(screen.getByRole('dialog')).getByRole('button', { name: 'Add color' }),
       );

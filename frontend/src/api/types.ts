@@ -6,6 +6,34 @@ export type Plan = 'free' | 'basic' | 'pro';
 export type Period = 'today' | 'week' | 'month' | '7d' | '30d';
 export type Money = string | number;
 
+/** Phase 13: the kind of shop; it names a product's two options. */
+export type ShopType = 'clothing' | 'electronics' | 'cosmetics' | 'general';
+
+/** One option's name, e.g. Storage / ማከማቻ (plural for lists, emoji for posts). */
+export interface OptionLabel {
+  en: string;
+  am: string;
+  plural: string;
+  icon: string;
+}
+
+/** A type with its own words (for "What kind of shop?" and Settings). */
+export interface ShopTypeInfo {
+  type: ShopType;
+  names: { en: string; am: string };
+  option1: OptionLabel;
+  option2: OptionLabel;
+  categories: string[];
+  condition_and_warranty: boolean;
+}
+
+/** The owner's renames: empty = the type's word. */
+export type OptionRenames = Partial<
+  Record<'option1' | 'option2', { en?: string; am?: string }>
+> | null;
+
+export type Condition = 'new' | 'used';
+
 export interface Me {
   user: { id: number; name: string; username: string | null; language_code: string | null };
   role: Role;
@@ -21,6 +49,12 @@ export interface Me {
     staff_discount_percent: Money;
     /** "Cash" plus the store's payment accounts (anything else: "Other" + a note). */
     payment_methods: string[];
+    /** Phase 13: the kind of shop and its words for the two options (with renames). */
+    shop_type: ShopType;
+    option1: OptionLabel;
+    option2: OptionLabel;
+    categories: string[];
+    condition_and_warranty: boolean;
   };
 }
 
@@ -43,6 +77,9 @@ export interface Product {
   photo_url: string | null;
   description: string | null;
   search_keywords: string | null;
+  /** Electronics (Phase 13): new or used, and months of warranty. */
+  condition: Condition | null;
+  warranty_months: number | null;
   total_stock: number;
   variant_count: number;
   on_sale: boolean;
@@ -65,6 +102,8 @@ export interface ProductFields {
   description?: string | null;
   search_keywords?: string | null;
   photo_url?: string | null;
+  condition?: Condition | null;
+  warranty_months?: number | null;
 }
 
 export interface GridRow {
@@ -230,6 +269,10 @@ export interface StoreSettings {
   pickup_instructions: string | null;
   return_policy: string | null;
   staff_discount_percent: Money;
+  /** Phase 13: the kind of shop, the owner's renames, every type's own words. */
+  shop_type: ShopType;
+  option_labels: OptionRenames;
+  shop_types: ShopTypeInfo[];
   // The texts customers get (written by the backend from the lists).
   payment_instructions: string | null;
   delivery_info: string | null;
@@ -270,6 +313,8 @@ export interface PlatformMe {
   is_platform_admin: boolean;
   stores: StoreCard[];
   support_url: string | null;
+  /** Phase 13: for "What kind of shop?". */
+  shop_types: ShopTypeInfo[];
 }
 
 export interface AdminStore {
