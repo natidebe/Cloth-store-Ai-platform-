@@ -2,6 +2,7 @@ import { CheckSquare } from 'lucide-react';
 
 import analytics from '@/assets/screens/analytics.webp';
 import channel from '@/assets/screens/channel.webp';
+import orders from '@/assets/screens/orders.webp';
 import products from '@/assets/screens/products.webp';
 import { useContent } from '@/content';
 
@@ -48,12 +49,14 @@ export function HeroShowcase() {
   );
 }
 
-/** "For you, the owner": the real Analytics screen, as a phone turned in 3D. */
-export function OwnerPhone() {
+const CARD_SCREENS = { orders, analytics };
+
+/** A feature card's phone, turned in 3D: staff (Orders) and owner (Analytics). */
+export function CardPhone({ screen }: { screen: keyof typeof CARD_SCREENS }) {
   const t = useContent().hero.shots;
   return (
-    <div className={s.ownerStage}>
-      <Phone src={analytics} alt={t.analytics} place={s.owner} />
+    <div className={s.cardStage}>
+      <Phone src={CARD_SCREENS[screen]} alt={t[screen]} place={s.cardPhone} />
     </div>
   );
 }

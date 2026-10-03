@@ -30,8 +30,9 @@ describe('the page', () => {
     for (const alt of Object.values(am.hero.shots)) {
       expect(screen.getAllByRole('img', { name: alt })[0]).toHaveAttribute('src');
     }
-    // The owner card shows the Analytics screen too.
+    // The owner card shows the Analytics screen too; the staff card, Orders.
     expect(screen.getAllByRole('img', { name: am.hero.shots.analytics })).toHaveLength(2);
+    expect(screen.getAllByRole('img', { name: am.hero.shots.orders })).toHaveLength(1);
   });
 
   it('is in English at /en/, and the language switch marks the current one', () => {

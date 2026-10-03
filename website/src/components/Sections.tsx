@@ -28,7 +28,7 @@ import ui from '@/styles/ui.module.css';
 
 import { ConnectMock, CreateMock, PostMock, StockMock } from './Mocks';
 import s from './sections.module.css';
-import { HeroShowcase, OwnerPhone } from './Showcase';
+import { CardPhone, HeroShowcase } from './Showcase';
 
 function Section({
   id,
@@ -168,6 +168,9 @@ const GROUP_TILES: [LucideIcon, string | undefined][] = [
   [BarChart3, ui.tileYellow],
 ];
 
+/** The screenshot beside each group: none for customers, Orders for staff, Analytics for the owner. */
+const GROUP_PHONES = [null, 'orders', 'analytics'] as const;
+
 export function Features() {
   const t = useContent().features;
   return (
@@ -176,8 +179,9 @@ export function Features() {
       <div className={s.groups}>
         {t.groups.map((group, index) => {
           const [icon, tone] = GROUP_TILES[index] ?? [Users, ui.tileBlue];
+          const phone = GROUP_PHONES[index];
           return (
-            <article key={group.title} className={`${s.group} ${index === 2 ? s.groupOwner : ''}`}>
+            <article key={group.title} className={`${s.group} ${phone ? s.groupShot : ''}`}>
               <div className={s.groupHead}>
                 <Tile icon={icon} tone={tone} />
                 <h3 className={s.groupTitle}>{group.title}</h3>
@@ -190,9 +194,9 @@ export function Features() {
                   </div>
                 ))}
               </div>
-              {index === 2 && (
-                <div className={s.ownerShot}>
-                  <OwnerPhone />
+              {phone && (
+                <div className={s.cardShot}>
+                  <CardPhone screen={phone} />
                 </div>
               )}
             </article>

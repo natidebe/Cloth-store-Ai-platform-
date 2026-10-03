@@ -24,6 +24,8 @@ export const en = {
     how: 'See how it works',
     checks: ['1 week free', 'No app to install', 'Built in Ethiopia'],
     shots: {
+      orders:
+        'The shop dashboard in Telegram: today’s orders from Telegram and in the shop, and the New counter sale button',
       channel:
         'A shop’s Telegram channel: a post with photo, price, colors and sizes, and the Order button',
       products: 'The shop dashboard in Telegram: products with stock and a low-stock warning',

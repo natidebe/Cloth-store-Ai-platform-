@@ -207,16 +207,16 @@
   color: var(--red);
 }
 
-/* --- The owner card's phone ---------------------------------------------------------- */
+/* --- A feature card's phone ---------------------------------------------------------- */
 
-.ownerStage {
+.cardStage {
   position: absolute;
   inset: 0 0 auto;
   height: 470px;
   perspective: 1200px;
 }
 
-.ownerStage::before {
+.cardStage::before {
   content: '';
   position: absolute;
   inset: 18% -10% 8%;
@@ -225,7 +225,7 @@
   filter: blur(28px);
 }
 
-.owner {
+.cardPhone {
   left: 50%;
   top: 4px;
   width: 210px;
@@ -235,12 +235,12 @@
   transform: rotateY(-16deg) rotateX(8deg);
 }
 
-.owner .screen,
-.owner .glare {
+.cardPhone .screen,
+.cardPhone .glare {
   border-radius: 24px;
 }
 
-.owner .glare {
+.cardPhone .glare {
   inset: 7px;
 }
 

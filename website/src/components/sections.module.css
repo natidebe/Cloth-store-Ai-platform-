@@ -201,19 +201,19 @@
   font-size: 14.5px;
 }
 
-/* The owner card: the phone rises out of the card's bottom edge, so the card is
+/* A card with a phone: the phone rises out of the card's bottom edge, so the card is
    only as tall as its text (the card clips the rest of the phone). */
-.groupOwner {
+.groupShot {
   position: relative;
   overflow: hidden;
   grid-template-columns: 220px minmax(0, 1fr) 250px;
 }
 
-.groupOwner .groupItems {
+.groupShot .groupItems {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.ownerShot {
+.cardShot {
   position: relative;
   min-height: 250px;
 }
@@ -591,7 +591,7 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 24px;
   }
-  .ownerShot {
+  .cardShot {
     min-height: 300px;
     margin-bottom: -32px; /* down to the card's edge */
   }
@@ -635,10 +635,10 @@
   .four,
   .steps,
   .groupItems,
-  .groupOwner .groupItems {
+  .groupShot .groupItems {
     grid-template-columns: minmax(0, 1fr);
   }
-  .ownerShot {
+  .cardShot {
     margin-bottom: -24px;
   }
   .heroButtons a {
