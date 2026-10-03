@@ -1,4 +1,4 @@
-# Cloth Store AI Platform
+# StoreFront.et AI Platform
 
 A Telegram sales assistant for clothing and shoe shops. Each shop connects
 its own Telegram bot and channel:
