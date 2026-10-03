@@ -1,0 +1,10 @@
+// Cloudflare Workers: the website is static files only (no server code).
+// `npx wrangler deploy` uploads dist/ (made by `npm run build`): / is English,
+// /am/ is Amharic. The name must match the Worker in the Cloudflare dashboard.
+{
+  "name": "storefront-et",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+  },
+}

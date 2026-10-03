@@ -37,18 +37,25 @@ is set; footer links appear once their page exists.
 `@StoreFrontETbot` is created (and its token set as `PLATFORM_BOT_TOKEN` on
 Render), change `platformBot` in `src/config.ts`.
 
-## Publish it (Cloudflare Pages, free)
+## Publish it (Cloudflare Workers, free)
 
-1. Cloudflare dashboard → Workers & Pages → Create → Pages → connect the
-   GitHub repository.
-2. Production branch **`Website`**; **root directory `website`**; build command
-   `npx -y npm@11.11.0 ci && npm run build` (the npm that made the lock file;
-   Node 22's own npm 10 refuses it); output directory `dist`. Node 22 comes
-   from `website/.node-version` (no variable needed).
-3. Optional, once the address is final: environment variable `SITE_URL` = the site's address (e.g.
-   `https://storefront.et`): adds the language links for Google, the sitemap
-   and robots.txt.
-4. Custom domain: Pages project → Custom domains.
+Cloudflare dashboard → Workers & Pages → Create → import the GitHub repository
+as a Worker named `storefront-et` (the name in `wrangler.jsonc`). Its build
+settings (the Worker → Settings → Build):
 
-Every push to the `Website` branch then republishes the site. Netlify or Vercel work the
-same way (base directory `website`, publish directory `website/dist`).
+| Setting | Value |
+|---|---|
+| Git branch | **`Website`** |
+| Root directory | **`website`** |
+| Build command | `npx -y npm@11.11.0 ci && npm run build` |
+| Deploy command | `npx wrangler deploy` |
+
+- npm 11.11 is the npm that made the lock file (Node 22's own npm 10 refuses
+  it); Node 22 comes from `.node-version`; `wrangler.jsonc` says to upload `dist/`.
+- Builds for other branches: off (they have no `website/` folder).
+- Optional, once the address is final: build variable `SITE_URL` = the site's
+  address (e.g. `https://storefront.et`): adds the language links for Google,
+  the sitemap and robots.txt.
+- Custom domain: the Worker → Settings → Domains & Routes.
+
+Every push to the `Website` branch then republishes the site.
