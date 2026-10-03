@@ -1,0 +1,98 @@
+/* Tokens from the design (website/design/), the same family as the Mini App. */
+:root {
+  --blue: #2f73bd;
+  --blue-pressed: #285f9c;
+  --blue-ink: #1f6fb6;
+  --blue-soft: #e2eefa;
+  --ink: #111114;
+  --body: #4a4a52;
+  --muted: #89898f;
+  --page: #ffffff;
+  --grey: #efeff4;
+  --line: #e5e5ea;
+  --pill: #e3e3e8;
+  --green: #2b7a3a;
+  --green-soft: #e3f3e6;
+  --amber: #8a5a00;
+  --amber-soft: #fdf0d5;
+  --red: #c0352b;
+  --red-soft: #fbe4e2;
+  --yellow: #f4b740;
+  --chat: #cfdde8;
+  --photo: #e9dcc9;
+  --navy: #1d3349;
+  --sky: #5da5ea;
+
+  --radius: 16px;
+  --radius-big: 24px;
+  --radius-button: 12px;
+  --shadow: 0 1px 2px rgba(17, 17, 20, 0.04), 0 8px 24px rgba(17, 17, 20, 0.06);
+  --shadow-pop: 0 12px 40px rgba(17, 17, 20, 0.14);
+
+  /* Latin from the system font; Ethiopic from Noto Sans Ethiopic (index.html). */
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans Ethiopic', 'Nyala', sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 88px; /* the sticky header */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--blue-ink);
+}
+
+img,
+svg,
+video {
+  display: block;
+  max-width: 100%;
+}
+
+button {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--sky);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

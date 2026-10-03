@@ -1,0 +1,183 @@
+/* --- Logo -------------------------------------------------------------------- */
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.logoSmall {
+  font-size: 17px;
+}
+
+.logoMark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--blue);
+  color: #fff;
+}
+
+.logoEt {
+  color: var(--blue);
+}
+
+/* --- Header ------------------------------------------------------------------ */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+
+.skip {
+  position: absolute;
+  left: 12px;
+  top: -60px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: #fff;
+  z-index: 20;
+}
+
+.skip:focus {
+  top: 12px;
+}
+
+.headerInner {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  min-height: 66px;
+}
+
+.home {
+  text-decoration: none;
+  flex: none;
+}
+
+.nav {
+  display: flex;
+  gap: 24px;
+  font-size: 15px;
+}
+
+.nav a {
+  color: var(--body);
+  text-decoration: none;
+}
+
+.nav a:hover {
+  color: var(--ink);
+}
+
+.headerEnd {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.langs {
+  display: flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--pill);
+}
+
+.lang {
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.langOn {
+  background: #fff;
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(17, 17, 20, 0.08);
+}
+
+.headerStart {
+  min-height: 44px;
+  font-size: 15px;
+}
+
+@media (max-width: 940px) {
+  .nav {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .headerInner {
+    gap: 10px;
+    min-height: 60px;
+  }
+  .logo {
+    font-size: 17px;
+  }
+  .logoMark {
+    width: 32px;
+    height: 32px;
+  }
+  .lang {
+    padding: 6px 9px;
+    font-size: 13px;
+  }
+  .headerStart {
+    display: none; /* the hero's big button is right below */
+  }
+}
+
+/* --- Footer ------------------------------------------------------------------ */
+
+.footer {
+  border-top: 1px solid var(--line);
+  background: #fff;
+  padding: 40px 0 32px;
+}
+
+.footerInner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.footerText {
+  color: var(--body);
+  font-size: 15px;
+  margin-top: 8px;
+}
+
+.footerLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  font-size: 15px;
+}
+
+.footerLink {
+  color: var(--blue-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.copyright {
+  margin-top: 36px;
+  font-size: 13px;
+  color: var(--muted);
+}

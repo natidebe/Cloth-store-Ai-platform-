@@ -1,0 +1,8 @@
+node_modules
+dist
+.ssr
+coverage
+*.local
+.vite
+# The designer's source files stay out of git
+design/

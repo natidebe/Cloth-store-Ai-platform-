@@ -1,0 +1,425 @@
+/* --- Hero: the phone and the staff-group card ---------------------------------- */
+
+.hero {
+  position: relative;
+  width: 420px;
+  max-width: 100%;
+  margin-left: auto;
+  padding-bottom: 40px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.phone {
+  width: 310px;
+  border: 10px solid var(--ink);
+  border-radius: 46px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: var(--shadow-pop);
+}
+
+.channelHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--yellow);
+  font-weight: 800;
+}
+
+.channelName {
+  display: block;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.channelSub {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chat {
+  background: var(--chat);
+  padding: 96px 12px 12px;
+}
+
+.post {
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.photo {
+  display: grid;
+  place-items: center;
+  background: var(--photo);
+  color: rgba(17, 17, 20, 0.25);
+}
+
+.postBody {
+  padding: 12px 12px 18px;
+}
+
+.postTitle {
+  font-weight: 700;
+}
+
+.postPrice {
+  color: var(--green);
+  font-weight: 800;
+  margin: 6px 0;
+}
+
+.postLine {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  white-space: nowrap;
+}
+
+.dot {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+}
+
+.orderButton,
+.orderButtonSmall {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--blue-ink);
+  font-weight: 700;
+  text-align: center;
+}
+
+.orderButtonSmall {
+  padding: 8px;
+  font-size: 13px;
+}
+
+.orderCard {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 280px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--shadow-pop);
+}
+
+.orderFrom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.online {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.orderTitle {
+  font-weight: 800;
+  font-size: 16px;
+  margin: 6px 0 8px;
+}
+
+.orderLine {
+  margin-bottom: 6px;
+}
+
+.pill {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 13px;
+}
+
+.orderActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.confirm,
+.reject {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.confirm {
+  background: var(--green);
+  color: #fff;
+}
+
+.reject {
+  background: var(--grey);
+  color: var(--red);
+}
+
+/* --- Step screens --------------------------------------------------------------- */
+
+.screen {
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.screenTitle {
+  display: block;
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 12px;
+}
+
+.label {
+  color: var(--muted);
+  margin: 8px 0 6px;
+}
+
+.field {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+
+.fieldFaint {
+  color: var(--muted);
+}
+
+.blueButton {
+  margin-top: 10px;
+  padding: 9px;
+  border-radius: 8px;
+  background: var(--blue);
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+  font-size: 13px;
+}
+
+.code {
+  margin: 10px 0 14px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--blue-soft);
+  color: var(--blue-ink);
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 17px;
+  text-align: center;
+}
+
+.connectLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tick {
+  color: var(--green);
+}
+
+.circle {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1.5px solid var(--muted);
+}
+
+.stack {
+  display: grid;
+  gap: 8px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 44px repeat(4, 1fr);
+  gap: 4px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.gridHead {
+  text-align: center;
+  color: var(--muted);
+}
+
+.gridColor {
+  color: var(--body);
+}
+
+.cell {
+  padding: 3px 0;
+  border-radius: 5px;
+  background: var(--grey);
+  text-align: center;
+}
+
+.cellLow {
+  background: var(--amber-soft);
+}
+
+.cellOut {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.bagRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stepButton {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--grey);
+}
+
+.chatPanel {
+  background: var(--chat);
+  border-radius: 14px;
+  padding: 8px;
+}
+
+.soldRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.soldLabel {
+  white-space: nowrap;
+}
+
+.sold {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.newOrder {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.faint {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+/* --- Owner card: the dashboard --------------------------------------------------- */
+
+.dashboard {
+  background: var(--grey);
+  border-radius: 14px;
+  padding: 14px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  max-width: 230px;
+}
+
+.dashTitle {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.bar {
+  display: flex;
+  height: 10px;
+  border-radius: 99px;
+  overflow: hidden;
+  margin: 12px 0 8px;
+}
+
+.dashSplit,
+.dashRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dashRow {
+  margin-top: 9px;
+}
+
+.dashLabel {
+  color: var(--muted);
+  margin-top: 12px;
+}
+
+.dashNote {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 12px;
+}
+
+@media (max-width: 560px) {
+  .hero {
+    width: 100%;
+    margin: 0 auto;
+    padding-bottom: 150px;
+  }
+  .phone {
+    width: 270px;
+    margin: 0 auto;
+  }
+  .chat {
+    padding-top: 40px;
+  }
+  .orderCard {
+    left: 50%;
+    right: auto;
+    transform: translateX(-38%);
+    width: 260px;
+  }
+}

@@ -1,0 +1,638 @@
+/* --- Hero ------------------------------------------------------------------------ */
+
+.hero {
+  padding: 72px 0 80px;
+  overflow: hidden;
+}
+
+.heroGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 440px;
+  align-items: center;
+  gap: 48px;
+}
+
+.h1 {
+  font-size: clamp(40px, 5.2vw, 62px);
+  font-weight: 900;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  max-width: 620px;
+}
+
+.heroBody {
+  margin-top: 28px;
+  max-width: 580px;
+  font-size: 19px;
+  color: var(--body);
+}
+
+.heroButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 36px;
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.checks li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.checks svg {
+  color: var(--green);
+}
+
+/* --- Cards (problems, audience) -------------------------------------------------- */
+
+.four {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.card {
+  background: #fff;
+  border-radius: var(--radius);
+  padding: 24px;
+}
+
+.cardSmall {
+  padding: 20px 22px;
+}
+
+.cardTitle {
+  margin-top: 20px;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.cardBody {
+  margin-top: 8px;
+  color: var(--body);
+  font-size: 15px;
+}
+
+.audienceIcon {
+  color: var(--blue-ink);
+}
+
+.audienceTitle {
+  margin-top: 12px;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.other {
+  margin-top: 22px;
+  font-size: 15px;
+  color: var(--body);
+}
+
+/* --- Steps -------------------------------------------------------------------------- */
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+}
+
+.stepPanel {
+  flex: 1;
+  background: var(--grey);
+  border-radius: 20px;
+  padding: 16px;
+}
+
+.stepPanelChat {
+  background: var(--chat);
+}
+
+.stepText {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.stepNumber {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font-weight: 800;
+  font-size: 15px;
+  flex: none;
+}
+
+.stepTitle {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+/* --- Features ------------------------------------------------------------------------ */
+
+.groups {
+  display: grid;
+  gap: 16px;
+}
+
+.group {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 32px;
+  background: #fff;
+  border-radius: var(--radius-big);
+  padding: 32px;
+}
+
+.groupHead {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.groupTitle {
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.groupItems {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px 36px;
+  align-content: start;
+}
+
+.itemTitle {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 800;
+}
+
+.itemBody {
+  margin-top: 6px;
+  color: var(--body);
+  font-size: 14.5px;
+}
+
+.control {
+  display: flex;
+  gap: 40px;
+  align-items: center;
+  background: var(--ink);
+  color: #fff;
+  border-radius: var(--radius-big);
+  padding: 44px 40px;
+}
+
+.controlIcon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: var(--navy);
+  color: var(--sky);
+  flex: none;
+}
+
+.controlTitle {
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.controlBody {
+  margin-top: 10px;
+  color: #c9ccd3;
+  font-size: 15px;
+}
+
+.controlBody strong {
+  color: #fff;
+}
+
+/* --- Demo ------------------------------------------------------------------------------- */
+
+.demo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 48px;
+  align-items: center;
+}
+
+.demoTitle {
+  margin-bottom: 18px;
+}
+
+.demoBody {
+  color: var(--body);
+  margin-bottom: 30px;
+  max-width: 520px;
+}
+
+.video {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 360px;
+  border-radius: var(--radius-big);
+  background: var(--ink);
+  color: #fff;
+  text-align: center;
+  padding: 24px;
+  overflow: hidden;
+}
+
+.videoPlayer {
+  width: 100%;
+  border-radius: 12px;
+}
+
+.play {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: none;
+  background: var(--blue);
+  color: #fff;
+  cursor: pointer;
+  padding-left: 4px;
+}
+
+.play:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.videoTitle {
+  margin-top: 26px;
+  font-weight: 800;
+}
+
+.videoFlow {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #a6a8b0;
+}
+
+/* --- Pricing --------------------------------------------------------------------------- */
+
+.plans {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: stretch;
+}
+
+.plan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 30px 26px 26px;
+  background: #fff;
+}
+
+.planPopular {
+  border: 2px solid var(--blue);
+}
+
+.badge {
+  position: absolute;
+  top: -13px;
+  left: 24px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.planName {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.price {
+  margin-top: 16px;
+}
+
+.priceNumber {
+  font-size: 38px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.priceUnit {
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.planFor {
+  margin-top: 10px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+  color: var(--body);
+  font-size: 15px;
+}
+
+.planIncludes {
+  flex: 1;
+  margin: 18px 0 26px;
+  font-size: 15px;
+}
+
+.notes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.note {
+  border-radius: var(--radius);
+  background: var(--grey);
+  padding: 16px 18px;
+  font-size: 14.5px;
+  color: var(--body);
+}
+
+.note strong {
+  color: var(--ink);
+}
+
+.noteFounding {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.noteFounding strong {
+  color: var(--amber);
+}
+
+/* --- Built in Ethiopia ------------------------------------------------------------------ */
+
+.trust {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 48px;
+  align-items: start;
+}
+
+.people {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.personPhoto {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: #e1e1e7;
+  color: var(--muted);
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.personName {
+  display: block;
+  font-weight: 800;
+  font-size: 17px;
+}
+
+.personRole {
+  display: block;
+  color: var(--body);
+  font-size: 14px;
+}
+
+.promises {
+  display: grid;
+  gap: 12px;
+}
+
+.promise {
+  display: flex;
+  gap: 16px;
+  background: #fff;
+  border-radius: var(--radius);
+  padding: 24px;
+}
+
+.promise .cardBody {
+  margin-top: 4px;
+}
+
+.promiseTitle {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.toneGreen {
+  color: var(--green);
+  flex: none;
+}
+
+.toneBlue {
+  color: var(--blue-ink);
+  flex: none;
+}
+
+.toneAmber {
+  color: var(--amber);
+  flex: none;
+}
+
+/* --- FAQ ---------------------------------------------------------------------------- */
+
+.faq {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.question {
+  border-bottom: 1px solid var(--line);
+}
+
+.question:first-of-type {
+  border-top: 1px solid var(--line);
+}
+
+.question summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 0;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+}
+
+.question summary::-webkit-details-marker {
+  display: none;
+}
+
+.plus {
+  color: var(--muted);
+  flex: none;
+  transition: transform 0.2s;
+}
+
+.question[open] .plus {
+  transform: rotate(45deg);
+}
+
+.answer {
+  padding: 0 40px 22px 0;
+  color: var(--body);
+}
+
+/* --- Final call to action ------------------------------------------------------------- */
+
+.cta {
+  border-radius: 32px;
+  background: var(--blue);
+  color: #fff;
+  text-align: center;
+  padding: 80px 24px;
+}
+
+.ctaTitle {
+  font-size: clamp(30px, 4.2vw, 46px);
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.ctaBody {
+  margin-top: 14px;
+  opacity: 0.92;
+}
+
+.ctaButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 36px;
+}
+
+/* --- Smaller screens ------------------------------------------------------------------- */
+
+@media (max-width: 1080px) {
+  .heroGrid {
+    grid-template-columns: minmax(0, 1fr) 400px;
+    gap: 24px;
+  }
+  .four,
+  .steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .group {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .groupItems {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .plans {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 520px;
+  }
+  .plan + .plan {
+    margin-top: 6px;
+  }
+  .notes {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 520px;
+  }
+}
+
+@media (max-width: 860px) {
+  .heroGrid,
+  .demo,
+  .trust {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hero {
+    padding-top: 48px;
+  }
+  .heroGrid {
+    gap: 48px;
+  }
+  .control {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 32px 24px;
+  }
+}
+
+@media (max-width: 560px) {
+  .four,
+  .steps,
+  .groupItems {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .heroButtons a {
+    width: 100%;
+  }
+  .heroBody {
+    font-size: 17px;
+  }
+  .group {
+    padding: 24px 20px;
+  }
+  .cta {
+    padding: 56px 20px;
+    border-radius: 24px;
+  }
+  .ctaButtons a {
+    width: 100%;
+  }
+  .video {
+    min-height: 260px;
+  }
+}
