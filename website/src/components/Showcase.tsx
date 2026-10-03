@@ -8,9 +8,10 @@ import { useContent } from '@/content';
 import s from './showcase.module.css';
 
 /*
- * The hero: real screenshots as phones in 3D. In front, a post in a shop's
- * channel with the Order button; behind it, the Mini App's Products and
- * Analytics; floating in front, the order arriving in the staff group.
+ * The hero: real screenshots as phones in 3D. In front, the Mini App's
+ * Products dashboard; behind it, a post in the shop's channel with the Order
+ * button and the Analytics; floating in front, the order arriving in the
+ * staff group.
  */
 
 const SCREEN = { width: 540, height: 1097 }; // the WebP files (src/assets/screens)
@@ -37,9 +38,9 @@ export function HeroShowcase() {
     <div className={s.stage}>
       <span className={s.glow} aria-hidden="true" />
       <div className={s.scene}>
-        <Phone src={products} alt={t.products} place={s.left} />
+        <Phone src={channel} alt={t.channel} place={s.left} />
         <Phone src={analytics} alt={t.analytics} place={s.right} />
-        <Phone src={channel} alt={t.channel} place={s.front} />
+        <Phone src={products} alt={t.products} place={s.front} />
         <OrderCard />
       </div>
       <span className={s.floor} aria-hidden="true" />
