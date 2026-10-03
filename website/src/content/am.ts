@@ -172,15 +172,15 @@ export const am: Content = {
       { name: 'ነፃ ሙከራ', price: '0', unit: 'ለ1 ሳምንት', for: 'ሁሉንም ለመሞከር', includes: 'የፕሮ ሁሉንም' },
       {
         name: 'መሰረታዊ',
-        price: '1,500',
-        unit: 'በወር',
+        price: '4,500',
+        unit: 'በ3 ወር',
         for: 'ለትናንሽ ሱቆች',
         includes: 'የራስዎ ቦት፣ የቻናል ፖስቶች፣ የሰራተኞች ግሩፕ፣ ዳሽቦርድ፣ የሱቅ ሽያጭ፣ ትንታኔ',
       },
       {
         name: 'ፕሮ',
-        price: '3,000',
-        unit: 'በወር',
+        price: '9,000',
+        unit: 'በ3 ወር',
         for: 'ብዙ ሰራተኛ ላላቸው ስራ የበዛባቸው ሱቆች',
         includes: 'የመሰረታዊ ሁሉንም፣ ተጨማሪ የAI መልሶች፣ ቅድሚያ ድጋፍ፣ ምርቶችዎን በማስገባት እገዛ',
       },
@@ -251,6 +251,7 @@ export const am: Content = {
   footer: {
     tagline: 'StoreFront.et: የቴሌግራም ሱቆች ለኢትዮጵያ',
     support: 'ድጋፍ:',
+    call: 'ስልክ:',
     guide: 'ለሱቅ ባለቤቶች መመሪያ',
     pricing: 'ዋጋ',
     privacy: 'ግላዊነት',

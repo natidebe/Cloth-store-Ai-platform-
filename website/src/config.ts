@@ -10,7 +10,10 @@ export const site = {
    * yet: switch to it once it's created (and set as PLATFORM_BOT_TOKEN on Render).
    */
   platformBot: 'Platform_16bot',
-  support: 'nati_support',
+  /** Customer support on Telegram (the first one gets the "Talk to us" button). */
+  support: ['kiya30', 'AWGKGGK'],
+  /** Support phone numbers, shown in the footer. */
+  phones: ['+251960570692', '+25167026271'],
   /** A public demo shop channel visitors can order from. */
   demoUrl: null as string | null,
   /** The 60-second video (an .mp4 in public/, or a full URL). */
@@ -24,4 +27,4 @@ export const site = {
 
 /** "Start free": opens the platform bot, tagged as coming from the website. */
 export const startLink = `https://t.me/${site.platformBot}?start=web`;
-export const supportLink = `https://t.me/${site.support}`;
+export const supportLink = `https://t.me/${site.support[0]}`;

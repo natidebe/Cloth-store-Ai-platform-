@@ -11,7 +11,7 @@ English is the default language on the site (at /); Amharic is behind a switch (
 | `[BOT]` | The platform bot's username | @StoreFrontETbot |
 | `[START_LINK]` | The sign-up link: the platform bot, tagged as coming from the website | `https://t.me/StoreFrontETbot?start=web` |
 | `[DEMO_CHANNEL]` | A public demo shop channel visitors can order from | `https://t.me/SuqDemoShop` |
-| `[SUPPORT]` | Your support Telegram | @nati_support |
+| `[SUPPORT]` | Support on Telegram, and phones (footer) | @kiya30, @AWGKGGK; +251960570692, +25167026271 |
 | `[STATUS_LINK]` | The UptimeRobot status page | |
 
 Words that must match the product exactly (customers see them in Telegram):
@@ -279,7 +279,7 @@ confirm payment → the post's stock drops.
 
 | | **Free trial** | **Basic** | **Pro** |
 |---|---|---|---|
-| Price | **0 ETB** for 30 days | **1,500 ETB** / month | **3,000 ETB** / month |
+| Price | **0 ETB** for 1 week | **4,500 ETB** / 3 months | **9,000 ETB** / 3 months |
 | For | Trying everything | Small shops | Busy shops with several staff |
 | Includes | Everything in Pro | Your bot, channel posts, staff group, dashboard, in-shop sales, analytics | Everything in Basic, more AI replies, priority support, help adding your products |
 | Button | Start free | Start free | Start free |
@@ -295,7 +295,7 @@ confirm payment → the post's stock drops.
 
 | | **ነፃ ሙከራ** | **መሰረታዊ** | **ፕሮ** |
 |---|---|---|---|
-| ዋጋ | ለ30 ቀን **0 ብር** | በወር **1,500 ብር** | በወር **3,000 ብር** |
+| ዋጋ | ለ1 ሳምንት **0 ብር** | በ3 ወር **4,500 ብር** | በ3 ወር **9,000 ብር** |
 | ለማን | ሁሉንም ለመሞከር | ለትናንሽ ሱቆች | ብዙ ሰራተኛ ላላቸው ስራ የበዛባቸው ሱቆች |
 | የሚያካትተው | የፕሮ ሁሉንም | የራስዎ ቦት፣ የቻናል ፖስቶች፣ የሰራተኞች ግሩፕ፣ ዳሽቦርድ፣ የሱቅ ሽያጭ፣ ትንታኔ | የመሰረታዊ ሁሉንም፣ ተጨማሪ የAI መልሶች፣ ቅድሚያ ድጋፍ፣ ምርቶችዎን በማስገባት እገዛ |
 | ቁልፍ | በነፃ ይጀምሩ | በነፃ ይጀምሩ | በነፃ ይጀምሩ |

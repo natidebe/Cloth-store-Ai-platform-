@@ -1,6 +1,6 @@
 import { Store } from 'lucide-react';
 
-import { site, startLink, supportLink } from '@/config';
+import { site, startLink } from '@/config';
 import { pathOf, useContent, useLang, type Lang } from '@/content';
 import ui from '@/styles/ui.module.css';
 
@@ -85,9 +85,25 @@ export function Footer() {
           <p className={s.footerText}>{t.footer.tagline}</p>
           <p className={s.footerText}>
             {t.footer.support}{' '}
-            <a href={supportLink} className={s.footerLink}>
-              @{site.support}
-            </a>
+            {site.support.map((user, index) => (
+              <span key={user}>
+                {index > 0 && ' · '}
+                <a href={`https://t.me/${user}`} className={s.footerLink}>
+                  @{user}
+                </a>
+              </span>
+            ))}
+          </p>
+          <p className={s.footerText}>
+            {t.footer.call}{' '}
+            {site.phones.map((phone, index) => (
+              <span key={phone}>
+                {index > 0 && ' · '}
+                <a href={`tel:${phone}`} className={s.footerLink}>
+                  {phone}
+                </a>
+              </span>
+            ))}
           </p>
         </div>
         <nav className={s.footerLinks} aria-label={t.footer.tagline}>

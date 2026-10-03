@@ -19,10 +19,27 @@ describe('the page', () => {
     // Header, hero, the three plans, the final call to action.
     expect(starts).toHaveLength(6);
     expect(startLink).toBe(`https://t.me/${site.platformBot}?start=web`);
-    expect(screen.getAllByRole('link', { name: `@${site.support}` })[0]).toHaveAttribute(
-      'href',
-      supportLink,
-    );
+    for (const user of site.support) {
+      expect(screen.getAllByRole('link', { name: `@${user}` })[0]).toHaveAttribute(
+        'href',
+        `https://t.me/${user}`,
+      );
+    }
+    expect(screen.getByRole('link', { name: am.cta.talk })).toHaveAttribute('href', supportLink);
+  });
+
+  it('has the support phones in the footer and prices per 3 months', () => {
+    render(<App lang="en" />);
+    const footer = screen.getByRole('contentinfo');
+    for (const phone of site.phones) {
+      expect(within(footer).getByRole('link', { name: phone })).toHaveAttribute(
+        'href',
+        `tel:${phone}`,
+      );
+    }
+    expect(screen.getByText('4,500 ETB')).toBeInTheDocument();
+    expect(screen.getByText('9,000 ETB')).toBeInTheDocument();
+    expect(screen.getAllByText('/ 3 months')).toHaveLength(2);
   });
 
   it('shows the three real screenshots, described for screen readers', () => {

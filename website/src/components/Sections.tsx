@@ -56,10 +56,18 @@ function Tile({ icon: Icon, tone }: { icon: LucideIcon; tone: string | undefined
   );
 }
 
+/** "@kiya30 · @AWGKGGK", each a link to the Telegram chat. */
 const supportHandle = (
-  <a className={ui.link} href={supportLink}>
-    @{site.support}
-  </a>
+  <>
+    {site.support.map((user, index) => (
+      <span key={user}>
+        {index > 0 && ' · '}
+        <a className={ui.link} href={`https://t.me/${user}`}>
+          @{user}
+        </a>
+      </span>
+    ))}
+  </>
 );
 
 // --- Hero ------------------------------------------------------------------------

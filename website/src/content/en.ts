@@ -183,15 +183,15 @@ export const en = {
       },
       {
         name: 'Basic',
-        price: '1,500',
-        unit: '/ month',
+        price: '4,500',
+        unit: '/ 3 months',
         for: 'Small shops',
         includes: 'Your bot, channel posts, staff group, dashboard, in-shop sales, analytics',
       },
       {
         name: 'Pro',
-        price: '3,000',
-        unit: '/ month',
+        price: '9,000',
+        unit: '/ 3 months',
         for: 'Busy shops with several staff',
         includes:
           'Everything in Basic, more AI replies, priority support, help adding your products',
@@ -275,6 +275,7 @@ export const en = {
   footer: {
     tagline: 'StoreFront.et: Telegram shops for Ethiopia',
     support: 'Support:',
+    call: 'Call:',
     guide: 'Guide for shop owners',
     pricing: 'Pricing',
     privacy: 'Privacy',
