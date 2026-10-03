@@ -210,10 +210,9 @@
 /* --- The owner card's phone ---------------------------------------------------------- */
 
 .ownerStage {
-  position: relative;
-  width: 210px;
-  height: 400px;
-  margin-top: 6px;
+  position: absolute;
+  inset: 0 0 auto;
+  height: 470px;
   perspective: 1200px;
 }
 
@@ -227,12 +226,13 @@
 }
 
 .owner {
-  left: 8px;
-  top: 0;
-  width: 190px;
+  left: 50%;
+  top: 4px;
+  width: 210px;
+  margin-left: -105px;
   border-radius: 30px;
   padding: 7px;
-  transform: rotateY(18deg) rotateX(5deg);
+  transform: rotateY(-16deg) rotateX(8deg);
 }
 
 .owner .screen,

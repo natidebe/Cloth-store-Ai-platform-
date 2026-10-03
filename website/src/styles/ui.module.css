@@ -15,6 +15,10 @@
   background: var(--grey);
 }
 
+.grey + .grey {
+  padding-top: 0;
+}
+
 .h2 {
   font-size: clamp(30px, 4.2vw, 46px);
   font-weight: 900;

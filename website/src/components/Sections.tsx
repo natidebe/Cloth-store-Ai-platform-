@@ -177,11 +177,10 @@ export function Features() {
         {t.groups.map((group, index) => {
           const [icon, tone] = GROUP_TILES[index] ?? [Users, ui.tileBlue];
           return (
-            <article key={group.title} className={s.group}>
+            <article key={group.title} className={`${s.group} ${index === 2 ? s.groupOwner : ''}`}>
               <div className={s.groupHead}>
                 <Tile icon={icon} tone={tone} />
                 <h3 className={s.groupTitle}>{group.title}</h3>
-                {index === 2 && <OwnerPhone />}
               </div>
               <div className={s.groupItems}>
                 {group.items.map((item) => (
@@ -191,6 +190,11 @@ export function Features() {
                   </div>
                 ))}
               </div>
+              {index === 2 && (
+                <div className={s.ownerShot}>
+                  <OwnerPhone />
+                </div>
+              )}
             </article>
           );
         })}
