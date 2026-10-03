@@ -92,6 +92,11 @@ async def telegram_webhook(
         background.add_task(orchestrator.app_access.answer_dashboard, store, update,
                             get_settings().public_base_url)
         return {"ok": True}
+    if orchestrator.app_access.is_private_start(update):
+        # The store's team gets a "📊 Dashboard" button next to the message box;
+        # customers keep the usual menu. The /start itself goes on as usual.
+        background.add_task(orchestrator.app_access.update_menu_button, store,
+                            update.message.from_user.id, get_settings().public_base_url)
     if store.status != "active":
         message = parse_update(store.id, update)
         if message is not None and message.kind != "button":

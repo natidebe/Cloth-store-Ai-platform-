@@ -16,11 +16,13 @@ from decimal import Decimal
 from uuid import UUID
 
 from app.agents.messages import Language, format_price, t
+from app.agents.shop_types import condition_text, text_values, warranty_text
 from app.models.schemas import (
     Conversation,
     Customer,
     IncomingMessage,
     OrderDraft,
+    OrderItemDetail,
     OrderWithItems,
     Store,
     VariantMatch,
@@ -66,16 +68,32 @@ class ToolContext:
 # Formatting
 # ---------------------------------------------------------------------------
 
-def describe(variant: VariantMatch, language: Language = "en") -> str:
-    """E.g. "Air Force 1 (Nike), White, size 42" / "…, White, ቁጥር 42".
-    Product names and colors are shown as the store wrote them."""
+def describe(variant: VariantMatch, language: Language = "en", store: Store | None = None) -> str:
+    """E.g. "Air Force 1 (Nike), White, size 42" / "…, White, ቁጥር 42"; an
+    electronics shop: "iPhone 13 (Apple), Used, Black, storage 128GB, 6 months
+    warranty" (the shop's words, Phase 13). Names and colors as the store wrote them."""
     name = variant.product_name + (f" ({variant.brand})" if variant.brand else "")
     parts = [name]
+    condition = condition_text(variant.condition, language)
+    if condition:
+        parts.append(condition)
     if variant.color:
         parts.append(variant.color)
     if variant.size:
-        parts.append(t("size", language, size=variant.size))
+        parts.append(t("size", language, store, size=variant.size))
+    warranty = warranty_text(variant.warranty_months, language)
+    if warranty:
+        parts.append(warranty)
     return ", ".join(parts)
+
+
+def _alert_line(item: OrderItemDetail, store: Store | None) -> str:
+    """One item in a staff alert (English), with the shop's word for option 2."""
+    option2 = text_values(store, "en")["opt2"]
+    extras = [text for text in (condition_text(item.condition, "en"),
+                                warranty_text(item.warranty_months, "en")) if text]
+    name = (item.product_name or "item") + (f" ({', '.join(extras)})" if extras else "")
+    return f"• {name}, {item.color or '-'}, {option2} {item.size or '-'} × {item.quantity}"
 
 
 def order_number(order_id: UUID) -> str:
@@ -93,7 +111,7 @@ def build_summary(draft: OrderDraft, variants: dict[UUID, VariantMatch],
         variant = variants[item.variant_id]
         price = variant.price or Decimal(0)
         total += price * item.quantity
-        lines.append(f"• {describe(variant, language)} × {item.quantity} — "
+        lines.append(f"• {describe(variant, language, store)} × {item.quantity} — "
                      f"{format_price(price * item.quantity, language)}")
     lines.append(t("summary_total", language, store, total=format_price(total, language)))
     lines.append(t("summary_name", language, store, name=draft.contact_name))
@@ -149,11 +167,8 @@ def delivery_message(store: Store, order: OrderWithItems, language: Language = "
     return "\n\n".join(parts)
 
 
-def new_order_alert(customer: Customer, order: OrderWithItems) -> StaffAlert:
-    items = "\n".join(
-        f"• {i.product_name or 'item'}, {i.color or '-'}, size {i.size or '-'} × {i.quantity}"
-        for i in order.items
-    )
+def new_order_alert(customer: Customer, order: OrderWithItems, store: Store | None = None) -> StaffAlert:
+    items = "\n".join(_alert_line(i, store) for i in order.items)
     where = (f"Delivery to: {order.delivery_address}" if order.fulfillment_method == "delivery"
              else "Pickup at the store")
     text = (
@@ -166,13 +181,10 @@ def new_order_alert(customer: Customer, order: OrderWithItems) -> StaffAlert:
 
 
 def delivery_order_alert(customer: Customer, order: OrderWithItems,
-                         username: str | None) -> StaffAlert:
+                         username: str | None, store: Store | None = None) -> StaffAlert:
     """D29: a delivery order is handed to staff, who call the customer to
     arrange the address; the customer was told they pay on delivery."""
-    items = "\n".join(
-        f"• {i.product_name or 'item'}, {i.color or '-'}, size {i.size or '-'} × {i.quantity}"
-        for i in order.items
-    )
+    items = "\n".join(_alert_line(i, store) for i in order.items)
     contact = f"{order.contact_name}, {order.contact_phone}"
     if username:
         contact += f", @{username}"
@@ -293,7 +305,7 @@ async def place_order(ctx: ToolContext) -> PlacedOrder:
 
     order = await ctx.db.get_order(ctx.store.id, order_id)
     logger.info("order placed", extra={"order_id": str(order_id)})
-    ctx.staff_alerts.append(new_order_alert(ctx.customer, order))
+    ctx.staff_alerts.append(new_order_alert(ctx.customer, order, ctx.store))
     try:  # remember the contact details for next time
         await ctx.db.update_customer(ctx.store.id, ctx.customer.id, name=draft.contact_name,
                                      phone=draft.contact_phone, address=draft.delivery_address)

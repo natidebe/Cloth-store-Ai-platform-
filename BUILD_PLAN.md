@@ -1132,6 +1132,72 @@ holds it and see the warning and the staff note.
 
 ---
 
+### Phase 13 — Shop types (any kind of shop, not only clothing) 🟡 Built (migration 013 run; backend 489 tests, Mini App 42 tests pass); waiting for my test in Telegram
+
+**Goal:** an electronics shop, a cosmetics shop or any other shop can open on
+the platform and feel at home: the system speaks its language. When a shop
+is created, the **first question is "What kind of shop do you have?"**, and
+the answer sets the shop's words everywhere.
+
+**Why:** today everything says *color* and *size*: an electronics shop would
+see "size 128GB" in its posts and the bot would ask "which size?" for a phone.
+
+**Shop types (D58)** — each sets the names of a product's two options and the
+suggested categories:
+
+| Type | Option 1 | Option 2 | Suggested categories | Extras |
+|---|---|---|---|---|
+| Clothing & shoes (all shops today) | Color / ቀለም | Size / ቁጥር | Clothing, Shoes, Bags, Accessories | — |
+| Electronics & phones | Color / ቀለም | Storage / ማከማቻ | Phones, Laptops, Tablets, Accessories | Condition, Warranty |
+| Cosmetics & perfume | Shade / ቀለም | Volume / መጠን | Makeup, Perfume, Skincare, Hair | — |
+| General (other) | Type / አይነት | Size / መጠን | (the owner's own) | — |
+
+Options stay optional (Phase 12: a bag has neither). In the database the
+existing `color` and `size` columns stay and simply become option 1 and
+option 2: no data moves, nothing to migrate in the products.
+
+**The owner can rename the two options (D59)** in Settings → "Shop type &
+words", in English and Amharic (e.g. Storage → Model). Empty = the type's
+words. **The type can be changed later (D61)** in the same screen: only the
+words change; products, stock and orders stay.
+
+**Electronics: Condition and Warranty (D60, per product D62).** A product
+can be **New** or **Used** and have a **warranty in months** (none, 3, 6,
+12…). "iPhone 13, used, 3 months" and "iPhone 13, new, 12 months" are two
+products: the stock grid stays two-dimensional (Color × Storage). Shown in
+the channel post ("✨ New · 🛡 12 months warranty"), in the bot's summary
+and in the staff group alert.
+
+**Where the words change (English and Amharic):**
+- **Bot:** its questions and buttons ("Which storage?"), "not available"
+  answers, the order summary, /help and the bot's description in Telegram
+  (updated when the type or words change).
+- **Channel posts:** "🎨 Colors & 💾 Storage", condition and warranty lines.
+- **AI:** told what the two options are called in this shop.
+- **Staff group:** order alerts and counter-sale notes.
+- **Mini App:** stock grid, product form (+ condition and warranty for
+  electronics, categories suggested by type), quick stock, counter sale,
+  orders. The words come from the server (`/me`), one source for all.
+- **Platform bot (sign-up):** "What kind of shop?" first, then name and bot.
+
+**How:**
+- Migration `013_shop_types.sql`: `stores.shop_type` (default `clothing`,
+  so every existing shop keeps today's words), `stores.option_labels`
+  (the owner's renames, or empty), `products.condition` (`new`/`used`) and
+  `products.warranty_months` (0–120).
+- Backend: the presets in one place (`app/agents/shop_types.py`); every text
+  above takes the shop's words; `/me`, create store and settings carry the
+  type and words; products carry condition and warranty.
+- Mini App screens designed in the style of the existing ones (D63).
+
+**Check:** create an electronics shop → add "iPhone 13, used, 3 months" with
+Black/White × 128/256 GB → the post says Storage, Used and the warranty → the
+bot asks "Which storage?" → the staff alert shows condition and warranty.
+Rename Storage → Model and see it everywhere. An existing clothing shop:
+nothing changes.
+
+---
+
 ## 6. Decisions
 
 Answer each before the phase listed, and record the answer here.
@@ -1195,6 +1261,12 @@ Answer each before the phase listed, and record the answer here.
 | D55 | A walk-in wants the last piece an online order is holding? | Phase 12 | Warn, then staff decide; if they sell it, the staff group is told to call the online customer |
 | D56 | How do walk-in customers pay? | Phase 12 | Any method: cash, one of the store's payment accounts, or "other" with a note |
 | D57 | Are counter sales in the analytics? | Phase 12 | Yes: every number counts both, plus Telegram vs in shop, discounts given, and per seller |
+| D58 | Which shop types at the start? | Phase 13 | Clothing & shoes (every existing shop), Electronics & phones, Cosmetics & perfume, General (other). Chosen first when a shop is created |
+| D59 | Can owners change the words? | Phase 13 | The type sets them; the owner can rename the two options (English and Amharic) in Settings; empty = the type's words |
+| D60 | Electronics' Condition and Warranty: now or later? | Phase 13 | Now |
+| D61 | Can the shop type change after creation? | Phase 13 | Yes, in Settings: only the words change, products and stock stay |
+| D62 | Condition and Warranty per product or per variant? | Phase 13 | Per product: new and used are separate products; the grid stays two-dimensional |
+| D63 | Who designs the new Mini App screens? | Phase 13 | Claude, in the style of the existing screens |
 
 ---
 

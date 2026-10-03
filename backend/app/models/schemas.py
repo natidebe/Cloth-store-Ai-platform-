@@ -101,6 +101,10 @@ class Store(DbModel):
     # Counter sales (migration 012, D53): staff may sell this much below the
     # listed price at most (percent); the owner any price.
     staff_discount_percent: Decimal = Decimal("10")
+    # Shop types (migration 013, D58/D59): the kind of shop names the two
+    # product options (agents/shop_types.py); the owner's renames, or None.
+    shop_type: str = "clothing"
+    option_labels: dict | None = None
 
     @property
     def profile(self) -> StoreProfile:
@@ -156,6 +160,9 @@ class Product(DbModel):
     code: str | None = None  # generated, e.g. P101 (D40)
     description: str | None = None
     photo_url: str | None = None  # one photo per product (D36)
+    # Electronics (migration 013, D60/D62): 'new' or 'used', and months of warranty.
+    condition: Literal["new", "used"] | None = None
+    warranty_months: int | None = Field(default=None, ge=0, le=120)
     created_at: datetime | None = None
 
     @field_validator("photo_url")
@@ -288,6 +295,9 @@ class VariantMatch(BaseModel):
     stock_quantity: int
     held: int = 0  # held by other customers' recent orders (D19)
     price: Decimal | None  # price_override, otherwise base_price
+    # The product's condition and warranty (electronics, migration 013).
+    condition: str | None = None
+    warranty_months: int | None = None
 
     @property
     def available(self) -> int:
@@ -304,6 +314,8 @@ class OrderItemDetail(OrderItem):
     product_name: str | None = None
     color: str | None = None
     size: str | None = None
+    condition: str | None = None  # the product's (electronics, migration 013)
+    warranty_months: int | None = None
 
 
 class OrderWithItems(Order):

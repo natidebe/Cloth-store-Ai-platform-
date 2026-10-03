@@ -25,6 +25,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, 
 from pydantic import BaseModel, Field, ValidationError
 
 from app.agents.miniapp import dashboard_url
+from app.agents.shop_types import DEFAULT_TYPE, ShopType, shop_types_json
 from app.agents.onboarding import Onboarding, OnboardingError
 from app.agents.orchestrator import Orchestrator
 from app.api.v1.miniapp import get_onboarding
@@ -73,6 +74,7 @@ async def platform_admin(user: MiniAppUser = Depends(platform_user),
 class NewStore(BaseModel):
     name: str = Field(min_length=2, max_length=80)
     bot_token: str = Field(min_length=20, max_length=100)
+    shop_type: ShopType = DEFAULT_TYPE  # Phase 13: asked first, "What kind of shop?"
 
 
 class PlanIn(BaseModel):
@@ -99,6 +101,7 @@ async def me(user: MiniAppUser = Depends(platform_user),
         "is_platform_admin": await db.is_platform_admin_telegram(user.id),
         "stores": [_store_card(s) for s in await db.stores_created_by(user.id)],
         "support_url": f"https://t.me/{support}" if support else None,
+        "shop_types": shop_types_json(),  # Phase 13: for "What kind of shop?"
     }
 
 
@@ -108,7 +111,8 @@ async def create_store(body: NewStore, user: MiniAppUser = Depends(platform_user
     """Check the bot token with Telegram, save the store as pending (D14) with
     this Telegram account as its owner, and connect its bot."""
     try:
-        result = await onboarding.create_store_for_telegram(user.id, body.name, body.bot_token)
+        result = await onboarding.create_store_for_telegram(user.id, body.name, body.bot_token,
+                                                            body.shop_type)
     except OnboardingError as error:
         raise HTTPException(status_code=error.status_code, detail=error.message)
     return {**_store_card(result.store), "bot_connected": result.connected,

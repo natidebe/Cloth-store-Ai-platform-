@@ -20,6 +20,8 @@ from collections.abc import Iterable
 from decimal import Decimal
 from typing import Literal
 
+from app.agents.shop_types import text_values
+
 Language = Literal["am", "en"]
 
 TEXTS: dict[str, dict[Language, str]] = {
@@ -42,11 +44,11 @@ TEXTS: dict[str, dict[Language, str]] = {
     "btn_change_language": {"en": "🌐 ቋንቋ / Language", "am": "🌐 ቋንቋ / Language"},
     "ask_product_pick": {"en": "Which one?", "am": "የትኛውን?"},
     "ask_color": {
-        "en": "{product} — {price}. Which color?",
-        "am": "{product} — {price}። የትኛው ቀለም?",
+        "en": "{product} — {price}. Which {opt1}?",
+        "am": "{product} — {price}። የትኛው {opt1}?",
     },
     "price_from": {"en": "from {price}", "am": "ከ{price} ጀምሮ"},
-    "ask_size": {"en": "Which size?", "am": "ቁጥር ስንት?"},
+    "ask_size": {"en": "Which {opt2}?", "am": "የትኛው {opt2}?"},
     "ask_quantity": {"en": "How many?", "am": "ስንት ይፈልጋሉ?"},
     "ask_delivery": {
         "en": "Delivery or pickup?",
@@ -111,8 +113,8 @@ TEXTS: dict[str, dict[Language, str]] = {
     "btn_edit": {"en": "✏️ Edit", "am": "✏️ አስተካክል"},
     "btn_start_over": {"en": "🔄 Start over", "am": "🔄 እንደገና ጀምር"},
     "btn_edit_product": {"en": "Product", "am": "ምርት"},
-    "btn_edit_size": {"en": "Size", "am": "ቁጥር"},
-    "btn_edit_color": {"en": "Color", "am": "ቀለም"},
+    "btn_edit_size": {"en": "{Opt2}", "am": "{Opt2}"},
+    "btn_edit_color": {"en": "{Opt1}", "am": "{Opt1}"},
     "btn_edit_quantity": {"en": "Quantity", "am": "ብዛት"},
     "btn_edit_delivery": {"en": "Delivery / pickup", "am": "አደራረስ"},
     "btn_edit_contact": {"en": "Name & phone", "am": "ስም እና ስልክ"},
@@ -125,8 +127,8 @@ TEXTS: dict[str, dict[Language, str]] = {
         "am": "ይቅርታ፣ \"{query}\" አላገኘሁም።",
     },
     "size_unavailable": {
-        "en": "Sorry, size {size} isn't available in that color.",
-        "am": "ይቅርታ፣ ቁጥር {size} በዚህ ቀለም የለም።",
+        "en": "Sorry, {opt2} {size} isn't available in that {opt1}.",
+        "am": "ይቅርታ፣ {opt2} {size} በዚህ {opt1} የለም።",
     },
     "color_unavailable": {
         "en": "Sorry, {color} isn't available.",
@@ -206,7 +208,7 @@ TEXTS: dict[str, dict[Language, str]] = {
         "en": 'Reply "yes" (አዎ) to confirm, or tell me what to change.',
         "am": 'ለማረጋገጥ "አዎ" (yes) ብለው ይመልሱ፤ መቀየር የሚፈልጉት ነገር ካለ ይንገሩኝ።',
     },
-    "size": {"en": "size {size}", "am": "ቁጥር {size}"},
+    "size": {"en": "{opt2} {size}", "am": "{opt2} {size}"},
 
     # --- After the order is placed -------------------------------------------
     "order_placed": {
@@ -271,7 +273,7 @@ TEXTS: dict[str, dict[Language, str]] = {
     "help": {
         "en": "ℹ️ How to order:\n"
               "1. Tap 🛒 Order on a post in our channel, or type a product name or code (e.g. P101).\n"
-              "2. Choose the color, size and quantity with the buttons.\n"
+              "2. Choose the {opt1}, {opt2} and quantity with the buttons.\n"
               "3. Add more items or tap ➡️ Continue, then choose 🚚 Delivery or 🏪 Pickup.\n"
               "4. Check the summary and tap ✅ Confirm.\n\n"
               "💵 Pickup: pay with the details we send you, then send a screenshot here.\n"
@@ -279,7 +281,7 @@ TEXTS: dict[str, dict[Language, str]] = {
               "🔄 Start over anytime. Questions? Just write, and our team will answer.",
         "am": "ℹ️ እንዴት ማዘዝ ይቻላል:\n"
               "1. በቻናላችን ላይ ያለውን 🛒 እዘዝ ይጫኑ፣ ወይም የምርቱን ስም ወይም ኮድ (ለምሳሌ P101) ይጻፉ።\n"
-              "2. ቀለሙን፣ ቁጥሩንና ብዛቱን በቁልፎቹ ይምረጡ።\n"
+              "2. {opt1}፣ {opt2}ና ብዛት በቁልፎቹ ይምረጡ።\n"
               "3. ሌላ ዕቃ ይጨምሩ ወይም ➡️ ቀጥል ይጫኑ፤ ከዚያ 🚚 ይድረስልኝ ወይም 🏪 ከሱቁ እወስዳለሁ ይምረጡ።\n"
               "4. ማጠቃለያውን አይተው ✅ አረጋግጥ ይጫኑ።\n\n"
               "💵 ከሱቁ ሲወስዱ: በምንልክልዎት የክፍያ መረጃ ከፍለው ስክሪንሾቱን እዚህ ይላኩ።\n"
@@ -292,10 +294,10 @@ TEXTS: dict[str, dict[Language, str]] = {
     "bot_description": {
         "en": "👋 Welcome to {shop}!\n"
               "🛒 Tap Order on a post in our channel, or type a product name. "
-              "Choose color, size and quantity, then confirm. Type /help anytime.",
+              "Choose {opt1}, {opt2} and quantity, then confirm. Type /help anytime.",
         "am": "👋 እንኳን ወደ {shop} በደህና መጡ!\n"
               "🛒 በቻናላችን ላይ እዘዝ ይጫኑ፣ ወይም የምርቱን ስም ይጻፉ። "
-              "ቀለም፣ ቁጥርና ብዛት መርጠው ያረጋግጡ። እርዳታ ከፈለጉ /help ይጻፉ።",
+              "{opt1}፣ {opt2}ና ብዛት መርጠው ያረጋግጡ። እርዳታ ከፈለጉ /help ይጻፉ።",
     },
     "bot_short_description": {"en": "Order from {shop} in a few taps.", "am": "ከ{shop} በቀላሉ ይዘዙ።"},
     "command_start": {"en": "Start an order", "am": "ትዕዛዝ ጀምር"},
@@ -315,19 +317,24 @@ def t(key: str, language: Language, store: object | None = None, **values: objec
     """
     overrides = getattr(store, "text_overrides", None) or {}
     template = (overrides.get(key) or {}).get(language) or TEXTS[key][language]
+    if "{opt" in template or "{Opt" in template:
+        # The shop's names for the two product options (Phase 13, shop_types.py).
+        values = {**text_values(store, language), **values}
     return template.format(**values)
 
 
-def both(key: str, **values: object) -> str:
+def both(key: str, store: object | None = None, **values: object) -> str:
     """Amharic and English together, for when we don't know the language."""
-    return f"{t(key, 'am', **values)}\n{t(key, 'en', **values)}"
+    return f"{t(key, 'am', store, **values)}\n{t(key, 'en', store, **values)}"
 
 
-def bot_profile(shop: str) -> tuple[str, str, list[tuple[str, str]]]:
+def bot_profile(shop: str, store: object | None = None) -> tuple[str, str, list[tuple[str, str]]]:
     """The bot's Telegram profile, Amharic first: its description (shown
-    before Start), short description, and command menu."""
+    before Start), short description, and command menu. `store` gives the
+    shop's words for its options (Phase 13)."""
     shop = shop.strip()[:40]
-    description = f"{t('bot_description', 'am', shop=shop)}\n\n{t('bot_description', 'en', shop=shop)}"
+    description = (f"{t('bot_description', 'am', store, shop=shop)}\n\n"
+                   f"{t('bot_description', 'en', store, shop=shop)}")
     short = f"{t('bot_short_description', 'am', shop=shop)} {t('bot_short_description', 'en', shop=shop)}"
     commands = [(name, f"{t(f'command_{name}', 'am')} / {t(f'command_{name}', 'en')}")
                 for name in ("start", "help")]

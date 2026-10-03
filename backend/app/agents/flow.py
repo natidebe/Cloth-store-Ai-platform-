@@ -800,7 +800,7 @@ class _Run:
             if delivery:
                 # D29: pay on delivery: staff call the customer about the address.
                 self.ctx.staff_alerts[-1] = delivery_order_alert(
-                    self.ctx.customer, order, self.ctx.new_messages[-1].customer_username)
+                    self.ctx.customer, order, self.ctx.new_messages[-1].customer_username, self.store)
                 self.before.append(Reply(delivery_message(self.store, order, self.language)))
                 conversation = self.ctx.conversation
                 conversation.bot_paused, conversation.paused_at = True, utc_now()
@@ -891,7 +891,7 @@ class _Run:
         else:
             if len(d.items) < MAX_CART_ITEMS:
                 d.items.append(DraftItem(variant_id=variant.variant_id, quantity=quantity,
-                                         description=describe(variant)))
+                                         description=describe(variant, store=self.store)))
         self.clear_pick()
         d.adding_item = False
         self.changed()

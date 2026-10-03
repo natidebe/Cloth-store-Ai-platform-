@@ -26,6 +26,7 @@ created the store). Members are "staff", the group's admins "owners":
                POST /api/v1/app/stores/{store}/link-code                  /link code for the group/channel
                PUT  /api/v1/app/stores/{store}/bot-token                  change the bot (D17)
 """
+import logging
 import secrets
 from datetime import datetime
 from decimal import Decimal
@@ -39,7 +40,9 @@ from app.agents.analytics import Period, store_analytics
 from app.agents.catalog import Catalog
 from app.agents.counter import CounterSaleError, CounterSales, SaleLine, SaleRequest
 from app.agents.inventory import GridRow, Inventory, InventoryError, summarize
+from app.agents.messages import bot_profile
 from app.agents.miniapp import AppAccess
+from app.agents.shop_types import ShopType, clean_labels, shop_json, shop_type_of, shop_types_json
 from app.agents.onboarding import LINK_CODE_MINUTES, LINK_COMMAND, Onboarding, OnboardingError
 from app.agents.store_profile import (
     DeliveryArea,
@@ -59,6 +62,7 @@ from app.models.schemas import PROFILE_FIELDS, Store
 from app.services.supabase_service import SupabaseService
 from app.services.telegram_service import TelegramError
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/app/stores/{store_id}", tags=["mini app"])
 
 PHOTO_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
@@ -124,6 +128,9 @@ class ProductFields(BaseModel):
     description: str | None = Field(default=None, max_length=700)
     search_keywords: str | None = Field(default=None, max_length=500)
     photo_url: str | None = Field(default=None, max_length=1000)
+    # Electronics (Phase 13, D60/D62): new or used, and months of warranty (0 = none).
+    condition: Literal["new", "used"] | None = None
+    warranty_months: int | None = Field(default=None, ge=0, le=120)
 
     @field_validator("name", "brand", "search_keywords")
     @classmethod
@@ -193,6 +200,10 @@ class SettingsIn(BaseModel):
     return_policy: str | None = Field(default=None, max_length=1000)
     # Counter sales (D53): how far below the listed price staff may go, in percent.
     staff_discount_percent: Decimal | None = Field(default=None, ge=0, le=100)
+    # Shop types (Phase 13, D58/D59/D61): the kind of shop, and the owner's own
+    # words for the two options ({"option2": {"en": "Model", "am": "ሞዴል"}}; null = the type's).
+    shop_type: ShopType | None = None
+    option_labels: dict[str, dict[str, str]] | None = None
 
 
 class BotTokenIn(BaseModel):
@@ -214,7 +225,9 @@ async def me(access: AppAccess = Depends(app_access)) -> dict[str, Any]:
                   "channel_linked": store.channel_id is not None,
                   # Counter sales (Phase 12): staff's lowest price, and how walk-ins can pay.
                   "staff_discount_percent": store.staff_discount_percent,
-                  "payment_methods": payment_methods(store)},
+                  "payment_methods": payment_methods(store),
+                  # Phase 13: the shop's type and its words for the two options.
+                  **shop_json(store)},
     }
 
 
@@ -511,6 +524,9 @@ def _settings(store: Store) -> dict[str, Any]:
         "payment_accounts": store.payment_accounts, "delivery_areas": store.delivery_areas,
         "opening_week": store.opening_week, "staff_discount_percent": store.staff_discount_percent,
         **{name: getattr(store, name) for name in PROFILE_FIELDS},
+        # Phase 13: the type, the owner's renames, and every type's own words.
+        "shop_type": shop_type_of(store), "option_labels": store.option_labels,
+        "shop_types": shop_types_json(),
     }
 
 
@@ -521,9 +537,14 @@ async def get_store_settings(access: AppAccess = Depends(owner_access)) -> dict[
 
 @router.put("/settings")
 async def save_store_settings(body: SettingsIn, access: AppAccess = Depends(owner_access),
-                              db: SupabaseService = Depends(get_db)) -> dict[str, Any]:
+                              db: SupabaseService = Depends(get_db),
+                              orchestrator: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
     sent = body.model_fields_set
     changes: dict[str, Any] = {}
+    if "shop_type" in sent and body.shop_type is not None:
+        changes["shop_type"] = body.shop_type
+    if "option_labels" in sent:
+        changes["option_labels"] = clean_labels(body.option_labels)
     for name in ("location", "pickup_instructions", "return_policy"):
         if name in sent:
             changes[name] = (getattr(body, name) or "").strip() or None
@@ -541,7 +562,22 @@ async def save_store_settings(body: SettingsIn, access: AppAccess = Depends(owne
         changes["opening_week"] = body.opening_week.as_json() if body.opening_week else None
         changes["opening_hours"] = hours_text(body.opening_week)
     await db.update_store_profile(access.store.id, changes)
-    return _settings(await db.get_store_any_status(access.store.id))
+    store = await db.get_store_any_status(access.store.id)
+    if "shop_type" in changes or "option_labels" in changes:
+        # The bot's description in Telegram names the options too (Phase 13).
+        await refresh_bot_profile(orchestrator.telegram, store)
+    return _settings(store)
+
+
+async def refresh_bot_profile(telegram, store: Store) -> None:
+    """Best effort: a failure here mustn't undo the saved settings."""
+    if store.telegram_bot_token is None:
+        return
+    try:
+        await telegram.set_profile(store.telegram_bot_token.get_secret_value(),
+                                   *bot_profile(store.name, store))
+    except TelegramError as error:
+        logger.warning("bot description not updated", extra={"error": error.description})
 
 
 @router.get("/connections")
