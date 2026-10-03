@@ -26,8 +26,9 @@ import { site, startLink, supportLink } from '@/config';
 import { useContent } from '@/content';
 import ui from '@/styles/ui.module.css';
 
-import { ConnectMock, CreateMock, DashboardMock, HeroMock, PostMock, StockMock } from './Mocks';
+import { ConnectMock, CreateMock, DashboardMock, PostMock, StockMock } from './Mocks';
 import s from './sections.module.css';
+import { HeroShowcase } from './Showcase';
 
 function Section({
   id,
@@ -89,7 +90,7 @@ export function Hero() {
             ))}
           </ul>
         </div>
-        <HeroMock />
+        <HeroShowcase />
       </div>
     </section>
   );

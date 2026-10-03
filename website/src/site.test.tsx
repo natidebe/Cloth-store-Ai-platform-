@@ -25,6 +25,13 @@ describe('the page', () => {
     );
   });
 
+  it('shows the three real screenshots, described for screen readers', () => {
+    render(<App lang="am" />);
+    for (const alt of Object.values(am.hero.shots)) {
+      expect(screen.getByRole('img', { name: alt })).toHaveAttribute('src');
+    }
+  });
+
   it('is in English at /en/, and the language switch marks the current one', () => {
     render(<App lang="en" />);
     expect(screen.getByRole('heading', { level: 1, name: en.hero.title })).toBeInTheDocument();

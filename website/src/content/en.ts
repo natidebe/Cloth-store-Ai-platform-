@@ -23,6 +23,13 @@ export const en = {
     start: 'Start free in Telegram',
     how: 'See how it works',
     checks: ['1 week free', 'No app to install', 'Built in Ethiopia'],
+    shots: {
+      channel:
+        'A shop’s Telegram channel: a post with photo, price, colors and sizes, and the Order button',
+      products: 'The shop dashboard in Telegram: products with stock and a low-stock warning',
+      analytics:
+        'The shop dashboard in Telegram: this week’s sales, Telegram vs in the shop, discounts by staff',
+    },
   },
   problems: {
     title: "Selling on Telegram shouldn't take your whole day.",

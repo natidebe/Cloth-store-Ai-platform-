@@ -1,4 +1,4 @@
-import { Check, CheckSquare, Minus, Plus, ShoppingBag, X } from 'lucide-react';
+import { Check, Minus, Plus, ShoppingBag, X } from 'lucide-react';
 
 import s from './mocks.module.css';
 
@@ -17,54 +17,6 @@ function PhotoBox({ height }: { height: number }) {
 }
 
 const ORDER = '🛒 እዘዝ / Order';
-
-/** The hero: a channel post on a phone, and the order arriving in the staff group. */
-export function HeroMock() {
-  return (
-    <div className={s.hero} aria-hidden="true">
-      <div className={s.phone}>
-        <div className={s.channelHead}>
-          <span className={s.avatar}>S</span>
-          <span>
-            <span className={s.channelName}>Selam Shoes</span>
-            <span className={s.channelSub}>channel</span>
-          </span>
-        </div>
-        <div className={s.chat}>
-          <div className={s.post}>
-            <PhotoBox height={220} />
-            <div className={s.postBody}>
-              <div className={s.postTitle}>Leather loafers · የቆዳ ጫማ</div>
-              <div className={s.postPrice}>2,400 ብር</div>
-              <div className={s.postLine}>
-                <span className={s.dot} style={{ background: '#111114' }} /> Black ·{' '}
-                <span className={s.dot} style={{ background: '#6b3f26' }} /> Brown
-              </div>
-              <div className={s.postLine}>39 · 40 · 41 · 42 · 43</div>
-            </div>
-          </div>
-          <div className={s.orderButton}>{ORDER}</div>
-        </div>
-      </div>
-
-      <div className={s.orderCard}>
-        <div className={s.orderFrom}>
-          <span className={s.online} /> Selam Shoes · Staff
-        </div>
-        <div className={s.orderTitle}>🛍 New order #1042</div>
-        <div className={s.orderLine}>Leather loafers · Black · 41 × 1</div>
-        <div className={s.orderLine}>Delivery · Bole · 2,400 ብር</div>
-        <span className={s.pill}>Payment screenshot received</span>
-        <div className={s.orderActions}>
-          <span className={s.confirm}>
-            <CheckSquare size={16} /> Confirm
-          </span>
-          <span className={s.reject}>Reject</span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /** Step 1: Create store. */
 export function CreateMock() {

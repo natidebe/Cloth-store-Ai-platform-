@@ -1,0 +1,251 @@
+/*
+ * Three phones in perspective: the channel post in front, Products and
+ * Analytics turned in behind it, a soft glow and a floor shadow, and a gentle
+ * float (off for people who ask their device for less motion).
+ */
+
+.stage {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  height: 640px;
+  margin-left: auto;
+  perspective: 1800px;
+  perspective-origin: 50% 40%;
+}
+
+.glow {
+  position: absolute;
+  inset: 12% 6% 18%;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side at 35% 45%, rgba(47, 115, 189, 0.45), transparent),
+    radial-gradient(closest-side at 70% 60%, rgba(244, 183, 64, 0.4), transparent);
+  filter: blur(40px);
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(6deg) rotateY(-8deg);
+  transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.stage:hover .scene {
+  transform: rotateX(2deg) rotateY(-2deg);
+}
+
+.floor {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  bottom: 6px;
+  height: 36px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(17, 17, 20, 0.28), transparent);
+  filter: blur(6px);
+}
+
+/* --- A phone -------------------------------------------------------------------------- */
+
+.phone {
+  position: absolute;
+  margin: 0;
+  aspect-ratio: 540 / 1097;
+  border-radius: 38px;
+  padding: 9px;
+  background: linear-gradient(145deg, #2a2a30, #0c0c0f 55%, #2a2a30);
+  box-shadow:
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.14),
+    0 2px 0 1px #3a3a42,
+    0 30px 60px -12px rgba(17, 17, 20, 0.45),
+    0 18px 36px -18px rgba(17, 17, 20, 0.5);
+  transform-style: preserve-3d;
+  animation: float 7s ease-in-out infinite;
+}
+
+.screen {
+  width: 100%;
+  height: 100%;
+  border-radius: 30px;
+  object-fit: cover;
+  object-position: top;
+  background: #fff;
+}
+
+/* A light reflection across the glass. */
+.glare {
+  position: absolute;
+  inset: 9px;
+  border-radius: 30px;
+  background: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.28) 0%,
+    rgba(255, 255, 255, 0.06) 28%,
+    transparent 42%
+  );
+  pointer-events: none;
+}
+
+.front {
+  left: 50%;
+  top: 8px;
+  width: 262px;
+  margin-left: -131px;
+  transform: translateZ(70px) rotateY(-6deg);
+  z-index: 3;
+}
+
+.left,
+.right {
+  top: 70px;
+  width: 214px;
+  filter: saturate(0.92) brightness(0.97);
+}
+
+.left {
+  left: 0;
+  transform: translateZ(-60px) rotateY(26deg);
+  animation-delay: -2.3s;
+  z-index: 1;
+}
+
+.right {
+  right: 0;
+  transform: translateZ(-60px) rotateY(-26deg);
+  animation-delay: -4.6s;
+  z-index: 2;
+}
+
+@keyframes float {
+  50% {
+    translate: 0 -12px;
+  }
+}
+
+/* --- The staff group's order card ------------------------------------------------------ */
+
+.orderCard {
+  position: absolute;
+  right: -6px;
+  bottom: 40px;
+  width: 262px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 24px 48px -12px rgba(17, 17, 20, 0.35),
+    0 0 0 1px rgba(17, 17, 20, 0.04);
+  transform: translateZ(150px) rotateY(-4deg);
+  font-size: 13.5px;
+  line-height: 1.4;
+  z-index: 4;
+  animation: float 6s ease-in-out infinite;
+  animation-delay: -1s;
+}
+
+.orderFrom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.online {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.orderTitle {
+  font-weight: 800;
+  font-size: 16px;
+  margin: 6px 0 8px;
+}
+
+.orderLine {
+  margin-bottom: 6px;
+}
+
+.pill {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 12.5px;
+}
+
+.orderActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.confirm,
+.reject {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.confirm {
+  background: var(--green);
+  color: #fff;
+}
+
+.reject {
+  background: var(--grey);
+  color: var(--red);
+}
+
+/* --- Smaller screens -------------------------------------------------------------------- */
+
+@media (max-width: 860px) {
+  .stage {
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .stage {
+    height: 560px;
+  }
+  .front {
+    width: 220px;
+    margin-left: -110px;
+  }
+  .left,
+  .right {
+    top: 64px;
+    width: 172px;
+  }
+  .left {
+    left: -34px;
+  }
+  .right {
+    right: -34px;
+  }
+  .orderCard {
+    right: 50%;
+    margin-right: -130px;
+    bottom: 0;
+    width: 240px;
+    font-size: 12.5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phone,
+  .orderCard {
+    animation: none;
+  }
+}
