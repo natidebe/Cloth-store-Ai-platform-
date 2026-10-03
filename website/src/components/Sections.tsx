@@ -333,8 +333,8 @@ export function Pricing() {
         })}
       </div>
       <div className={s.notes}>
-        {t.notes.map((note, index) => (
-          <p key={note.label} className={`${s.note} ${index === 0 ? s.noteFounding : ''}`}>
+        {t.notes.map((note) => (
+          <p key={note.label} className={s.note}>
             <strong>{note.label}</strong> {note.text}
           </p>
         ))}

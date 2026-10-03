@@ -197,14 +197,7 @@ export const en = {
           'Everything in Basic, more AI replies, priority support, help adding your products',
       },
     ],
-    notes: [
-      {
-        label: 'Founding shops:',
-        text: 'the first 10 shops pay 1,000 ETB / month, for as long as they stay.',
-      },
-      { label: 'Yearly:', text: 'pay 10 months, get 12.' },
-      { label: 'Pay with:', text: 'Telebirr or bank transfer (CBE and others).' },
-    ],
+    notes: [{ label: 'Pay with:', text: 'Telebirr or bank transfer (CBE and others).' }],
   },
   trust: {
     title: 'Built in Addis Ababa, for Ethiopian shops.',

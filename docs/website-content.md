@@ -284,9 +284,6 @@ confirm payment → the post's stock drops.
 | Includes | Everything in Pro | Your bot, channel posts, staff group, dashboard, in-shop sales, analytics | Everything in Basic, more AI replies, priority support, help adding your products |
 | Button | Start free | Start free | Start free |
 
-- **Yearly:** pay 10 months, get 12.
-- **Founding shops:** the first 10 shops pay **1,000 ETB / month**, for as long
-  as they stay.
 - **Pay with:** Telebirr or bank transfer (CBE and others).
 
 **Amharic**
@@ -300,8 +297,6 @@ confirm payment → the post's stock drops.
 | የሚያካትተው | የፕሮ ሁሉንም | የራስዎ ቦት፣ የቻናል ፖስቶች፣ የሰራተኞች ግሩፕ፣ ዳሽቦርድ፣ የሱቅ ሽያጭ፣ ትንታኔ | የመሰረታዊ ሁሉንም፣ ተጨማሪ የAI መልሶች፣ ቅድሚያ ድጋፍ፣ ምርቶችዎን በማስገባት እገዛ |
 | ቁልፍ | በነፃ ይጀምሩ | በነፃ ይጀምሩ | በነፃ ይጀምሩ |
 
-- **ዓመታዊ:** የ10 ወር ይክፈሉ፣ 12 ወር ይጠቀሙ።
-- **መስራች ሱቆች:** የመጀመሪያዎቹ 10 ሱቆች እስከቆዩ ድረስ በወር **1,000 ብር** ይከፍላሉ።
 - **የሚከፍሉት በ:** ቴሌብር ወይም በባንክ ዝውውር (ንግድ ባንክና ሌሎች)።
 
 > Decide before publishing: show these prices, or "Contact us" during the pilot.
