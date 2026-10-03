@@ -13,9 +13,11 @@ import {
   Steps,
   Trust,
 } from './components/Sections';
+import { useRevealOnce } from './components/useRevealOnce';
 
 /** The whole page, in one language (design: website/design/Landing page). */
 export function App({ lang }: { lang: Lang }) {
+  useRevealOnce();
   return (
     <LangContext.Provider value={lang}>
       <Header />

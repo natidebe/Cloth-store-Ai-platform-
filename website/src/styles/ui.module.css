@@ -139,18 +139,15 @@
   }
 }
 
-/* Section titles fade in and rise as they enter the screen (see sections.module.css). */
-@keyframes titleRise {
-  from {
-    opacity: 0;
-    translate: 0 18px;
-  }
+/* Scroll animation, once per load (components/useRevealOnce.ts): waiting below
+   the screen, then fading in and rising when first seen. */
+.revealHidden {
+  opacity: 0;
+  translate: 0 24px;
 }
 
-@supports (animation-timeline: view()) {
-  .h2 {
-    animation: titleRise linear both;
-    animation-timeline: view();
-    animation-range: entry 0% entry 60%;
-  }
+.revealShown {
+  transition:
+    opacity 0.6s ease-out,
+    translate 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
