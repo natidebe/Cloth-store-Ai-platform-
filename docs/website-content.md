@@ -7,16 +7,17 @@ Amharic is the default language on the site; English is behind a switch.
 
 | Placeholder | What | Example |
 |---|---|---|
-| `[NAME]` | The product's name | SuqBot |
-| `[BOT]` | The platform bot's username | @SuqBot |
-| `[START_LINK]` | The sign-up link: the platform bot, tagged as coming from the website | `https://t.me/SuqBot?start=web` |
+| `[NAME]` | The product's name | StoreFront.et |
+| `[BOT]` | The platform bot's username | @StoreFrontETbot |
+| `[START_LINK]` | The sign-up link: the platform bot, tagged as coming from the website | `https://t.me/StoreFrontETbot?start=web` |
 | `[DEMO_CHANNEL]` | A public demo shop channel visitors can order from | `https://t.me/SuqDemoShop` |
 | `[SUPPORT]` | Your support Telegram | @nati_support |
 | `[STATUS_LINK]` | The UptimeRobot status page | |
 
 Words that must match the product exactly (customers see them in Telegram):
 **🛒 እዘዝ / Order** (the button on posts), **❌ ተሽጧል / SOLD OUT**,
-**📊 Dashboard**. Items are held for **5 minutes** while a customer orders.
+**📊 Dashboard**. Items are held for **5 mi
+nutes** while a customer orders.
 
 > Have a native speaker read the Amharic once before publishing.
 
