@@ -1132,7 +1132,7 @@ holds it and see the warning and the staff note.
 
 ---
 
-### Phase 13 — Shop types (any kind of shop, not only clothing) 🟡 Backend built (migration 013 run; 489 tests pass); Mini App screens next
+### Phase 13 — Shop types (any kind of shop, not only clothing) 🟡 Built (migration 013 run; backend 489 tests, Mini App 42 tests pass); waiting for my test in Telegram
 
 **Goal:** an electronics shop, a cosmetics shop or any other shop can open on
 the platform and feel at home: the system speaks its language. When a shop
