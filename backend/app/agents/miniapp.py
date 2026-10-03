@@ -11,10 +11,13 @@ Telegram is asked (getChatMember) and the answer is remembered for a few
 minutes, so the dashboard doesn't ask Telegram on every tap. Removing
 someone from the staff group takes away their access within that time.
 
-How people open it: /dashboard (or the "📊 Dashboard" button in the staff
-group, which opens a private chat with /start dashboard). Telegram only
-allows Mini App buttons in private chats, and the bot only sends one to
-someone with access. Customers never see it.
+How people open it: the "📊 Dashboard" menu button next to the message box
+in their private chat with the store's bot. The bot sets it for each person
+with access (owners and staff) the first time they talk to it (Start, or the
+pinned "📊 Dashboard" button in the staff group, which opens that chat), and
+takes it away from someone who left the group. /dashboard still works.
+Telegram only allows Mini App buttons in private chats, and customers never
+get this one: their menu stays the bot's commands.
 """
 import logging
 import time
@@ -34,6 +37,7 @@ KNOWN_FOR_SECONDS = 300  # someone with access: ask Telegram again after 5 minut
 UNKNOWN_FOR_SECONDS = 30  # someone without: ask again soon (they may just have been added)
 DASHBOARD_COMMAND = "/dashboard"
 DASHBOARD_START = "dashboard"  # /start dashboard (from the staff group's button)
+MENU_TEXT = "📊 Dashboard"
 
 
 @dataclass
@@ -57,6 +61,7 @@ class MiniAppAccess:
         self.telegram = telegram
         self.clock = clock
         self._known: dict[tuple, tuple[Role | None, float]] = {}
+        self._menus: set[tuple] = set()  # (store, person) who got the menu button
 
     async def role(self, store: Store, telegram_id: int) -> Role | None:
         """"owner", "staff", or None (no access). If Telegram can't be
@@ -81,6 +86,37 @@ class MiniAppAccess:
         if len(self._known) > 5000:  # forget expired answers, so memory doesn't grow
             self._known = {k: v for k, v in self._known.items() if v[1] > now}
         return role
+
+    # --- The menu button ----------------------------------------------------------
+
+    @staticmethod
+    def is_private_start(update: TelegramUpdate) -> bool:
+        """/start (with or without a word after it) from a person, in a private chat."""
+        message = update.message
+        if message is None or message.from_user is None or message.from_user.is_bot:
+            return False
+        words = (message.text or "").strip().split()
+        return message.chat.type == "private" and bool(words) and words[0].split("@")[0].lower() == "/start"
+
+    async def update_menu_button(self, store: Store, telegram_id: int, public_base_url: str) -> None:
+        """Give this person the "📊 Dashboard" menu button if they're on the
+        store's team, or take it away if they aren't any more. Never raises."""
+        url = dashboard_url(public_base_url, store)
+        if store.telegram_bot_token is None or not url.startswith("https://"):
+            return
+        token = store.telegram_bot_token.get_secret_value()
+        key = (store.id, telegram_id)
+        try:
+            role = await self.role(store, telegram_id)
+            if role is not None and key not in self._menus:
+                await self.telegram.set_menu_button(token, MENU_TEXT, url, chat_id=telegram_id)
+                self._menus.add(key)
+            elif role is None and key in self._menus:
+                await self.telegram.reset_menu_button(token, telegram_id)
+                self._menus.discard(key)
+        except TelegramError as error:
+            # e.g. the person never opened a chat with the bot yet: next time.
+            logger.info("dashboard menu button not changed", extra={"error": error.description})
 
     # --- /dashboard -------------------------------------------------------------
 
@@ -127,7 +163,9 @@ class MiniAppAccess:
                 return
             await self.telegram.send_message(
                 token, message.chat.id,
-                f"📊 {store.name} dashboard ({'owner' if role == 'owner' else 'staff'}):",
+                f"📊 {store.name} dashboard ({'owner' if role == 'owner' else 'staff'}). From now on "
+                "it's also the 📊 Dashboard button next to the message box.",
                 buttons=[("📊 Open dashboard", f"{WEB_APP_PREFIX}{url}")])
+            await self.update_menu_button(store, message.from_user.id, public_base_url)
         except TelegramError as error:
             logger.warning("dashboard button not sent", extra={"error": error.description})

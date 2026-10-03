@@ -28,7 +28,7 @@ Errors always look like `{"detail": "…"}`.
 
 | From | URL | Signed by |
 |---|---|---|
-| A store: `/dashboard` to the store's bot, or "📊 Dashboard" in the staff group | `/app/?store=<store id>` | the store's bot |
+| A store: the "📊 Dashboard" menu button next to the message box in the store's bot (set for each owner and staff member the first time they press Start; customers never get it), the pinned "📊 Dashboard" button in the staff group, or `/dashboard` | `/app/?store=<store id>` | the store's bot |
 | The platform bot: its "Open" menu button or any message | `/app/platform` | the platform bot |
 
 The backend serves the built app (`frontend/dist`) for every path under

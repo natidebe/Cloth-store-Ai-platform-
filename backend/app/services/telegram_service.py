@@ -303,11 +303,25 @@ class TelegramService:
             raise
         return chat.get("title")
 
-    async def set_menu_button(self, bot_token: str, text: str, url: str) -> None:
-        """The button next to the message box that opens a Mini App (all private chats)."""
-        await self._call(bot_token, "setChatMenuButton", {
+    async def set_menu_button(self, bot_token: str, text: str, url: str, chat_id: int | None = None) -> None:
+        """The button next to the message box that opens a Mini App: in one
+        person's private chat (chat_id), or in every private chat (None)."""
+        params: dict[str, Any] = {
             "menu_button": {"type": "web_app", "text": text[:64], "web_app": {"url": url}},
-        })
+        }
+        if chat_id is not None:
+            params["chat_id"] = chat_id
+        await self._call(bot_token, "setChatMenuButton", params)
+
+    async def reset_menu_button(self, bot_token: str, chat_id: int) -> None:
+        """Back to Telegram's usual menu (the bot's commands) in this private chat."""
+        await self._call(bot_token, "setChatMenuButton",
+                         {"chat_id": chat_id, "menu_button": {"type": "default"}})
+
+    async def pin_message(self, bot_token: str, chat_id: int, message_id: int) -> None:
+        """Pin quietly (needs the "pin messages" right in a group)."""
+        await self._call(bot_token, "pinChatMessage",
+                         {"chat_id": chat_id, "message_id": message_id, "disable_notification": True})
 
     async def delete_webhook(self, bot_token: str) -> None:
         await self._call(bot_token, "deleteWebhook")

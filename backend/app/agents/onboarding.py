@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from app.agents.messages import bot_profile
+from app.agents.miniapp import DASHBOARD_START, MENU_TEXT, dashboard_url
 from app.agents.shop_types import DEFAULT_TYPE
 from app.models.schemas import AuthUser, Store, TelegramUpdate
 from app.services.supabase_service import DuplicateError, SupabaseService
@@ -150,6 +151,8 @@ class Onboarding:
         store = await self.db.get_store_any_status(store_id)
         logger.info("store created", extra={"store_id": str(store_id), "bot": bot.username})
         connected = await self._connect(store)
+        if connected and store.owner_telegram_id is not None:
+            await self._owner_menu_button(store)
         return BotConnection(store, connected, "" if connected else
                              "The store is saved, but the bot couldn't be connected yet. Try "
                              "again with 'change bot token' (same token) in a few minutes.")
@@ -213,16 +216,49 @@ class Onboarding:
                     pass
                 logger.info("channel linked", extra={"store_id": str(store.id)})
                 return
-            text = (f"✅ This group is now the staff group of {store.name}. New orders, payment "
-                    "screenshots and customer questions will appear here." if ok else
+            if not ok:
+                await self.telegram.send_message(
+                    token, chat_id,
                     "❌ That code is wrong, already used, or expired (codes last "
                     f"{LINK_CODE_MINUTES} minutes and work once). Get a new code in the "
-                    f"dashboard and send it like this: {LINK_COMMAND} ABCD2345")
-            await self.telegram.send_message(token, chat_id, text, reply_to=message.message_id)
-            if ok:
-                logger.info("staff group linked", extra={"store_id": str(store.id)})
+                    f"dashboard and send it like this: {LINK_COMMAND} ABCD2345",
+                    reply_to=message.message_id)
+                return
+            await self.welcome_staff_group(store, chat_id, reply_to=message.message_id)
+            logger.info("staff group linked", extra={"store_id": str(store.id)})
         except Exception:
             logger.exception("link failed", extra={"store_id": str(store.id)})
+
+    async def _owner_menu_button(self, store: Store) -> None:
+        """The owner's "📊 Dashboard" button next to the message box. Telegram only
+        allows it once they've opened a chat with the bot; if not yet, they get it
+        on their first Start (MiniAppAccess.update_menu_button)."""
+        try:
+            await self.telegram.set_menu_button(
+                store.telegram_bot_token.get_secret_value(), MENU_TEXT,
+                dashboard_url(self.public_base_url, store), chat_id=store.owner_telegram_id)
+        except TelegramError:
+            pass
+
+    async def welcome_staff_group(self, store: Store, chat_id: int, reply_to: int | None = None) -> None:
+        """The staff group's welcome, with the "📊 Dashboard" button, pinned so the
+        team always finds it (Mini App buttons can't be in groups: the button opens
+        the private chat, where everyone with access gets the menu button)."""
+        token = store.telegram_bot_token.get_secret_value()
+        bot = store.telegram_bot_username
+        buttons = [("📊 Dashboard", f"https://t.me/{bot}?start={DASHBOARD_START}")] if bot else None
+        message_id = await self.telegram.send_message(
+            token, chat_id,
+            f"✅ This group is now the staff group of {store.name}. New orders, payment "
+            "screenshots and customer questions will appear here.\n\n"
+            "📊 Products, stock, orders and numbers: tap Dashboard once. After that it's "
+            "always the 📊 Dashboard button next to the message box in your chat with the bot.",
+            buttons=buttons, reply_to=reply_to)
+        if message_id is not None:
+            try:
+                await self.telegram.pin_message(token, chat_id, message_id)
+            except TelegramError:
+                pass  # the bot may not be allowed to pin: the message is still there
 
     # --- 2. Platform admin: approve, suspend, plan (D14–D16) --------------------------
 
