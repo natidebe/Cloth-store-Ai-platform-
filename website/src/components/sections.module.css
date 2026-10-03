@@ -661,3 +661,66 @@
     min-height: 260px;
   }
 }
+
+/* --- Motion -------------------------------------------------------------------------------
+   Subtle: on load the hero rises once; while scrolling, cards, steps, plans and
+   FAQ rows fade in and rise as they enter the screen (items in a row one after
+   another). CSS scroll animations only: browsers without them show everything
+   still, nothing is ever left hidden, and "reduce motion" turns it all off
+   (global.css). */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 24px;
+  }
+}
+
+.heroGrid > :first-child {
+  animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.heroGrid > :last-child {
+  animation: rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.15s both;
+}
+
+@supports (animation-timeline: view()) {
+  .card,
+  .step,
+  .group,
+  .control,
+  .demo,
+  .plan,
+  .note,
+  .person,
+  .promise,
+  .question,
+  .cta,
+  .other {
+    animation: rise linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 40%;
+  }
+
+  /* A row arrives left to right. */
+  .four > :nth-child(2),
+  .steps > :nth-child(2),
+  .plans > :nth-child(2),
+  .notes > :nth-child(2),
+  .promises > :nth-child(2) {
+    animation-range: entry 5% entry 48%;
+  }
+
+  .four > :nth-child(3),
+  .steps > :nth-child(3),
+  .plans > :nth-child(3),
+  .notes > :nth-child(3),
+  .promises > :nth-child(3) {
+    animation-range: entry 10% entry 56%;
+  }
+
+  .four > :nth-child(4),
+  .steps > :nth-child(4) {
+    animation-range: entry 15% entry 64%;
+  }
+}

@@ -138,3 +138,19 @@
     margin-bottom: 28px;
   }
 }
+
+/* Section titles fade in and rise as they enter the screen (see sections.module.css). */
+@keyframes titleRise {
+  from {
+    opacity: 0;
+    translate: 0 18px;
+  }
+}
+
+@supports (animation-timeline: view()) {
+  .h2 {
+    animation: titleRise linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 60%;
+  }
+}
