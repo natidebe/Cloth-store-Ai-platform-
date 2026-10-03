@@ -56,7 +56,7 @@ function Tile({ icon: Icon, tone }: { icon: LucideIcon; tone: string | undefined
   );
 }
 
-/** "@kiya30 · @AWGKGGK", each a link to the Telegram chat. */
+/** "@kiyay30 · @AWGKGGK", each a link to the Telegram chat. */
 const supportHandle = (
   <>
     {site.support.map((user, index) => (

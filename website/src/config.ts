@@ -11,9 +11,9 @@ export const site = {
    */
   platformBot: 'Platform_16bot',
   /** Customer support on Telegram (the first one gets the "Talk to us" button). */
-  support: ['kiya30', 'AWGKGGK'],
+  support: ['kiyay30', 'AWGKGGK'],
   /** Support phone numbers, shown in the footer. */
-  phones: ['+251960570692', '+25167026271'],
+  phones: ['+251960570692', '+251967026271'],
   /** A public demo shop channel visitors can order from. */
   demoUrl: null as string | null,
   /** The 60-second video (an .mp4 in public/, or a full URL). */

@@ -11,7 +11,7 @@ English is the default language on the site (at /); Amharic is behind a switch (
 | `[BOT]` | The platform bot's username | @StoreFrontETbot |
 | `[START_LINK]` | The sign-up link: the platform bot, tagged as coming from the website | `https://t.me/StoreFrontETbot?start=web` |
 | `[DEMO_CHANNEL]` | A public demo shop channel visitors can order from | `https://t.me/SuqDemoShop` |
-| `[SUPPORT]` | Support on Telegram, and phones (footer) | @kiya30, @AWGKGGK; +251960570692, +25167026271 |
+| `[SUPPORT]` | Support on Telegram, and phones (footer) | @kiyay30, @AWGKGGK; +251960570692, +251967026271 |
 | `[STATUS_LINK]` | The UptimeRobot status page | |
 
 Words that must match the product exactly (customers see them in Telegram):
