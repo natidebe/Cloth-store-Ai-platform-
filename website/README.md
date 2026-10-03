@@ -1,5 +1,8 @@
 # StoreFront.et website
 
+Lives on its own branch, **`Website`** (not merged into `main`, which is the bot
+server Render deploys).
+
 The promotional website, built with React from the design in `design/`
 (kept out of git) and the text in `docs/website-content.md`.
 
@@ -38,12 +41,12 @@ Render), change `platformBot` in `src/config.ts`.
 
 1. Cloudflare dashboard → Workers & Pages → Create → Pages → connect the
    GitHub repository.
-2. Production branch `main`; **root directory `website`**; build command
+2. Production branch **`Website`**; **root directory `website`**; build command
    `npm ci && npm run build`; output directory `dist`.
 3. Environment variable `SITE_URL` = the site's address (e.g.
    `https://storefront.et`): adds the language links for Google, the sitemap
    and robots.txt.
 4. Custom domain: Pages project → Custom domains.
 
-Every merge into `main` then republishes the site. Netlify or Vercel work the
+Every push to the `Website` branch then republishes the site. Netlify or Vercel work the
 same way (base directory `website`, publish directory `website/dist`).
