@@ -43,9 +43,9 @@ Render), change `platformBot` in `src/config.ts`.
    GitHub repository.
 2. Production branch **`Website`**; **root directory `website`**; build command
    `npx -y npm@11.11.0 ci && npm run build` (the npm that made the lock file;
-   Node 22's own npm 10 refuses it); output directory `dist`; environment
-   variable `NODE_VERSION` = `22`.
-3. Environment variable `SITE_URL` = the site's address (e.g.
+   Node 22's own npm 10 refuses it); output directory `dist`. Node 22 comes
+   from `website/.node-version` (no variable needed).
+3. Optional, once the address is final: environment variable `SITE_URL` = the site's address (e.g.
    `https://storefront.et`): adds the language links for Google, the sitemap
    and robots.txt.
 4. Custom domain: Pages project → Custom domains.
