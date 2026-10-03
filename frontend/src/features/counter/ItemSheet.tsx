@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useAvailability, useProducts } from '@/api/queries';
 import type { Product, Variant } from '@/api/types';
-import { useLanguage, useStore } from '@/app/hooks';
+import { useLanguage, useStore, useShopWords } from '@/app/hooks';
 import { inputClass } from '@/components/classes';
 import { Icon } from '@/components/Icon';
 import { Badge, Button, Field, Photo, Sheet, Stepper, TextInput } from '@/components/ui';
@@ -24,6 +24,7 @@ interface ItemSheetProps {
 /** Pick a product, its color and size, how many, and the agreed price (D53). */
 export function ItemSheet({ line, onClose, onSave }: ItemSheetProps) {
   const { t } = useTranslation();
+  const words = useShopWords();
   const language = useLanguage();
   const { storeId, isOwner, store } = useStore();
   const products = useProducts(storeId);
@@ -177,9 +178,13 @@ export function ItemSheet({ line, onClose, onSave }: ItemSheetProps) {
       ) : (
         <>
           <p className={s.lineSub} style={{ fontWeight: 600, margin: '4px 0 8px' }}>
-            {t('counter.chooseVariant')}
+            {t('counter.chooseVariant', words)}
           </p>
-          <div className={s.variants} role="radiogroup" aria-label={t('counter.chooseVariant')}>
+          <div
+            className={s.variants}
+            role="radiogroup"
+            aria-label={t('counter.chooseVariant', words)}
+          >
             {product.variants.map((v) => (
               <button
                 key={v.id}
@@ -197,7 +202,7 @@ export function ItemSheet({ line, onClose, onSave }: ItemSheetProps) {
               >
                 <span className={s.variantLabel}>
                   {v.color && <span className={s.dot} style={{ background: swatch(v.color) }} />}
-                  {variantLabel(v.color, v.size) || t('grid.noSize')}
+                  {variantLabel(v.color, v.size) || t('grid.noSize', words)}
                 </span>
                 <span className={s.variantStock}>
                   {v.stock > 0

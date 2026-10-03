@@ -2,6 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 
 import type { PlatformMe } from '@/api/types';
+import { shopTypes } from '@/test/fixtures';
 import { renderApp } from '@/test/render';
 import { server } from '@/test/server';
 
@@ -13,6 +14,7 @@ function platformMe(overrides: Partial<PlatformMe> = {}): PlatformMe {
     is_platform_admin: false,
     stores: [],
     support_url: 'https://t.me/support',
+    shop_types: shopTypes(),
     ...overrides,
   };
 }
@@ -42,6 +44,12 @@ describe('the platform bot', () => {
     );
     const { user: u } = renderApp('/platform');
     expect(await screen.findByRole('heading', { name: 'Create your store' })).toBeInTheDocument();
+    // Phase 13: first, what kind of shop.
+    expect(screen.getByText('What kind of shop do you have?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    await u.click(screen.getByRole('radio', { name: /Electronics & phones/ }));
+    await u.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText('Electronics & phones')).toBeInTheDocument();
     await u.click(screen.getByRole('button', { name: 'Create store' }));
     expect(
       await screen.findByText('The store name must be 2 to 80 characters'),
@@ -53,7 +61,11 @@ describe('the platform bot', () => {
     expect(
       await screen.findByRole('heading', { name: 'Waiting for approval' }),
     ).toBeInTheDocument();
-    expect(sent).toEqual({ name: 'nati fashion', bot_token: `123456789:${'A'.repeat(35)}` });
+    expect(sent).toEqual({
+      name: 'nati fashion',
+      bot_token: `123456789:${'A'.repeat(35)}`,
+      shop_type: 'electronics',
+    });
     expect(screen.getByRole('button', { name: 'Contact support' })).toBeInTheDocument();
   });
 

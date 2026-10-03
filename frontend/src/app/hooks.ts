@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router';
 
@@ -6,6 +6,7 @@ import { ApiError, NETWORK_ERROR } from '@/api/client';
 import { useMe } from '@/api/queries';
 import type { Me } from '@/api/types';
 import { showBackButton } from '@/lib/telegram';
+import { shopWords, type ShopWords } from '@/lib/shopWords';
 import { resolveLanguage, usePreferences, type Language } from '@/state/preferences';
 
 /** The store in the URL (/app/s/<store id>/…). */
@@ -21,6 +22,13 @@ export function useStore(): Me & { storeId: string; isOwner: boolean } {
   const { data } = useMe(storeId);
   if (!data) throw new Error('useStore before the store loaded');
   return { ...data, storeId, isOwner: data.role === 'owner' };
+}
+
+/** The shop's words for a product's two options, in the reader's language (Phase 13). */
+export function useShopWords(): ShopWords {
+  const { store } = useStore();
+  const language = useLanguage();
+  return useMemo(() => shopWords(store, language), [store, language]);
 }
 
 export function useLanguage(): Language {

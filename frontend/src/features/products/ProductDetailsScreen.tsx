@@ -23,6 +23,7 @@ import {
   Card,
   Field,
   Page,
+  Segmented,
   PageHeader,
   Photo,
   SkeletonList,
@@ -37,6 +38,7 @@ import { toast } from '@/state/toasts';
 import s from './details.module.css';
 
 const NEW_CATEGORY = '__new__';
+const WARRANTY_MONTHS = [3, 6, 12, 24];
 const DESCRIPTION_MAX = 700;
 
 function schema(t: (key: 'product.nameRequired' | 'product.priceInvalid') => string) {
@@ -54,6 +56,9 @@ function schema(t: (key: 'product.nameRequired' | 'product.priceInvalid') => str
     description: z.string().max(DESCRIPTION_MAX),
     keywords: z.array(z.string()),
     photoUrl: z.string().nullable(),
+    // Electronics (Phase 13): '' = not said / no warranty.
+    condition: z.enum(['', 'new', 'used']),
+    warranty: z.string(),
   });
 }
 
@@ -71,6 +76,8 @@ function toForm(product?: Product): FormValues {
     description: product?.description ?? '',
     keywords: splitKeywords(product?.search_keywords),
     photoUrl: product?.photo_url ?? null,
+    condition: product?.condition ?? '',
+    warranty: product?.warranty_months ? String(product.warranty_months) : '',
   };
 }
 
@@ -97,7 +104,7 @@ function DetailsForm({ product }: { product?: Product }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const errorText = useErrorText();
-  const { storeId, role, isOwner } = useStore();
+  const { storeId, role, isOwner, store } = useStore();
   const categories = useProducts(storeId).data?.categories;
   const create = useCreateProduct(storeId);
   const update = useUpdateProduct(storeId, product?.id ?? '');
@@ -112,15 +119,21 @@ function DetailsForm({ product }: { product?: Product }) {
   // A refresh from the server must not wipe what the user is typing.
   useEffect(() => reset(toForm(product), { keepDirtyValues: true }), [product, reset]);
 
-  const [description, photoUrl, category] = useWatch({
+  const [description, photoUrl, category, condition, warranty] = useWatch({
     control,
-    name: ['description', 'photoUrl', 'category'],
+    name: ['description', 'photoUrl', 'category', 'condition', 'warranty'],
   });
+  // The shop's categories, plus the ideas for its type (Phase 13: Phones, Laptops…).
   const options = useMemo(() => {
-    const list = new Set(categories ?? []);
+    const list = new Set([...(categories ?? []), ...store.categories.map((c) => c.toLowerCase())]);
     if (category) list.add(category);
     return [...list].sort();
-  }, [categories, category]);
+  }, [categories, category, store.categories]);
+  const warrantyChoices = useMemo(() => {
+    const list = new Set(WARRANTY_MONTHS);
+    if (warranty) list.add(Number(warranty));
+    return [...list].sort((a, b) => a - b);
+  }, [warranty]);
 
   const onPhoto = async (file: File | undefined) => {
     if (!file) return;
@@ -151,6 +164,10 @@ function DetailsForm({ product }: { product?: Product }) {
       search_keywords: joinKeywords(values.keywords),
       photo_url: values.photoUrl,
     };
+    if (store.condition_and_warranty) {
+      fields.condition = values.condition || null;
+      fields.warranty_months = values.warranty ? Number(values.warranty) : null;
+    }
     if (isOwner) fields.base_price = values.price === '' ? null : values.price;
 
     const done = (saved: Product, isNew: boolean) => {
@@ -264,6 +281,47 @@ function DetailsForm({ product }: { product?: Product }) {
               />
             )}
           </Field>
+
+          {store.condition_and_warranty && (
+            <>
+              <Field label={t('product.condition')}>
+                {() => (
+                  <Segmented
+                    label={t('product.condition')}
+                    value={condition}
+                    onChange={(value) => setValue('condition', value, { shouldDirty: true })}
+                    options={[
+                      { value: '', label: t('product.conditionNone') },
+                      { value: 'new', label: t('product.conditionNew') },
+                      { value: 'used', label: t('product.conditionUsed') },
+                    ]}
+                  />
+                )}
+              </Field>
+              <Field label={t('product.warranty')} hint={t('product.warrantyHint')}>
+                {(id) => (
+                  <div className={s.selectWrap}>
+                    <select
+                      id={id}
+                      className={selectClass}
+                      value={warranty}
+                      onChange={(event) =>
+                        setValue('warranty', event.target.value, { shouldDirty: true })
+                      }
+                    >
+                      <option value="">{t('product.warrantyNone')}</option>
+                      {warrantyChoices.map((months) => (
+                        <option key={months} value={String(months)}>
+                          {t('product.warrantyMonths', { count: months })}
+                        </option>
+                      ))}
+                    </select>
+                    <Icon name="chevronDown" size={18} className={s.selectIcon} />
+                  </div>
+                )}
+              </Field>
+            </>
+          )}
         </Card>
 
         <Card>

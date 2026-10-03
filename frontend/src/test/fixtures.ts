@@ -1,8 +1,72 @@
-import type { Analytics, Me, Order, Product, StoreSettings } from '@/api/types';
+import type {
+  Analytics,
+  Me,
+  Order,
+  Product,
+  ShopType,
+  ShopTypeInfo,
+  StoreSettings,
+} from '@/api/types';
 
 export const STORE_ID = '6f1c1d2e-1111-4222-8333-444455556666';
 
-export function me(role: Me['role'] = 'owner'): Me {
+/** Every shop type with its words, as the server sends them (Phase 13). */
+export function shopTypes(): ShopTypeInfo[] {
+  const label = (en: string, am: string, plural: string, icon: string) => ({
+    en,
+    am,
+    plural,
+    icon,
+  });
+  return [
+    {
+      type: 'clothing',
+      names: { en: 'Clothing & shoes', am: 'አልባሳትና ጫማ' },
+      option1: label('Color', 'ቀለም', 'Colors', '🎨'),
+      option2: label('Size', 'ቁጥር', 'Sizes', '📏'),
+      categories: ['Clothing', 'Shoes', 'Bags', 'Accessories'],
+      condition_and_warranty: false,
+    },
+    {
+      type: 'electronics',
+      names: { en: 'Electronics & phones', am: 'ኤሌክትሮኒክስና ስልክ' },
+      option1: label('Color', 'ቀለም', 'Colors', '🎨'),
+      option2: label('Storage', 'ማከማቻ', 'Storage', '💾'),
+      categories: ['Phones', 'Laptops', 'Tablets', 'Accessories'],
+      condition_and_warranty: true,
+    },
+    {
+      type: 'cosmetics',
+      names: { en: 'Cosmetics & perfume', am: 'መዋቢያና ሽቶ' },
+      option1: label('Shade', 'ቀለም', 'Shades', '🎨'),
+      option2: label('Volume', 'መጠን', 'Volumes', '🧴'),
+      categories: ['Makeup', 'Perfume', 'Skincare', 'Hair'],
+      condition_and_warranty: false,
+    },
+    {
+      type: 'general',
+      names: { en: 'General', am: 'ሌላ' },
+      option1: label('Type', 'አይነት', 'Types', '🏷️'),
+      option2: label('Size', 'መጠን', 'Sizes', '📏'),
+      categories: [],
+      condition_and_warranty: false,
+    },
+  ];
+}
+
+/** A shop's words for /me (the type's, no renames). */
+export function shopWordsOf(type: ShopType) {
+  const info = shopTypes().find((t) => t.type === type)!;
+  return {
+    shop_type: type,
+    option1: info.option1,
+    option2: info.option2,
+    categories: info.categories,
+    condition_and_warranty: info.condition_and_warranty,
+  };
+}
+
+export function me(role: Me['role'] = 'owner', type: ShopType = 'clothing'): Me {
   return {
     user: { id: 42, name: 'Nati', username: 'nati', language_code: 'en' },
     role,
@@ -16,6 +80,7 @@ export function me(role: Me['role'] = 'owner'): Me {
       channel_linked: false,
       staff_discount_percent: '10',
       payment_methods: ['Cash', 'Telebirr'],
+      ...shopWordsOf(type),
     },
   };
 }
@@ -31,6 +96,8 @@ export function jacket(): Product {
     photo_url: null,
     description: 'Classic fit',
     search_keywords: 'jacket, ጃኬት',
+    condition: null,
+    warranty_months: null,
     total_stock: 6,
     variant_count: 2,
     on_sale: true,
@@ -148,6 +215,9 @@ export function settings(): StoreSettings {
     pickup_instructions: null,
     return_policy: null,
     staff_discount_percent: '10',
+    shop_type: 'clothing',
+    option_labels: null,
+    shop_types: shopTypes(),
     payment_instructions: 'Telebirr: 0911 000 000',
     delivery_info: 'Bole: 150 ETB',
     opening_hours: null,

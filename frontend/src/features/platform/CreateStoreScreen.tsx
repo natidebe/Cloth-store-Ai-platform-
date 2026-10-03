@@ -1,12 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { z } from 'zod';
 
 import { useCreateStore } from '@/api/platformQueries';
-import { useErrorText } from '@/app/hooks';
+import type { ShopType } from '@/api/types';
+import { useErrorText, useLanguage } from '@/app/hooks';
+import { ShopTypeChoices } from '@/components/ShopTypeChoices';
 import {
   BottomBar,
   Button,
@@ -20,18 +22,69 @@ import {
 import { haptic } from '@/lib/telegram';
 import { toast } from '@/state/toasts';
 
-import { useBackToPlatform } from './hooks';
+import { useBackToPlatform, usePlatform } from './hooks';
 import s from './platform.module.css';
 
 const TOKEN = /^\d{5,15}:[A-Za-z0-9_-]{30,50}$/;
 
-/** Design: "Create your store". */
+/**
+ * Design: "Create your store". Phase 13: first "What kind of shop do you
+ * have?" (it names the products' options everywhere), then the name and bot.
+ */
 export function CreateStoreScreen() {
+  const { t } = useTranslation();
+  const language = useLanguage();
+  const { shop_types: types } = usePlatform();
+  const [kind, setKind] = useState<ShopType | null>(null);
+  const [kindChosen, setKindChosen] = useState(false);
+  useBackToPlatform();
+
+  if (!kindChosen || !kind) {
+    return (
+      <Page>
+        <PageHeader title={t('platform.createTitle')} subtitle={t('platform.createSubtitle')} />
+        <Card>
+          <h2 className={s.kindTitle}>{t('platform.kindTitle')}</h2>
+          <p className={s.kindHint}>{t('platform.kindHint')}</p>
+          <ShopTypeChoices
+            types={types}
+            value={kind}
+            onChange={setKind}
+            language={language}
+            label={t('platform.kindTitle')}
+          />
+        </Card>
+        <BottomBar>
+          <Button variant="primary" block disabled={!kind} onClick={() => setKindChosen(true)}>
+            {t('platform.kindNext')}
+          </Button>
+        </BottomBar>
+      </Page>
+    );
+  }
+  const chosen = types.find((type) => type.type === kind);
+  return (
+    <StoreForm
+      kind={kind}
+      kindName={chosen ? chosen.names[language] : kind}
+      onChangeKind={() => setKindChosen(false)}
+    />
+  );
+}
+
+function StoreForm({
+  kind,
+  kindName,
+  onChangeKind,
+}: {
+  kind: ShopType;
+  kindName: string;
+  onChangeKind: () => void;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const errorText = useErrorText();
   const create = useCreateStore();
-  useBackToPlatform();
 
   const schema = useMemo(
     () =>
@@ -63,7 +116,7 @@ export function CreateStoreScreen() {
 
   const onSubmit = handleSubmit(({ name, token }) =>
     create.mutate(
-      { name, token },
+      { name, token, shopType: kind },
       {
         onSuccess: () => {
           haptic.success();
@@ -84,6 +137,15 @@ export function CreateStoreScreen() {
       <PageHeader title={t('platform.createTitle')} subtitle={t('platform.createSubtitle')} />
       <form onSubmit={onSubmit} noValidate>
         <Card>
+          <div className={s.kindChosen}>
+            <span>
+              <span className={s.kindChosenLabel}>{t('platform.kindTitle')}</span>
+              <strong>{kindName}</strong>
+            </span>
+            <Button variant="link" onClick={onChangeKind}>
+              {t('platform.kindChange')}
+            </Button>
+          </div>
           <Field label={t('platform.storeName')} error={formState.errors.name?.message}>
             {(id) => (
               <TextInput

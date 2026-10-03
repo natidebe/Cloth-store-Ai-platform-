@@ -1,0 +1,65 @@
+/* "What kind of shop?" (Phase 13): one card per type, in the style of the Mini App's radio rows. */
+
+.choices {
+  display: grid;
+  gap: 10px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--divider);
+  background: var(--card);
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+}
+
+.choiceOn {
+  border: 2px solid var(--primary);
+  padding: 13px 15px;
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  font-size: 22px;
+  flex: none;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name {
+  font-weight: 700;
+}
+
+.words {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.radio {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--field-border);
+  flex: none;
+}
+
+.radioOn {
+  border: 7px solid var(--primary);
+}
