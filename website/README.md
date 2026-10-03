@@ -42,7 +42,9 @@ Render), change `platformBot` in `src/config.ts`.
 1. Cloudflare dashboard → Workers & Pages → Create → Pages → connect the
    GitHub repository.
 2. Production branch **`Website`**; **root directory `website`**; build command
-   `npm ci && npm run build`; output directory `dist`.
+   `npx -y npm@11.11.0 ci && npm run build` (the npm that made the lock file;
+   Node 22's own npm 10 refuses it); output directory `dist`; environment
+   variable `NODE_VERSION` = `22`.
 3. Environment variable `SITE_URL` = the site's address (e.g.
    `https://storefront.et`): adds the language links for Google, the sitemap
    and robots.txt.
