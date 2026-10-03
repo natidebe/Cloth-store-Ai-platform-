@@ -48,6 +48,16 @@ export function HeroShowcase() {
   );
 }
 
+/** "For you, the owner": the real Analytics screen, as a phone turned in 3D. */
+export function OwnerPhone() {
+  const t = useContent().hero.shots;
+  return (
+    <div className={s.ownerStage}>
+      <Phone src={analytics} alt={t.analytics} place={s.owner} />
+    </div>
+  );
+}
+
 /** The staff group's message for an order from that post (decorative). */
 function OrderCard() {
   return (

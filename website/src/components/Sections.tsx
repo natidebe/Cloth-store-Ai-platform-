@@ -26,9 +26,9 @@ import { site, startLink, supportLink } from '@/config';
 import { useContent } from '@/content';
 import ui from '@/styles/ui.module.css';
 
-import { ConnectMock, CreateMock, DashboardMock, PostMock, StockMock } from './Mocks';
+import { ConnectMock, CreateMock, PostMock, StockMock } from './Mocks';
 import s from './sections.module.css';
-import { HeroShowcase } from './Showcase';
+import { HeroShowcase, OwnerPhone } from './Showcase';
 
 function Section({
   id,
@@ -181,7 +181,7 @@ export function Features() {
               <div className={s.groupHead}>
                 <Tile icon={icon} tone={tone} />
                 <h3 className={s.groupTitle}>{group.title}</h3>
-                {index === 2 && <DashboardMock />}
+                {index === 2 && <OwnerPhone />}
               </div>
               <div className={s.groupItems}>
                 {group.items.map((item) => (

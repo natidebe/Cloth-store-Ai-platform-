@@ -207,6 +207,43 @@
   color: var(--red);
 }
 
+/* --- The owner card's phone ---------------------------------------------------------- */
+
+.ownerStage {
+  position: relative;
+  width: 210px;
+  height: 400px;
+  margin-top: 6px;
+  perspective: 1200px;
+}
+
+.ownerStage::before {
+  content: '';
+  position: absolute;
+  inset: 18% -10% 8%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(244, 183, 64, 0.35), transparent);
+  filter: blur(28px);
+}
+
+.owner {
+  left: 8px;
+  top: 0;
+  width: 190px;
+  border-radius: 30px;
+  padding: 7px;
+  transform: rotateY(18deg) rotateX(5deg);
+}
+
+.owner .screen,
+.owner .glare {
+  border-radius: 24px;
+}
+
+.owner .glare {
+  inset: 7px;
+}
+
 /* --- Smaller screens -------------------------------------------------------------------- */
 
 @media (max-width: 860px) {

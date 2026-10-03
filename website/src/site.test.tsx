@@ -28,8 +28,10 @@ describe('the page', () => {
   it('shows the three real screenshots, described for screen readers', () => {
     render(<App lang="am" />);
     for (const alt of Object.values(am.hero.shots)) {
-      expect(screen.getByRole('img', { name: alt })).toHaveAttribute('src');
+      expect(screen.getAllByRole('img', { name: alt })[0]).toHaveAttribute('src');
     }
+    // The owner card shows the Analytics screen too.
+    expect(screen.getAllByRole('img', { name: am.hero.shots.analytics })).toHaveLength(2);
   });
 
   it('is in English at /en/, and the language switch marks the current one', () => {

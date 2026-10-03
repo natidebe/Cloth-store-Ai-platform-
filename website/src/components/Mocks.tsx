@@ -131,30 +131,3 @@ export function PostMock() {
     </div>
   );
 }
-
-/** The owner card: this week's numbers. */
-export function DashboardMock() {
-  return (
-    <div className={s.dashboard} aria-hidden="true">
-      <div className={s.dashTitle}>📊 Dashboard · This week</div>
-      <div className={s.bar}>
-        <span style={{ width: '64%', background: 'var(--blue)' }} />
-        <span style={{ width: '36%', background: 'var(--yellow)' }} />
-      </div>
-      <div className={s.dashSplit}>
-        <span>Telegram 64%</span>
-        <span>🏪 In shop 36%</span>
-      </div>
-      <div className={s.dashLabel}>Discounts by staff</div>
-      <div className={s.dashRow}>
-        <span>Hana</span>
-        <b>320 ብር</b>
-      </div>
-      <div className={s.dashRow}>
-        <span>Dawit</span>
-        <b>150 ብር</b>
-      </div>
-      <div className={s.dashNote}>Demo data</div>
-    </div>
-  );
-}
