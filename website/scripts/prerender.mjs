@@ -1,7 +1,7 @@
 /**
  * After `vite build`: render each language to static HTML.
- *   dist/index.html     Amharic (the default)
- *   dist/en/index.html  English
+ *   dist/index.html     English (the default)
+ *   dist/am/index.html  Amharic
  *   dist/sitemap.xml    when SITE_URL is set (e.g. SITE_URL=https://storefront.et)
  * The pages show fully before any JavaScript loads (slow mobile data, search
  * engines, Telegram link previews); React then takes them over.
@@ -17,12 +17,12 @@ const siteUrl = process.env.SITE_URL ? process.env.SITE_URL.replace(/\/+$/, '') 
 
 const { render, langs } = await import(pathToFileURL(resolve(ssr, 'entry-server.js')).href);
 const template = await readFile(resolve(dist, 'index.html'), 'utf8');
-const paths = { am: '/', en: '/en/' };
+const paths = { en: '/', am: '/am/' };
 
 for (const lang of langs) {
   const { html, head } = render(lang, siteUrl);
   const page = template
-    .replace('<html lang="am">', `<html lang="${lang}">`)
+    .replace('<html lang="en">', `<html lang="${lang}">`)
     .replace('<!--app-head-->', head)
     .replace('<!--app-html-->', html);
   if (!page.includes(html) || !page.includes(`lang="${lang}"`)) {

@@ -1,7 +1,7 @@
 # Promotional website: the content
 
 The text for every section, in English and Amharic, ready to design.
-Amharic is the default language on the site; English is behind a switch.
+English is the default language on the site (at /); Amharic is behind a switch (at /am/).
 
 **Placeholders to replace once decided:**
 

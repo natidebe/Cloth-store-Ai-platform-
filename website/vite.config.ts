@@ -6,7 +6,7 @@ import { defineConfig } from 'vite';
 
 // The website is static: `npm run build` bundles the browser code into dist/,
 // renders every page to HTML on this machine (scripts/prerender.mjs) and writes
-// dist/index.html (Amharic) and dist/en/index.html (English). Any static host
+// dist/index.html (English, the default) and dist/am/index.html (Amharic). Any static host
 // can serve dist/.
 export default defineConfig({
   plugins: [react()],

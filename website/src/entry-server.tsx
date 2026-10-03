@@ -37,7 +37,7 @@ export function render(lang: Lang, siteUrl: string | null) {
     for (const other of langs) {
       head.push(`<link rel="alternate" hreflang="${other}" href="${absolute(other)}" />`);
     }
-    head.push(`<link rel="alternate" hreflang="x-default" href="${absolute('am')}" />`);
+    head.push(`<link rel="alternate" hreflang="x-default" href="${absolute('en')}" />`);
   }
   return { html, head: head.join('\n    ') };
 }

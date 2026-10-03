@@ -6,7 +6,7 @@ server Render deploys).
 The promotional website, built with React from the design in `design/`
 (kept out of git) and the text in `docs/website-content.md`.
 
-- **Amharic** at `/`, **English** at `/en/`.
+- **English** at `/` (the default), **Amharic** at `/am/`.
 - `npm run build` renders both pages to plain HTML (`dist/`), so they show
   instantly on slow mobile data and in Google and Telegram link previews;
   React then takes over the page in the browser.
@@ -16,7 +16,7 @@ The promotional website, built with React from the design in `design/`
 
 ```bash
 npm ci
-npm run dev          # http://localhost:5174 (English: /en/)
+npm run dev          # http://localhost:5174 (Amharic: /am/)
 npm test             # tests
 npm run build        # dist/; then `npm run preview` to look at the result
 ```

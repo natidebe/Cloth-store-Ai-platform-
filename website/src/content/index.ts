@@ -7,14 +7,14 @@ export type { Content, Lang };
 
 export const contents: Record<Lang, Content> = { am, en };
 
-/** Each language is its own page: Amharic at /, English at /en/. */
-export const pathOf: Record<Lang, string> = { am: '/', en: '/en/' };
+/** Each language is its own page: English at / (the default), Amharic at /am/. */
+export const pathOf: Record<Lang, string> = { en: '/', am: '/am/' };
 
 export function langOfPath(pathname: string): Lang {
-  return pathname.startsWith('/en') ? 'en' : 'am';
+  return pathname.startsWith('/am') ? 'am' : 'en';
 }
 
-export const LangContext = createContext<Lang>('am');
+export const LangContext = createContext<Lang>('en');
 
 export function useLang(): Lang {
   return useContext(LangContext);

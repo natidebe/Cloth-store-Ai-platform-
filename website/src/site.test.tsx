@@ -35,7 +35,7 @@ describe('the page', () => {
     expect(screen.getAllByRole('img', { name: am.hero.shots.orders })).toHaveLength(1);
   });
 
-  it('is in English at /en/, and the language switch marks the current one', () => {
+  it('is in English at / (the default), and the language switch marks the current one', () => {
     render(<App lang="en" />);
     expect(screen.getByRole('heading', { level: 1, name: en.hero.title })).toBeInTheDocument();
     const switcher = screen.getByRole('group', { name: en.nav.language });
@@ -43,9 +43,10 @@ describe('the page', () => {
       'aria-current',
       'page',
     );
-    expect(within(switcher).getByRole('link', { name: 'አማርኛ' })).toHaveAttribute('href', '/');
-    expect(langOfPath('/en/')).toBe('en');
-    expect(langOfPath('/')).toBe('am');
+    expect(within(switcher).getByRole('link', { name: 'አማርኛ' })).toHaveAttribute('href', '/am/');
+    expect(within(switcher).getByRole('link', { name: 'English' })).toHaveAttribute('href', '/');
+    expect(langOfPath('/')).toBe('en');
+    expect(langOfPath('/am/')).toBe('am');
   });
 
   it('has the sections the menu points to, and no placeholder left', () => {
@@ -94,8 +95,8 @@ describe('the built page head', () => {
 
   it('links the two languages once the address is known', () => {
     const { head } = renderPage('en', 'https://storefront.et');
-    expect(head).toContain('<link rel="canonical" href="https://storefront.et/en/" />');
-    expect(head).toContain('hreflang="am" href="https://storefront.et/"');
+    expect(head).toContain('<link rel="canonical" href="https://storefront.et/" />');
+    expect(head).toContain('hreflang="am" href="https://storefront.et/am/"');
     expect(head).toContain('hreflang="x-default" href="https://storefront.et/"');
   });
 });
