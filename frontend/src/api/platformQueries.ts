@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { platformApi } from './endpoints';
-import type { Plan, ShopType } from './types';
+import type { PaymentInput, Plan, ShopType } from './types';
 
 export const platformKeys = {
   me: ['platform', 'me'] as const,
@@ -35,6 +35,11 @@ export function useStoreAdmin() {
   return {
     approve: useMutation({ mutationFn: platformApi.approve, onSuccess: refresh }),
     suspend: useMutation({ mutationFn: platformApi.suspend, onSuccess: refresh }),
+    recordPayment: useMutation({
+      mutationFn: ({ storeId, payment }: { storeId: string; payment: PaymentInput }) =>
+        platformApi.recordPayment(storeId, payment),
+      onSuccess: refresh,
+    }),
     setPlan: useMutation({
       mutationFn: ({ storeId, plan }: { storeId: string; plan: Plan }) =>
         platformApi.setPlan(storeId, plan),

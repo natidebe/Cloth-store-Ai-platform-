@@ -55,6 +55,10 @@ export interface Me {
     option2: OptionLabel;
     categories: string[];
     condition_and_warranty: boolean;
+    /** Phase 14: when the trial or paid period ends (null: not approved yet). */
+    plan_ends_at: string | null;
+    /** 'unpaid': paused for not paying; 'admin': suspended by the platform admin. */
+    suspended_reason: 'unpaid' | 'admin' | null;
   };
 }
 
@@ -325,4 +329,22 @@ export interface AdminStore {
   telegram_bot_username: string | null;
   created_at: string | null;
   orders: number;
+  plan_ends_at: string | null;
+  suspended_reason: 'unpaid' | 'admin' | null;
+}
+
+/** A subscription payment the platform admin received (Phase 14, D65). */
+export interface PaymentInput {
+  plan: 'basic' | 'pro';
+  amount: number;
+  method: string | null;
+  reference: string | null;
+}
+
+export interface PaymentResult {
+  payment_id: string;
+  plan: 'basic' | 'pro';
+  period_start: string;
+  period_end: string;
+  resumed: boolean;
 }

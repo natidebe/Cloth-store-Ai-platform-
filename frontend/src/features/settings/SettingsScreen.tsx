@@ -5,6 +5,7 @@ import { useLanguage, useStore } from '@/app/hooks';
 import { StoreTabs } from '@/app/StoreShell';
 import { Icon } from '@/components/Icon';
 import { Card, Notice, Page, PageHeader, Row, Segmented } from '@/components/ui';
+import { planDay, planState } from '@/lib/plan';
 import { usePreferences, type Language } from '@/state/preferences';
 
 /** Design: "Settings" (owner) / "Staff settings locked". */
@@ -25,6 +26,18 @@ export function SettingsScreen() {
           ? t('settings.connectedChannel')
           : t('settings.notConnected');
   const end = isOwner ? <Icon name="chevronRight" /> : <Icon name="lock" size={18} />;
+  // Phase 14: the plan and when it ends.
+  const plan = t(`plans.${store.plan ?? 'free'}`);
+  const ends = store.plan_ends_at;
+  const state = planState(ends, store.suspended_reason);
+  const planText =
+    !ends || state.kind === 'notStarted'
+      ? t('settings.planNotStarted')
+      : state.kind === 'ok' || state.kind === 'soon'
+        ? t('settings.planRow', { plan, count: state.days, date: planDay(ends, language) })
+        : state.kind === 'today'
+          ? t('admin.endsToday', { plan })
+          : t('settings.planEnded', { plan, date: planDay(ends, language) });
   const go = (path: string) => (isOwner ? () => navigate(`${base}/${path}`) : undefined);
 
   return (
@@ -82,6 +95,10 @@ export function SettingsScreen() {
           end={end}
           onClick={go('discount')}
         />
+      </Card>
+
+      <Card flush>
+        <Row icon="clock" title={t('settings.plan')} subtitle={planText} />
       </Card>
 
       <Card label={t('settings.language')}>
