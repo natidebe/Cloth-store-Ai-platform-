@@ -18,6 +18,7 @@ it answers with a button that opens the Mini App.
 import hashlib
 import hmac
 import logging
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -26,6 +27,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app.agents.miniapp import dashboard_url
 from app.agents.shop_types import DEFAULT_TYPE, ShopType, shop_types_json
+from app.agents.subscriptions import PaidPlan, Subscriptions
 from app.agents.onboarding import Onboarding, OnboardingError
 from app.agents.orchestrator import Orchestrator
 from app.api.v1.miniapp import get_onboarding
@@ -173,6 +175,44 @@ async def suspend(store_id: UUID, background: BackgroundTasks, _: MiniAppUser = 
                   db: SupabaseService = Depends(get_db),
                   onboarding: Onboarding = Depends(get_onboarding)) -> dict[str, Any]:
     return await _set_status(store_id, "suspended", db, onboarding, background)
+
+
+class PaymentIn(BaseModel):
+    """A subscription payment the platform admin received (D65)."""
+    plan: PaidPlan
+    amount: Decimal = Field(ge=0, le=10_000_000)
+    method: str | None = Field(default=None, max_length=60)
+    reference: str | None = Field(default=None, max_length=120)
+    months: int = Field(default=3, ge=1, le=24)
+
+
+def get_subscriptions(db: SupabaseService = Depends(get_db),
+                      orchestrator: Orchestrator = Depends(get_orchestrator)) -> Subscriptions:
+    settings = get_settings()
+    return Subscriptions(db, orchestrator.telegram,
+                         platform_token=settings.platform_bot_token.get_secret_value(),
+                         payment_info=settings.platform_payment_info, support=settings.support_username)
+
+
+@router.post("/platform-app/admin/stores/{store_id}/payments", status_code=201)
+async def record_payment(store_id: UUID, body: PaymentIn, user: MiniAppUser = Depends(platform_admin),
+                         db: SupabaseService = Depends(get_db),
+                         subscriptions: Subscriptions = Depends(get_subscriptions)) -> dict[str, Any]:
+    """D65: 3 months more from the current end (or today), an unpaid pause
+    turned back on, and the shop thanked."""
+    store = await db.get_store_any_status(store_id)
+    if store is None:
+        raise HTTPException(status_code=404, detail="store not found")
+    if store.status == "pending":
+        raise HTTPException(status_code=409, detail="Approve the store first.")
+    return await subscriptions.record_payment(store, body.plan, body.amount, body.method, body.reference,
+                                              user.id, body.months)
+
+
+@router.get("/platform-app/admin/stores/{store_id}/payments")
+async def list_payments(store_id: UUID, _: MiniAppUser = Depends(platform_admin),
+                        db: SupabaseService = Depends(get_db)) -> list[dict[str, Any]]:
+    return await db.subscription_payments(store_id)
 
 
 @router.put("/platform-app/admin/stores/{store_id}/plan")

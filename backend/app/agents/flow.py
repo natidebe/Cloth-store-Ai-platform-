@@ -51,6 +51,7 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from app.agents.interpreter import Interpretation, interpret
+from app.agents.subscriptions import ai_limit, plan_of
 from app.agents.messages import format_price, t
 from app.agents.tools import (
     ADDRESS_TO_ARRANGE,
@@ -756,18 +757,20 @@ class _Run:
         says why). If the counter can't be reached, the call is allowed."""
         if self.ai_daily_limit is None:
             return True
+        limit = ai_limit(self.store, self.ai_daily_limit)  # D68: by the store's plan
         try:
             calls = await self.db.use_ai_call(self.store.id)
         except DatabaseError:
             logger.warning("AI budget not checked (database error)")
             return True
-        if calls <= self.ai_daily_limit:
+        if calls <= limit:
             return True
         reason = "the store's daily AI limit is reached"
-        if calls == self.ai_daily_limit + 1:
-            logger.warning("daily AI limit reached", extra={"limit": self.ai_daily_limit})
-            reason += (f" ({self.ai_daily_limit} AI calls today). Until midnight, typed messages the "
-                       "bot can't read come to you; buttons and orders still work")
+        if calls == limit + 1:
+            logger.warning("daily AI limit reached", extra={"limit": limit})
+            reason += (f" ({limit} AI calls today, the {plan_of(self.store).name_en} plan). Until "
+                       "midnight, typed messages the bot can't read come to you; buttons and orders "
+                       "still work")
         await self.handover(reason, text)
         return False
 

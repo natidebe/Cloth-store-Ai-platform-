@@ -86,8 +86,12 @@ class FakeDb:
             update["webhook_secret"] = webhook_secret
         self._update(store_id, **update)
 
-    async def set_store_status(self, store_id, status):
-        self._update(store_id, status=status, is_active=status == "active")
+    async def set_store_status(self, store_id, status, reason=None):
+        self._update(store_id, status=status, is_active=status == "active",
+                     suspended_reason=reason if status == "suspended" else None)
+
+    async def set_plan_end(self, store_id, ends_at):
+        self._update(store_id, plan_ends_at=ends_at)
 
     async def set_store_plan(self, store_id, plan):
         self._update(store_id, plan=plan)

@@ -1133,7 +1133,7 @@ async def test_daily_ai_limit_sends_typed_messages_to_staff():
     await world.say("is there a warranty?")  # call 2: over the limit
     assert world.last_text() == t("handover_reply", "en")
     first = world.telegram.to(STAFF_CHAT)[-1]
-    assert "daily AI limit is reached (1 AI calls today)" in first  # the once-a-day note
+    assert "daily AI limit is reached (1 AI calls today, the Free trial plan)" in first  # once a day
 
     world.conversation.bot_paused = False  # staff answered and handed back
     await world.say("and a box?")  # call 3: still over, no repeated note

@@ -25,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 from app.agents.messages import bot_profile
 from app.agents.miniapp import DASHBOARD_START, MENU_TEXT, dashboard_url
 from app.agents.shop_types import DEFAULT_TYPE
+from app.agents.subscriptions import trial_end
 from app.models.schemas import AuthUser, Store, TelegramUpdate
 from app.services.supabase_service import DuplicateError, SupabaseService
 from app.services.telegram_service import TelegramError, TelegramService
@@ -265,7 +266,10 @@ class Onboarding:
     async def set_status(self, store: Store, status: str) -> None:
         if store.status == status:
             return
-        await self.db.set_store_status(store.id, status)
+        # Phase 14: a suspension by the platform admin is never undone by a payment (D67).
+        await self.db.set_store_status(store.id, status, reason="admin" if status == "suspended" else None)
+        if status == "active" and store.plan_ends_at is None:
+            await self.db.set_plan_end(store.id, trial_end())  # D69: the trial starts now
         logger.info("store status changed", extra={"store_id": str(store.id), "status": status})
         note = {
             "active": f"✅ {store.name} is approved. Customers can now order from the bot.",

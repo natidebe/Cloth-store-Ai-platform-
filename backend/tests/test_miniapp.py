@@ -231,8 +231,12 @@ class FakeDb:
         return [StoreSummary(id=s.id, name=s.name, status=s.status, plan=s.plan or "free")
                 for s in self.stores.values()]
 
-    async def set_store_status(self, store_id, status):
-        self.stores[store_id] = self.stores[store_id].model_copy(update={"status": status})
+    async def set_store_status(self, store_id, status, reason=None):
+        self.stores[store_id] = self.stores[store_id].model_copy(
+            update={"status": status, "suspended_reason": reason if status == "suspended" else None})
+
+    async def set_plan_end(self, store_id, ends_at):
+        self.stores[store_id] = self.stores[store_id].model_copy(update={"plan_ends_at": ends_at})
 
     async def set_store_plan(self, store_id, plan):
         self.stores[store_id] = self.stores[store_id].model_copy(update={"plan": plan})

@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     platform_bot_token: SecretStr = SecretStr("")
     # "Contact support" in the platform app: a Telegram username, e.g. nati_support.
     support_username: str = ""
+    # Phase 14: where shops pay their subscription, shown in reminders,
+    # e.g. "Telebirr 0960570692 (StoreFront.et)". Empty: "contact support".
+    platform_payment_info: str = ""
 
     # Error tracking (Sentry). Empty: off. The DSN is from Sentry → Project
     # Settings → Client Keys; the environment separates the live server's errors.

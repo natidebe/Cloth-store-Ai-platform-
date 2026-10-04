@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 
 from app.agents.catalog import Catalog
 from app.agents.orchestrator import Orchestrator
+from app.agents.subscriptions import Subscriptions
 from app.api.v1 import admin, catalog, health, miniapp, platform, platform_app, stores, webhook
 from app.core.config import get_settings
 from app.core.monitoring import init_sentry
@@ -68,6 +69,11 @@ async def lifespan(app: FastAPI):
             await app.state.orchestrator.recover(startup=True)
         except Exception:
             logger.exception("startup recovery failed; the sweep will try again")
+        # Phase 14: trial and paid periods, reminders, pausing.
+        app.state.orchestrator.subscriptions = Subscriptions(
+            app.state.db, app.state.telegram,
+            platform_token=settings.platform_bot_token.get_secret_value(),
+            payment_info=settings.platform_payment_info, support=settings.support_username)
         recovery_task = asyncio.create_task(app.state.orchestrator.run_recovery_loop())
     yield
     if recovery_task is not None:
