@@ -32,17 +32,40 @@ describe('Orders', () => {
       ),
     );
     const { user } = renderApp(`/s/${STORE_ID}/orders`);
-    expect(await screen.findByText('#AB12CD · Abebe')).toBeInTheDocument();
+    expect(await screen.findByText(/#AB12CD · Abebe/)).toBeInTheDocument();
     expect(screen.getByText('14,500 ETB')).toBeInTheDocument(); // today
-    expect(screen.getByText('#SHOP01 · Walk-in customer')).toBeInTheDocument();
+    expect(screen.getByText(/#SHOP01 · Walk-in customer/)).toBeInTheDocument();
     expect(screen.getByText('Paid')).toBeInTheDocument();
     expect(screen.getByText('New')).toBeInTheDocument();
 
-    await user.click(screen.getByText('#SHOP01 · Walk-in customer'));
+    await user.click(screen.getByText(/#SHOP01 · Walk-in customer/));
     const sheet = await screen.findByRole('dialog');
     expect(within(sheet).getByText('Sold by Sara')).toBeInTheDocument();
     expect(within(sheet).getByText('Paid with Cash')).toBeInTheDocument();
     expect(within(sheet).getByText('−500 ETB')).toBeInTheDocument(); // the discount
+  });
+
+  it('shows what was bought first, then the number and the customer', async () => {
+    server.use(
+      http.get(`${storeApiBase}/orders`, () =>
+        HttpResponse.json({
+          orders: [
+            {
+              ...order(),
+              items: [
+                order().items[0],
+                { ...order().items[0], name: 'Samba', color: 'White', size: '42', quantity: 1 },
+              ],
+            },
+          ],
+          more: false,
+        }),
+      ),
+    );
+    renderApp(`/s/${STORE_ID}/orders`);
+    expect(await screen.findByText('Classic Denim Jacket · Blue · M × 2')).toBeInTheDocument();
+    expect(screen.getByText('+ 1 more')).toBeInTheDocument();
+    expect(screen.getByText(/^#AB12CD · Abebe · Telegram · /)).toBeInTheDocument();
   });
 
   it('filters by channel', async () => {
@@ -54,7 +77,7 @@ describe('Orders', () => {
       }),
     );
     const { user } = renderApp(`/s/${STORE_ID}/orders`);
-    await screen.findByText('#AB12CD · Abebe');
+    await screen.findByText(/#AB12CD · Abebe/);
     await user.click(screen.getByRole('radio', { name: '🏪 In-shop' }));
     await waitFor(() => expect(channels).toEqual(['all', 'in_shop']));
   });
@@ -85,7 +108,7 @@ describe('Orders', () => {
     );
     const { user } = renderApp(`/s/${STORE_ID}/orders`);
     await user.click(await screen.findByRole('button', { name: 'Show more' }));
-    await waitFor(() => expect(screen.getByText('#N2 · Abebe')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/#N2 · Abebe/)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument();
   });
 });

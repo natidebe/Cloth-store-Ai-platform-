@@ -154,7 +154,12 @@ function OrderRow({ order, onOpen }: { order: Order; onOpen: () => void }) {
   const language = useLanguage();
   const shop = order.channel === 'in_shop';
   const who = order.customer.name || (shop ? t('orders.walkIn') : '—');
-  const count = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  // What was bought comes first: the first item, then "+ 2 more".
+  const [first, ...others] = order.items;
+  const what = first
+    ? [first.name ?? '—', variantLabel(first.color, first.size)].filter(Boolean).join(' · ') +
+      (first.quantity > 1 ? ` × ${first.quantity}` : '')
+    : `#${order.number}`;
   const time = new Date(order.created_at).toLocaleTimeString(
     language === 'am' ? 'am-ET' : 'en-GB',
     {
@@ -170,11 +175,13 @@ function OrderRow({ order, onOpen }: { order: Order; onOpen: () => void }) {
       </span>
       <span className={s.rowMain}>
         <span className={s.rowTitle}>
-          #{order.number} · {who}
+          {what}
+          {others.length > 0 && (
+            <span className={s.rowMore}> {t('orders.moreItems', { count: others.length })}</span>
+          )}
         </span>
         <span className={s.rowSub}>
-          {shop ? t('orders.inShop') : t('orders.telegram')} · {t('orders.itemsCount', { count })} ·{' '}
-          {time}
+          #{order.number} · {who} · {shop ? t('orders.inShop') : t('orders.telegram')} · {time}
         </span>
       </span>
       <span className={s.rowEnd}>

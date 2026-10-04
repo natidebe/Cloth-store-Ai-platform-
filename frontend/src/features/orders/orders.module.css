@@ -243,6 +243,9 @@
 .rowTitle {
   font-weight: 600;
   font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rowSub {
@@ -416,4 +419,10 @@
   border: none;
   border-top: 1px solid var(--divider);
   margin: 14px 0 10px;
+}
+
+/* "+ 2 more" after the first item's name in an order row. */
+.rowMore {
+  color: var(--text-muted);
+  font-weight: 500;
 }

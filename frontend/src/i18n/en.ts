@@ -122,6 +122,7 @@ const en = {
     inShop: 'In-shop',
     walkIn: 'Walk-in customer',
     itemsCount: '{{count}} items',
+    moreItems: '+ {{count}} more',
     statusNew: 'New',
     statusDelivered: 'Delivered',
     newCounterSale: 'New counter sale',
