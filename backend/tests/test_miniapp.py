@@ -247,10 +247,18 @@ class FakeTelegram:
         self.calls = []
         self.member_checks = 0
         self.down = False
+        self.documents = []  # (token, raw form) of files sent (Phase 15)
+        self.refuse_documents = False
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         _, bot, method = request.url.path.split("/")
         token = bot.removeprefix("bot")
+        if method == "sendDocument":  # a file upload is a form, not JSON
+            if self.refuse_documents:
+                return httpx.Response(403, json={"ok": False, "description": "Forbidden: bot can't initiate "
+                                                                             "conversation with a user"})
+            self.documents.append((token, request.content))
+            return httpx.Response(200, json={"ok": True, "result": {"message_id": 901}})
         body = json.loads(request.content or b"{}")
         self.calls.append((token, method, body))
         if method == "getChatMember":

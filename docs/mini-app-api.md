@@ -51,7 +51,7 @@ The backend serves the built app (`frontend/dist`) for every path under
   "user": {"id": 123, "name": "Nati Man", "username": "nati", "language_code": "am"},
   "role": "owner",
   "store": {"id": "…", "name": "nati fashion", "status": "active", "plan": "free",
-            "plan_ends_at": "2026-10-11T09:05:29+00:00", "suspended_reason": null,
+            "plan_ends_at": "2026-10-11T09:05:29+00:00", "suspended_reason": null, "daily_summary": "am",
             "bot_username": "Abdisafashionbot", "staff_group_linked": true, "channel_linked": true}
 }
 ```
@@ -178,6 +178,21 @@ for more, pass the last order's `created_at` as `before`.
 Counter sales come in the same list with `"channel": "in_shop"`, `sold_by`,
 `payment_method`, and each item's `list_price` next to the `price` paid.
 
+`status` (Phase 15) also moves on after payment when staff tap the buttons in
+the staff group: `confirmed` (paid) → `out_for_delivery` → `delivered`
+(pickup orders go straight from `confirmed` to `delivered`, "picked up").
+
+### `POST /orders/export` (owners, Phase 15, D72/D73)
+`{"month": "2026-09"}` (Addis Ababa months, by the day the order was placed;
+not a month that hasn't started). The shop's bot sends an Excel file to the
+owner's private chat (files opened inside the Mini App often don't download):
+sheets Summary, Sales (one row per item of every paid order) and Orders.
+```json
+{"sent": true, "file": "Selam-Shoes-2026-09.xlsx", "orders": 42, "revenue": 185000}
+```
+409 if the bot can't write to the owner yet (they never pressed Start in it):
+show `detail`, which names the bot. 422 for a bad or future month.
+
 ### `POST /products` (everyone; staff: no prices)
 ```json
 {
@@ -253,6 +268,11 @@ and `"option_labels": {"option1": {"en": "…", "am": "…"}, "option2": {…}}`
 (up to 20 characters each; empty = the type's word; `null` = no renames).
 Only the words change; products and stock stay. The bot's description in
 Telegram is rewritten, and channel posts follow within a minute.
+
+**Morning summary (Phase 15, D70).** GET returns `daily_summary`: `"am"`
+(the default), `"en"` or `"off"`; PUT accepts the same. Every morning from
+08:00 the creator of the shop gets yesterday's orders, money received, unpaid
+orders, best seller and low stock in a private message from the shop's bot.
 
 ### `GET /connections` (owners)
 `{"staff_group": {"id": -500, "title": "nati fashion staff", "bot_can_see": true}, "channel": null}`.

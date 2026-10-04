@@ -237,6 +237,23 @@ TEXTS: dict[str, dict[Language, str]] = {
         "en": "✅ Payment confirmed for order #{number}. Thank you! We're preparing your order.",
         "am": "✅ ለትዕዛዝ #{number} ክፍያዎ ተረጋግጧል። እናመሰግናለን! ትዕዛዝዎን እያዘጋጀን ነው።",
     },
+    # Sent when staff tap the order's next step in the staff group (Phase 15, D74/D75).
+    "order_on_the_way": {
+        "en": "🚚 Your order #{number} is on the way!",
+        "am": "🚚 ትዕዛዝ #{number} በመንገድ ላይ ነው!",
+    },
+    "order_delivered": {
+        "en": "✅ Your order #{number} was delivered. Thank you for shopping with {shop}!",
+        "am": "✅ ትዕዛዝ #{number} ደርሷል። ከ{shop} ስለገዙ እናመሰግናለን!",
+    },
+    "order_ready": {
+        "en": "📦 Your order #{number} is ready. You can pick it up now.",
+        "am": "📦 ትዕዛዝ #{number} ተዘጋጅቷል። አሁን መውሰድ ይችላሉ።",
+    },
+    "order_picked_up": {
+        "en": "✅ Thank you for picking up order #{number}! We hope to see you again at {shop}.",
+        "am": "✅ ትዕዛዝ #{number}ን ስለወሰዱ እናመሰግናለን! በድጋሚ በ{shop} እንጠብቅዎታለን።",
+    },
 
     # --- Fixed replies ------------------------------------------------------
     # Deliberately says nothing about the payment: only staff confirm it.

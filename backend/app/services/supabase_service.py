@@ -316,6 +316,44 @@ class SupabaseService:
             request = request.lt("created_at", before.isoformat())
         return await self._run(request)
 
+    async def orders_for_export(self, store_id: UUID, start: datetime, end: datetime,
+                                page_size: int = 500) -> list[dict[str, Any]]:
+        """Every order placed in [start, end), oldest first, with items and
+        payments (Phase 15: the accountant's file). Read in pages, because
+        Supabase returns at most 1,000 rows per request."""
+        rows: list[dict[str, Any]] = []
+        while True:
+            page = await self._run(
+                self._db.table("orders")
+                .select("id, status, payment_status, total_price, currency, fulfillment_method, "
+                        "contact_name, contact_phone, created_at, channel, payment_method, sold_by_name, "
+                        "payments(amount, method, paid_at, confirmed_by_name), "
+                        "order_items(quantity, price, list_price, product_variants(color, size, products(name, code)))")
+                .eq("store_id", str(store_id))
+                .gte("created_at", start.isoformat()).lt("created_at", end.isoformat())
+                .order("created_at").order("id")
+                .range(len(rows), len(rows) + page_size - 1)
+            )
+            rows.extend(page)
+            if len(page) < page_size:
+                return rows
+
+    async def set_order_status(self, store_id: UUID, order_id: UUID, status: str, from_statuses: list[str],
+                               changed_by_telegram_id: int | None = None,
+                               changed_by_name: str | None = None) -> bool:
+        """Move a paid order on (Phase 15, D74), only from one of `from_statuses`
+        (a stage never goes back; a second tap changes nothing). One statement,
+        so two staff tapping at once can't both win. False if nothing changed."""
+        rows = await self._run(
+            self._db.table("orders")
+            .update({"status": status, "status_changed_at": _now().isoformat(),
+                     "status_changed_by_telegram_id": changed_by_telegram_id,
+                     "status_changed_by_name": (changed_by_name or "")[:200] or None})
+            .eq("store_id", str(store_id)).eq("id", str(order_id)).eq("payment_status", "paid")
+            .in_("status", from_statuses)
+        )
+        return bool(rows)
+
     # Counter sales (Phase 12, migration 012)
 
     async def record_counter_sale(
@@ -468,7 +506,7 @@ class SupabaseService:
         the Mini App edits (migration 011). Nothing else on the store."""
         changes = {k: v for k, v in fields.items()
                    if k in PROFILE_FIELDS or k in PROFILE_LISTS
-                   or k in ("staff_discount_percent", "shop_type", "option_labels")}
+                   or k in ("staff_discount_percent", "shop_type", "option_labels", "daily_summary")}
         changes = _json_safe(changes)
         if not changes:
             return
@@ -673,6 +711,24 @@ class SupabaseService:
     async def platform_admin_ids(self) -> list[int]:
         rows = await self._run(self._db.table("platform_admin_telegram").select("telegram_id"))
         return [int(row["telegram_id"]) for row in rows]
+
+    # --- The morning summary (Phase 15, migration 015) -------------------------------
+
+    async def stores_for_summary(self) -> list[Store]:
+        """Active stores whose owner wants the morning summary."""
+        rows = await self._run(
+            self._db.table("stores").select("*").eq("status", "active")
+            .neq("daily_summary", "off").not_.is_("owner_telegram_id", "null")
+        )
+        return [Store.model_validate(row) for row in rows]
+
+    async def add_daily_summary(self, store_id: UUID, day: str) -> bool:
+        """Remember a summary (`day`: YYYY-MM-DD, Addis); False if already sent."""
+        try:
+            await self._run(self._db.table("daily_summaries").insert({"store_id": str(store_id), "day": day}))
+        except DuplicateError:
+            return False
+        return True
 
     async def set_store_plan(self, store_id: UUID, plan: str) -> None:
         rows = await self._run(self._db.table("stores").update({"plan": plan}).eq("id", str(store_id)))

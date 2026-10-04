@@ -7,6 +7,10 @@ What staff see in their Telegram group, and what they can do there:
     [✅ Confirm payment #…]  reduce stock, mark the order paid, tell the
                              customer, and hand the chat back to the bot
     [▶️ Hand back to bot]    the bot starts answering this customer again
+- Once paid, the order's next steps (Phase 15, D74/D75), each telling the customer:
+    delivery:  [🚚 On the way]  [✅ Delivered]
+    pickup:    [📦 Ready for pickup]  [✅ Picked up]
+  A stage never goes back, and a second tap changes nothing.
 - While the bot is paused for a customer, everything the customer writes is
   posted in the group.
 - To answer a customer, a staff member uses Telegram's "Reply" on any of
@@ -54,6 +58,10 @@ BOT_RESUMES_AFTER = timedelta(hours=2)
 # What the buttons send back to us (Telegram allows up to 64 characters).
 PAY_BUTTON = "pay:"  # + order id
 HAND_BACK_BUTTON = "resume:"  # + customer's Telegram id
+# Phase 15 (D74/D75): a paid order's next steps, + order id.
+SHIP_BUTTON = "ship:"  # delivery: on the way
+READY_BUTTON = "ready:"  # pickup: ready (a message only; the stage stays "confirmed")
+DONE_BUTTON = "done:"  # delivered / picked up
 
 _MAX_SAVE_TRIES = 3
 
@@ -62,6 +70,22 @@ _MAX_SAVE_TRIES = 3
 class PaymentResult:
     ok: bool
     message: str  # for the staff member (button notice or API response)
+    fulfillment: str | None = None  # the order's: "delivery" or "pickup"
+    customer_telegram_id: int | None = None
+
+
+def next_steps(order_id: UUID, fulfillment: str | None, done: str | None = None) -> list[tuple[str, str]]:
+    """The buttons for a paid order's next steps; `done`: the step just taken."""
+    number = order_number(order_id)
+    if fulfillment == "pickup":
+        steps = [(f"📦 Ready for pickup #{number}", f"{READY_BUTTON}{order_id}"),
+                 (f"✅ Picked up #{number}", f"{DONE_BUTTON}{order_id}")]
+    else:
+        steps = [(f"🚚 On the way #{number}", f"{SHIP_BUTTON}{order_id}"),
+                 (f"✅ Delivered #{number}", f"{DONE_BUTTON}{order_id}")]
+    if done in ("ship", "ready"):
+        return steps[1:]
+    return [] if done == "done" else steps
 
 
 class StaffDesk:
@@ -220,12 +244,27 @@ class StaffDesk:
             # A refusal (e.g. sold out) shows as a box the staff member must close.
             await self.telegram.answer_button(token, press.id, result.message, popup=not result.ok)
             if result.ok:
-                await self._note(store, f"{result.message} Confirmed by {staff_name}.",
-                                 reply_to=message.message_id)
+                await self._next_steps_note(store, order_id, result,
+                                            f"{result.message} Confirmed by {staff_name}.",
+                                            reply_to=message.message_id)
                 try:
                     await self.telegram.remove_buttons(token, message.chat.id, message.message_id)
                 except TelegramError:
                     pass  # the buttons stay; pressing again says "already paid"
+
+        elif press.data.startswith((SHIP_BUTTON, READY_BUTTON, DONE_BUTTON)):
+            step, _, raw_id = press.data.partition(":")
+            order_id = UUID(raw_id)
+            result = await self.advance_order(store, order_id, step, staff_telegram_id=press.from_user.id,
+                                              staff_name=staff_name)
+            await self.telegram.answer_button(token, press.id, result.message, popup=not result.ok)
+            if result.ok:
+                await self._note(store, f"{result.message} ({staff_name})", reply_to=message.message_id)
+                try:
+                    await self.telegram.set_buttons(token, message.chat.id, message.message_id,
+                                                    next_steps(order_id, result.fulfillment, done=step))
+                except TelegramError:
+                    pass  # the old buttons stay; pressing again changes nothing
         else:
             await self.telegram.answer_button(token, press.id, "Unknown button.")
 
@@ -275,27 +314,105 @@ class StaffDesk:
                 logger.warning("could not record who confirmed the payment", exc_info=True)
 
         customer = await self.db.get_customer(store.id, order.customer_id) if order.customer_id else None
+        customer_telegram_id = customer.telegram_id if customer is not None else None
+        if customer_telegram_id is not None:
+            with log_context(telegram_id=customer_telegram_id):
+                await self._tell_customer(store, customer_telegram_id,
+                                          lambda language: t("payment_confirmed", language, number=number))
+                await self.hand_back(store, customer_telegram_id)
+        logger.info("payment confirmed by staff", extra={"order_id": str(order_id)})
+        return PaymentResult(True, f"✅ Payment for order #{number} confirmed. The customer has been told.",
+                             order.fulfillment_method, customer_telegram_id)
+
+    async def _next_steps_note(self, store: Store, order_id: UUID, paid: PaymentResult, text: str,
+                               reply_to: int | None = None) -> None:
+        """After a payment: a note in the staff group with the order's next
+        steps (Phase 15), remembered so staff can Reply to it too."""
+        try:
+            message_id = await self.telegram.send_message(
+                store.telegram_bot_token.get_secret_value(), store.staff_chat_id, text,
+                buttons=next_steps(order_id, paid.fulfillment), reply_to=reply_to)
+        except TelegramError as error:
+            logger.error("staff note not delivered", extra={"error": error.description})
+            return
+        if message_id and paid.customer_telegram_id is not None:
+            await self.conversations.save_staff_message(StaffMessage(
+                store_id=store.id, staff_chat_id=store.staff_chat_id, message_id=message_id,
+                telegram_id=paid.customer_telegram_id, order_id=order_id,
+            ))
+
+    async def advance_order(self, store: Store, order_id: UUID, step: str, *,
+                            staff_telegram_id: int | None = None, staff_name: str | None = None) -> PaymentResult:
+        """A paid order's next step (D74/D75): "ship" (delivery: on the way),
+        "ready" (pickup: ready, a message only) or "done" (delivered / picked
+        up), and the customer is told. A stage never goes back: a step already
+        taken is refused, and nothing is sent."""
+        order = await self.db.get_order(store.id, order_id)
+        if order is None:
+            return PaymentResult(False, "Order not found.")
+        number = order_number(order.id)
+        pickup = order.fulfillment_method == "pickup"
+        finished = f"Order #{number} was already {'picked up' if pickup else 'delivered'}."
+        if order.status == "cancelled":
+            return PaymentResult(False, f"Order #{number} was cancelled.")
+        if order.payment_status != "paid":
+            return PaymentResult(False, f"Order #{number} isn't paid yet. Confirm the payment first.")
+        if order.status == "delivered":
+            return PaymentResult(False, finished)
+        if (step == "ship" and pickup) or (step == "ready" and not pickup):
+            return PaymentResult(False, "This button doesn't fit this order.")
+
+        if step == "ship":
+            if not await self.db.set_order_status(store.id, order_id, "out_for_delivery", ["confirmed"],
+                                                  staff_telegram_id, staff_name):
+                return PaymentResult(False, f"Order #{number} is already on the way.")
+            done, key = f"🚚 Order #{number} is on the way.", "order_on_the_way"
+        elif step == "ready":
+            done, key = f"📦 Order #{number} is ready for pickup.", "order_ready"
+        elif step == "done":
+            if not await self.db.set_order_status(store.id, order_id, "delivered", ["confirmed", "out_for_delivery"],
+                                                  staff_telegram_id, staff_name):
+                return PaymentResult(False, finished)
+            done = f"✅ Order #{number} was {'picked up' if pickup else 'delivered'}."
+            key = "order_picked_up" if pickup else "order_delivered"
+        else:
+            return PaymentResult(False, "Unknown button.")
+
+        def text(language) -> str:
+            lines = [t(key, language, number=number, shop=store.name)]
+            if key == "order_ready":  # where and when, from the store's profile
+                if store.location:
+                    lines.append(t("pickup_where", language, location=store.location))
+                if store.opening_hours:
+                    lines.append(t("pickup_hours", language, hours=store.opening_hours))
+            return "\n".join(lines)
+
+        customer = await self.db.get_customer(store.id, order.customer_id) if order.customer_id else None
+        told = False
         if customer is not None and customer.telegram_id is not None:
             with log_context(telegram_id=customer.telegram_id):
-                await self._tell_customer_paid(store, customer.telegram_id, number)
-                await self.hand_back(store, customer.telegram_id)
-        logger.info("payment confirmed by staff", extra={"order_id": str(order_id)})
-        return PaymentResult(True, f"✅ Payment for order #{number} confirmed. The customer has been told.")
+                told = await self._tell_customer(store, customer.telegram_id, text)
+        logger.info("order moved on by staff", extra={"order_id": str(order_id), "step": step})
+        after = "The customer has been told." if told else "⚠️ The customer couldn't be told."
+        return PaymentResult(True, f"{done} {after}", order.fulfillment_method)
 
-    async def _tell_customer_paid(self, store: Store, telegram_id: int, number: str) -> None:
+    async def _tell_customer(self, store: Store, telegram_id: int, build) -> bool:
+        """Send the customer `build(language)` and keep it in the chat history.
+        False if it wasn't delivered (e.g. the customer blocked the bot)."""
         conversation = await self.conversations.get_or_create_conversation(store.id, telegram_id)
         history = await self.conversations.get_recent_messages(store.id, conversation.id, HISTORY_LIMIT)
         # The language the customer chose (D29), otherwise a guess from the chat.
         language = conversation.order_draft.language or detect_language(
             m.content for m in reversed(history) if m.role == "customer" and m.kind != "other")
-        text = t("payment_confirmed", language, number=number)
+        text = build(language)
         try:
             await self.telegram.send_message(store.telegram_bot_token.get_secret_value(), telegram_id, text)
         except TelegramError as error:
-            logger.warning("payment confirmation not delivered", extra={"error": error.description})
-            return
+            logger.warning("customer message not delivered", extra={"error": error.description})
+            return False
         await self.conversations.add_messages(store.id, conversation.id,
                                               [ChatMessage(role="assistant", content=text)])
+        return True
 
     async def hand_back(self, store: Store, telegram_id: int, *, idle_before=None) -> bool:
         """The bot answers this customer again. False if it already was.

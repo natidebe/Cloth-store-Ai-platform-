@@ -23,6 +23,7 @@ created the store). Members are "staff", the group's admins "owners":
                POST /api/v1/app/stores/{store}/products/{product}/publish to the channel
                GET/PUT /api/v1/app/stores/{store}/settings                payment accounts, delivery, ...
                GET  /api/v1/app/stores/{store}/connections                the linked group and channel
+               POST /api/v1/app/stores/{store}/orders/export   {"month": "2026-09"}  Excel file sent by the bot
                POST /api/v1/app/stores/{store}/link-code                  /link code for the group/channel
                PUT  /api/v1/app/stores/{store}/bot-token                  change the bot (D17)
 """
@@ -39,6 +40,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.agents.analytics import Period, store_analytics
 from app.agents.catalog import Catalog
 from app.agents.counter import CounterSaleError, CounterSales, SaleLine, SaleRequest
+from app.agents.export import XLSX, ExportError, build_export, month_bounds
 from app.agents.inventory import GridRow, Inventory, InventoryError, summarize
 from app.agents.messages import bot_profile
 from app.agents.miniapp import AppAccess
@@ -205,6 +207,8 @@ class SettingsIn(BaseModel):
     # words for the two options ({"option2": {"en": "Model", "am": "ሞዴል"}}; null = the type's).
     shop_type: ShopType | None = None
     option_labels: dict[str, dict[str, str]] | None = None
+    # Phase 15 (D70): the owner's morning summary, in Amharic or English, or off.
+    daily_summary: Literal["am", "en", "off"] | None = None
 
 
 class BotTokenIn(BaseModel):
@@ -231,7 +235,9 @@ async def me(access: AppAccess = Depends(app_access)) -> dict[str, Any]:
                   **shop_json(store),
                   # Phase 14: the plan and when it ends (None: not approved yet).
                   "plan_ends_at": store.plan_ends_at,
-                  "suspended_reason": store.suspended_reason},
+                  "suspended_reason": store.suspended_reason,
+                  # Phase 15: the owner's morning summary ('am', 'en' or 'off').
+                  "daily_summary": store.daily_summary},
     }
 
 
@@ -457,6 +463,37 @@ async def list_orders(
     return {"orders": orders, "more": len(orders) == limit}
 
 
+class ExportIn(BaseModel):
+    month: str = Field(pattern=r"^\d{4}-\d{2}$")  # "2026-09"
+
+
+@router.post("/orders/export")
+async def export_orders(body: ExportIn, access: AppAccess = Depends(owner_access),
+                        db: SupabaseService = Depends(get_db),
+                        orchestrator: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
+    """Owners (D73): a month's sales and orders as an Excel file (Phase 15,
+    D72), sent by the shop's bot to the owner's private chat: files opened
+    inside the Mini App often don't download. 409 if the bot can't write to
+    them (they never pressed Start in it)."""
+    store = access.store
+    try:
+        start, end = month_bounds(body.month)
+    except ExportError as error:
+        raise HTTPException(status_code=422, detail=error.message)
+    export = build_export(store, await db.orders_for_export(store.id, start, end), start)
+    try:
+        await orchestrator.telegram.send_document(
+            store.telegram_bot_token.get_secret_value(), access.user.id, export.filename, export.data,
+            caption=f"📊 {store.name}: sales and orders, {start:%B %Y}", content_type=XLSX)
+    except TelegramError as error:
+        logger.info("export not delivered", extra={"error": error.description})
+        bot = f"@{store.telegram_bot_username}" if store.telegram_bot_username else "the shop's bot"
+        raise HTTPException(status_code=409, detail=f"The bot can't send you the file yet. Open {bot}, "
+                                                    "press Start, then try again.")
+    logger.info("export sent", extra={"orders": export.orders, "month": body.month})
+    return {"sent": True, "file": export.filename, "orders": export.orders, "revenue": export.revenue}
+
+
 # --- Counter sales (Phase 12, D53–D57) ----------------------------------------------------
 
 class CounterLineIn(BaseModel):
@@ -532,6 +569,7 @@ def _settings(store: Store) -> dict[str, Any]:
         # Phase 13: the type, the owner's renames, and every type's own words.
         "shop_type": shop_type_of(store), "option_labels": store.option_labels,
         "shop_types": shop_types_json(),
+        "daily_summary": store.daily_summary,  # Phase 15
     }
 
 
@@ -553,6 +591,8 @@ async def save_store_settings(body: SettingsIn, access: AppAccess = Depends(owne
     for name in ("location", "pickup_instructions", "return_policy"):
         if name in sent:
             changes[name] = (getattr(body, name) or "").strip() or None
+    if "daily_summary" in sent and body.daily_summary is not None:
+        changes["daily_summary"] = body.daily_summary
     if "staff_discount_percent" in sent and body.staff_discount_percent is not None:
         changes["staff_discount_percent"] = body.staff_discount_percent
     if "payment_accounts" in sent:
