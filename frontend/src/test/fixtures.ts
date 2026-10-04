@@ -81,6 +81,8 @@ export function me(role: Me['role'] = 'owner', type: ShopType = 'clothing'): Me 
       staff_discount_percent: '10',
       payment_methods: ['Cash', 'Telebirr'],
       ...shopWordsOf(type),
+      plan_ends_at: null,
+      suspended_reason: null,
     },
   };
 }

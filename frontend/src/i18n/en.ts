@@ -161,6 +161,11 @@ const en = {
     noDiscounts: 'No discounts in this period.',
   },
   settings: {
+    plan: 'Plan',
+    planNotStarted: 'The free trial starts when the shop is approved',
+    planRow_one: '{{plan}} · until {{date}} (1 day left)',
+    planRow_other: '{{plan}} · until {{date}} ({{count}} days left)',
+    planEnded: '{{plan}} · ended {{date}}',
     shopType: 'Shop type & words',
     title: 'Settings',
     ownerOnly: 'Only the store owner can change settings.',
@@ -273,6 +278,24 @@ const en = {
     suspendedBody: 'This store is suspended. Contact support.',
   },
   admin: {
+    filterEnding: 'Ending soon',
+    recordPayment: 'Record payment',
+    paymentTitle: 'Record a payment',
+    paymentPlan: 'Plan (3 months)',
+    amount: 'Amount (ETB)',
+    paidWith: 'Paid with',
+    other: 'Other',
+    otherMethod: 'How was it paid?',
+    reference: 'Reference (optional)',
+    referenceHint: 'The transaction number, to find it later.',
+    newEnd: 'Paid until {{date}}',
+    paymentSaved: 'Saved: {{plan}} until {{date}}',
+    notStarted: 'Trial starts when approved',
+    endsIn_one: '{{plan}} · until {{date}} · 1 day left',
+    endsIn_other: '{{plan}} · until {{date}} · {{count}} days left',
+    endsToday: '{{plan}} · ends today',
+    inGrace: '{{plan}} · ended {{date}} · pauses {{pause}}',
+    pausedUnpaid: '{{plan}} · paused: didn’t pay',
     title: 'Stores',
     all: 'All',
     approve: 'Approve',
@@ -365,7 +388,18 @@ const en = {
     saved: 'Saved. The bot and the posts use the new words within a minute.',
   },
   status: { pending: 'Pending', active: 'Active', suspended: 'Suspended' },
-  plans: { free: 'Free', basic: 'Basic', pro: 'Pro' },
+  planBanner: {
+    endsIn_one:
+      'Your {{plan}} plan ends tomorrow ({{date}}). Pay for the next 3 months to keep the bot taking orders.',
+    endsIn_other:
+      'Your {{plan}} plan ends in {{count}} days ({{date}}). Pay for the next 3 months to keep the bot taking orders.',
+    endsToday: 'Your {{plan}} plan ends today. The bot keeps working for 3 more days.',
+    grace: 'Your plan has ended. The bot pauses on {{date}} unless you pay.',
+    paused:
+      'Paused: the plan wasn’t renewed. Customers can’t order until you pay; your products and orders are kept.',
+    howToPay: 'The bot sent the payment details to your staff group.',
+  },
+  plans: { free: 'Free trial', basic: 'Basic', pro: 'Pro' },
 };
 
 export default en;

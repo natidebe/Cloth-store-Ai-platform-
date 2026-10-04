@@ -15,6 +15,8 @@ import type {
   OrderPage,
   Period,
   Plan,
+  PaymentInput,
+  PaymentResult,
   PlatformMe,
   ShopType,
   Product,
@@ -111,6 +113,11 @@ export const platformApi = {
     }),
 
   adminStores: () => api<AdminStore[]>('/platform-app/admin/stores'),
+  recordPayment: (storeId: string, payment: PaymentInput) =>
+    api<PaymentResult>(`/platform-app/admin/stores/${storeId}/payments`, {
+      method: 'POST',
+      body: payment,
+    }),
 
   approve: (storeId: string) =>
     api<{ status: string }>(`/platform-app/admin/stores/${storeId}/approve`, { method: 'POST' }),
