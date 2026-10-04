@@ -1198,6 +1198,69 @@ nothing changes.
 
 ---
 
+### Phase 14 — Subscriptions: trial, paid periods, reminders, AI limits per plan 🟡 Planned: migration 014 next
+
+**Goal:** the platform knows when each shop's free trial or paid period ends,
+reminds the right people in time, pauses a shop that didn't pay, and gives
+Basic and Pro different AI limits.
+
+**Plans and prices (D64, D65)** — as on the website:
+
+| Plan | Price | Lasts | AI replies a day (D68) |
+|---|---|---|---|
+| Free trial (`free`) | 0 | 1 week from approval (D69) | 100 |
+| Basic | 4,500 ETB | 3 months | 100 |
+| Pro | 9,000 ETB | 3 months | 300 |
+
+Over the AI limit nothing breaks: typed messages the bot can't read go to
+staff (Phase 10, D21); buttons and orders always work.
+
+**Every shop has an end date** (`stores.plan_ends_at`). New shops: approval
+starts a 1-week trial. Shops that were already active when migration 014 is
+run get a 1-week trial from that day (time to record their payments).
+
+**Recording a payment (D65)** — the platform admin, in the platform bot's
+Mini App: Record payment → Basic or Pro, amount (4,500 / 9,000 filled in),
+how it was paid (Telebirr, CBE…) and the reference. It adds 3 months from the
+current end date (or from today if it has ended), so paying early loses
+nothing. Every payment is kept (`subscription_payments`). A shop paused for
+not paying is turned back on at once.
+
+**Reminders (D66)** — a daily check (morning, Addis time):
+
+| When | The shop (staff group + the owner's private chat, Amharic and English) | You (platform admins, in the platform bot) |
+|---|---|---|
+| 7, 3, 1 days before the end (trial: 3 and 1) | "Your Basic plan ends in 3 days (Oct 12). To continue: …" | listed in one daily message |
+| The day it ends | "Ends today. 3 days of grace, then the bot pauses." | listed |
+| Grace days 1–2 | "The bot pauses in N days" | listed |
+| Grace day 3 | the shop is paused (D67): "Paused. Pay to turn it back on." | "Selam Shoes paused (didn't pay)" |
+
+Each reminder is sent once (remembered in `subscription_notices`).
+
+**Pausing (D67):** after the 3-day grace the shop is `suspended` with the
+reason `unpaid`: the bot tells customers it isn't taking orders, data stays.
+Recording a payment turns it back on. A shop the admin suspended by hand is
+never turned back on automatically.
+
+**Screens (designed like the others):**
+- **Platform admin:** each shop's plan, end date and days left, the ones
+  ending soonest first; Record payment.
+- **The shop (owners):** Settings shows the plan and "until Oct 12 (23 days
+  left)"; in the last week and the grace days a banner on every screen.
+
+**How:** migration `014_subscriptions.sql` (end date, pause reason, payments,
+notices, a database function that records a payment and extends the period
+in one step); `app/agents/subscriptions.py` (plans, prices, limits, the daily
+check, the messages); the AI limit read per shop's plan.
+
+**Check:** approve a new shop → trial ends in 7 days; move its end date to
+tomorrow (SQL) → the reminder arrives in the staff group, the owner's chat
+and the platform bot; move it 3 days into the past → the shop is paused;
+record a Basic payment → active again, ends in 3 months; a Pro shop gets 300
+AI replies a day, Basic 100.
+
+---
+
 ## 6. Decisions
 
 Answer each before the phase listed, and record the answer here.
@@ -1267,6 +1330,12 @@ Answer each before the phase listed, and record the answer here.
 | D61 | Can the shop type change after creation? | Phase 13 | Yes, in Settings: only the words change, products and stock stay |
 | D62 | Condition and Warranty per product or per variant? | Phase 13 | Per product: new and used are separate products; the grid stays two-dimensional |
 | D63 | Who designs the new Mini App screens? | Phase 13 | Claude, in the style of the existing screens |
+| D64 | How long is the free trial? | Phase 14 | 1 week (plan `free`). Shops already active when migration 014 runs get a 1-week trial from that day |
+| D65 | Paid plans and how payments are recorded? | Phase 14 | Basic 4,500 ETB and Pro 9,000 ETB per 3 months; the platform admin records each payment (plan, amount, method, reference); it adds 3 months to the current end date, or from today if it ended |
+| D66 | When and to whom do reminders go? | Phase 14 | 7, 3, 1 days before (trial: 3, 1), the day it ends, and each grace day; to the shop's staff group and owner (Amharic and English) and to the platform admins (one daily list in the platform bot) |
+| D67 | What happens when a shop doesn't pay? | Phase 14 | 3 days of grace, then paused automatically (reason "unpaid"); a payment turns it back on; admin suspensions are never undone automatically |
+| D68 | AI replies a day per plan? | Phase 14 | Trial 100, Basic 100, Pro 300; over it, typed messages go to staff |
+| D69 | When does the trial start? | Phase 14 | When the platform admin approves the shop |
 
 ---
 
