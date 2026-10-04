@@ -133,7 +133,8 @@ function DiscountForm({ saved }: { saved: number }) {
   );
 }
 
-function Choice({
+/** One option of a radio list (also the Morning summary screen). */
+export function Choice({
   on,
   title,
   hint,

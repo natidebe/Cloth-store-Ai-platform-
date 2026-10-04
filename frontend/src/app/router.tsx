@@ -32,6 +32,10 @@ const counterDone = () =>
   import('@/features/counter/CounterScreens').then((m) => ({ default: m.CounterDoneScreen }));
 const shopType = () =>
   import('@/features/settings/ShopTypeScreen').then((m) => ({ default: m.ShopTypeScreen }));
+const dailySummary = () =>
+  import('@/features/settings/DailySummaryScreen').then((m) => ({
+    default: m.DailySummaryScreen,
+  }));
 const staffDiscount = () =>
   import('@/features/settings/StaffDiscountScreen').then((m) => ({
     default: m.StaffDiscountScreen,
@@ -77,6 +81,7 @@ export const routes: RouteObject[] = [
           { path: 'settings/connect', ...screen(connect) },
           { path: 'settings/bot', ...screen(changeBot) },
           { path: 'settings/discount', ...screen(staffDiscount) },
+          { path: 'settings/summary', ...screen(dailySummary) },
           { path: 'settings/type', ...screen(shopType) },
         ],
       },

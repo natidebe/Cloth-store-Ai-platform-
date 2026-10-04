@@ -210,6 +210,10 @@ export function useSaveSettings(storeId: string) {
   });
 }
 
+export function useExportOrders(storeId: string) {
+  return useMutation({ mutationFn: (month: string) => storeApi.exportOrders(storeId, month) });
+}
+
 export function useLinkCode(storeId: string) {
   return useMutation({ mutationFn: () => storeApi.linkCode(storeId) });
 }

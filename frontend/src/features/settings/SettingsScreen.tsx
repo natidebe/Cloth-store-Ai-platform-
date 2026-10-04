@@ -95,6 +95,14 @@ export function SettingsScreen() {
           end={end}
           onClick={go('discount')}
         />
+        <Row
+          icon="send"
+          muted={!isOwner}
+          title={t('settings.dailySummary')}
+          subtitle={t(`settings.dailySummary_${store.daily_summary ?? 'am'}`)}
+          end={end}
+          onClick={go('summary')}
+        />
       </Card>
 
       <Card flush>

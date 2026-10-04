@@ -60,6 +60,23 @@ describe('Settings', () => {
     });
   });
 
+  it('turns the morning summary to English', async () => {
+    let sent: Record<string, unknown> | undefined;
+    server.use(
+      http.put(`${storeApiBase}/settings`, async ({ request }) => {
+        sent = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ ...settings(), daily_summary: 'en' });
+      }),
+    );
+    const { user } = renderApp(`/s/${STORE_ID}/settings`);
+    expect(await screen.findByText('Every morning, in Amharic')).toBeInTheDocument(); // the default
+    await user.click(screen.getByRole('button', { name: /Morning summary/ }));
+    expect(await screen.findByText(/press Start once/)).toBeInTheDocument();
+    await user.click(screen.getByRole('radio', { name: /In English/ }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sent).toEqual({ daily_summary: 'en' }));
+  });
+
   it('shows a /link code and the connected group', async () => {
     server.use(
       http.post(`${storeApiBase}/link-code`, () =>

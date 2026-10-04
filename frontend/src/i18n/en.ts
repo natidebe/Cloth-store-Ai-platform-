@@ -125,6 +125,11 @@ const en = {
     moreItems: '+ {{count}} more',
     statusNew: 'New',
     statusDelivered: 'Delivered',
+    statusOnTheWay: 'On the way',
+    statusPickedUp: 'Picked up',
+    nextStepsInGroup:
+      'Next steps (on the way, delivered or picked up): the buttons in the staff group.',
+    export: 'Export for the accountant',
     newCounterSale: 'New counter sale',
     seeAnalytics: 'Sales today',
     seeAnalyticsHint: 'Telegram and in-shop, discounts',
@@ -182,6 +187,10 @@ const en = {
     staffDiscount: 'Staff discount limit',
     staffDiscountRow: 'Up to {{percent}}% below listed price',
     staffDiscountNone: 'Staff sell at the listed price',
+    dailySummary: 'Morning summary',
+    dailySummary_am: 'Every morning, in Amharic',
+    dailySummary_en: 'Every morning, in English',
+    dailySummary_off: 'Off',
   },
   profile: {
     title: 'Store profile',
@@ -308,6 +317,25 @@ const en = {
     suspendConfirm: 'Suspend {{name}}? Its bot stops taking orders.',
     orders: '{{count}} orders',
     empty: 'No stores here.',
+  },
+  dailySummary: {
+    title: 'Morning summary',
+    subtitle:
+      'Every morning at 8:00 the bot sends you how yesterday went: orders, money received, unpaid orders and low stock.',
+    am: 'In Amharic',
+    en: 'In English',
+    sendHint: 'Every morning in your private chat with the bot',
+    off: 'Off',
+    offHint: 'No morning message',
+    startFirst: 'Open @{{bot}} and press Start once, so the bot can write to you.',
+  },
+  exportSheet: {
+    title: 'Export for the accountant',
+    hint: 'An Excel file with every sale and order of the month, the totals and the payment methods. The bot sends it to your Telegram.',
+    month: 'Month',
+    send: 'Send to my Telegram',
+    sent: 'Sent! Open your chat with @{{bot}}.',
+    sentNoBot: 'Sent to your Telegram.',
   },
   discountLimit: {
     title: 'Staff discount limit',
