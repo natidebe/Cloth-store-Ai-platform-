@@ -1,7 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 
-import { analytics, order, STORE_ID } from '@/test/fixtures';
+import { recentMonths } from '@/lib/format';
+import { analytics, me, order, STORE_ID } from '@/test/fixtures';
 import { renderApp } from '@/test/render';
 import { server, storeApiBase } from '@/test/server';
 
@@ -110,6 +111,108 @@ describe('Orders', () => {
     await user.click(await screen.findByRole('button', { name: 'Show more' }));
     await waitFor(() => expect(screen.getByText(/#N2 · Abebe/)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Order stages and the export (Phase 15)', () => {
+  it('shows on the way, delivered and picked up', async () => {
+    server.use(
+      http.get(`${storeApiBase}/orders`, () =>
+        HttpResponse.json({
+          orders: [
+            {
+              ...order(),
+              id: 'o-1',
+              number: 'WAY001',
+              status: 'out_for_delivery',
+              payment_status: 'paid',
+            },
+            {
+              ...order(),
+              id: 'o-2',
+              number: 'DEL001',
+              status: 'delivered',
+              payment_status: 'paid',
+            },
+            {
+              ...order(),
+              id: 'o-3',
+              number: 'PIC001',
+              status: 'delivered',
+              payment_status: 'paid',
+              fulfillment: 'pickup',
+            },
+          ],
+          more: false,
+        }),
+      ),
+    );
+    const { user } = renderApp(`/s/${STORE_ID}/orders`);
+    expect(await screen.findByText('On the way')).toBeInTheDocument();
+    expect(screen.getByText('Delivered')).toBeInTheDocument();
+    expect(screen.getByText('Picked up')).toBeInTheDocument();
+
+    await user.click(screen.getByText(/#WAY001/));
+    const sheet = await screen.findByRole('dialog');
+    expect(within(sheet).getByText(/buttons in the staff group/)).toBeInTheDocument();
+  });
+
+  it('lets the owner send a month to their Telegram', async () => {
+    let asked: unknown;
+    server.use(
+      http.post(`${storeApiBase}/orders/export`, async ({ request }) => {
+        asked = await request.json();
+        return HttpResponse.json({ sent: true, file: 'x.xlsx', orders: 3, revenue: 9000 });
+      }),
+    );
+    const { user } = renderApp(`/s/${STORE_ID}/orders`);
+    await user.click(await screen.findByRole('button', { name: 'Export for the accountant' }));
+    const sheet = await screen.findByRole('dialog');
+    const [thisMonth, lastMonth] = recentMonths();
+    expect(within(sheet).getAllByRole('radio')).toHaveLength(4);
+    await user.click(within(sheet).getAllByRole('radio')[1] as HTMLElement);
+    await user.click(within(sheet).getByRole('button', { name: 'Send to my Telegram' }));
+    await waitFor(() => expect(asked).toEqual({ month: lastMonth }));
+    expect(
+      await screen.findByText('Sent! Open your chat with @nati_fashion_bot.'),
+    ).toBeInTheDocument();
+    expect(thisMonth).toMatch(/^\d{4}-\d{2}$/);
+  });
+
+  it('says what to do when the bot cannot write to the owner', async () => {
+    server.use(
+      http.post(`${storeApiBase}/orders/export`, () =>
+        HttpResponse.json(
+          {
+            detail:
+              "The bot can't send you the file yet. Open @nati_fashion_bot, press Start, then try again.",
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    const { user } = renderApp(`/s/${STORE_ID}/orders`);
+    await user.click(await screen.findByRole('button', { name: 'Export for the accountant' }));
+    await user.click(await screen.findByRole('button', { name: 'Send to my Telegram' }));
+    expect(await screen.findByText(/press Start, then try again/)).toBeInTheDocument();
+  });
+
+  it('is not offered to staff', async () => {
+    server.use(http.get(`${storeApiBase}/me`, () => HttpResponse.json(me('staff'))));
+    renderApp(`/s/${STORE_ID}/orders`);
+    await screen.findByText(/#AB12CD · Abebe/);
+    expect(
+      screen.queryByRole('button', { name: 'Export for the accountant' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('counts months back across the new year, in Addis Ababa', () => {
+    // 22:00 UTC on Jan 31 is already Feb 1 in Addis.
+    expect(recentMonths(new Date('2027-01-31T22:00:00Z'), 3)).toEqual([
+      '2027-02',
+      '2027-01',
+      '2026-12',
+    ]);
   });
 });
 

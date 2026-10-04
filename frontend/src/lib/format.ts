@@ -66,3 +66,26 @@ export function joinKeywords(keywords: string[]): string | null {
 export function capitalize(text: string): string {
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
 }
+
+/** This month and the ones before it, as "2026-10", in Addis Ababa (Phase 15: the export). */
+export function recentMonths(now = new Date(), count = 4): string[] {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Addis_Ababa',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(now);
+  const part = (type: 'year' | 'month') => Number(parts.find((p) => p.type === type)?.value);
+  const current = part('year') * 12 + part('month') - 1;
+  return Array.from({ length: count }, (_, back) => {
+    const index = current - back;
+    return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`;
+  });
+}
+
+/** "September 2026" for "2026-09". */
+export function monthName(month: string, language: Language): string {
+  return new Date(`${month}-15T12:00:00+03:00`).toLocaleDateString(
+    language === 'am' ? 'am-ET' : 'en-GB',
+    { month: 'long', year: 'numeric', timeZone: 'Africa/Addis_Ababa' },
+  );
+}

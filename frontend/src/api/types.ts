@@ -59,7 +59,20 @@ export interface Me {
     plan_ends_at: string | null;
     /** 'unpaid': paused for not paying; 'admin': suspended by the platform admin. */
     suspended_reason: 'unpaid' | 'admin' | null;
+    /** Phase 15: the owner's morning summary (missing: an older backend). */
+    daily_summary?: DailySummary;
   };
+}
+
+/** Phase 15 (D70): yesterday's numbers every morning, in Amharic or English, or off. */
+export type DailySummary = 'am' | 'en' | 'off';
+
+/** Phase 15 (D72): a month's Excel file, sent to the owner by the shop's bot. */
+export interface ExportResult {
+  sent: boolean;
+  file: string;
+  orders: number;
+  revenue: Money;
 }
 
 export interface Variant {
@@ -277,6 +290,8 @@ export interface StoreSettings {
   shop_type: ShopType;
   option_labels: OptionRenames;
   shop_types: ShopTypeInfo[];
+  /** Phase 15: the owner's morning summary. */
+  daily_summary?: DailySummary;
   // The texts customers get (written by the backend from the lists).
   payment_instructions: string | null;
   delivery_info: string | null;

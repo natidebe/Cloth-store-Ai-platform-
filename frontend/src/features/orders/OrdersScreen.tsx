@@ -23,15 +23,17 @@ import { money, orderTime, variantLabel } from '@/lib/format';
 import { openTelegramLink } from '@/lib/telegram';
 import { percentOff } from '@/state/counterDraft';
 
+import { ExportSheet } from './ExportSheet';
 import s from './orders.module.css';
 
 /** Design: "Orders with 🏪 mark" / "Orders, Amharic". */
 export function OrdersScreen() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { storeId, role, store } = useStore();
+  const { storeId, role, store, isOwner } = useStore();
   const [filter, setFilter] = useState<OrderFilter>('all');
   const [open, setOpen] = useState<Order | null>(null);
+  const [exporting, setExporting] = useState(false);
   const orders = useOrders(storeId, filter);
   const list = orders.data?.pages.flatMap((page) => page.orders) ?? [];
   const noOrdersAtAll = filter === 'all' && orders.isSuccess && list.length === 0;
@@ -69,6 +71,11 @@ export function OrdersScreen() {
       ) : (
         <>
           <TodayLink onOpen={() => navigate(`/s/${storeId}/analytics`)} />
+          {isOwner && (
+            <Button variant="soft" block icon="chart" onClick={() => setExporting(true)}>
+              {t('orders.export')}
+            </Button>
+          )}
           <Chips
             label={t('orders.title')}
             value={filter}
@@ -112,6 +119,7 @@ export function OrdersScreen() {
         </Button>
       </BottomBar>
       {open && <OrderSheet order={open} onClose={() => setOpen(null)} />}
+      {exporting && <ExportSheet onClose={() => setExporting(false)} />}
     </Page>
   );
 }
@@ -141,7 +149,15 @@ function StatusBadge({ order }: { order: Order }) {
   const { t } = useTranslation();
   if (order.status === 'cancelled') return <Badge tone="neutral">{t('orders.cancelled')}</Badge>;
   if (order.channel === 'telegram' && order.status === 'delivered') {
-    return <Badge tone="neutral">{t('orders.statusDelivered')}</Badge>;
+    // Phase 15: staff tapped Delivered / Picked up in the staff group.
+    return (
+      <Badge tone="neutral">
+        {order.fulfillment === 'pickup' ? t('orders.statusPickedUp') : t('orders.statusDelivered')}
+      </Badge>
+    );
+  }
+  if (order.status === 'out_for_delivery') {
+    return <Badge tone="info">{t('orders.statusOnTheWay')}</Badge>;
   }
   if (order.payment_status === 'paid') return <Badge tone="success">{t('orders.paid')}</Badge>;
   if (order.payment_status === 'refunded')
@@ -268,6 +284,11 @@ function OrderSheet({ order, onClose }: { order: Order; onClose: () => void }) {
           </p>
         )}
         {!shop && order.payment_status === 'unpaid' && <p>{t('orders.paymentInGroup')}</p>}
+        {!shop &&
+          order.payment_status === 'paid' &&
+          (order.status === 'confirmed' || order.status === 'out_for_delivery') && (
+            <p>{t('orders.nextStepsInGroup')}</p>
+          )}
       </div>
     </Sheet>
   );
