@@ -133,6 +133,7 @@ class Orchestrator:
         self.rate_limit = rate_limit or RateLimiter(DEFAULT_MESSAGES_PER_MINUTE)
         self.app_access = MiniAppAccess(telegram)  # who may open the Mini App (Phase 10b)
         self.catalog = catalog
+        self.subscriptions = None  # Phase 14 (main.py sets it)
         self._tasks: set[asyncio.Task] = set()
 
     # --- Handling one customer ----------------------------------------------
@@ -426,6 +427,11 @@ class Orchestrator:
                 await self.staff.resume_idle()
             except Exception:
                 logger.exception("hand-back sweep failed")
+            if self.subscriptions is not None:
+                try:  # Phase 14: reminders and pausing, once a day in the morning
+                    await self.subscriptions.maybe_check()
+                except Exception:
+                    logger.exception("subscription check failed")
 
     async def close(self) -> None:
         """At shutdown: stop running work. Unfinished rows are recovered at

@@ -37,6 +37,9 @@ services:
         sync: false
       - key: SUPPORT_USERNAME
         sync: false
+      # Where shops pay their subscription, shown in reminders (Phase 14)
+      - key: PLATFORM_PAYMENT_INFO
+        sync: false
       # Error tracking (optional): Sentry → Project Settings → Client Keys
       - key: SENTRY_DSN
         sync: false

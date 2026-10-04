@@ -613,19 +613,66 @@ class SupabaseService:
         """Every store with its number of orders (platform admin only)."""
         rows = await self._run(
             self._db.table("stores")
-            .select("id, name, status, plan, telegram_bot_username, created_at, orders(count)")
+            .select("id, name, status, plan, telegram_bot_username, created_at, plan_ends_at, "
+                    "suspended_reason, orders(count)")
             .order("created_at", desc=True)
         )
         return [StoreSummary(**{k: v for k, v in row.items() if k != "orders"},
                              orders=(row.get("orders") or [{"count": 0}])[0]["count"])
                 for row in rows]
 
-    async def set_store_status(self, store_id: UUID, status: str) -> None:
+    async def set_store_status(self, store_id: UUID, status: str, reason: str | None = None) -> None:
+        """reason: why a suspended store is suspended ('unpaid', 'admin'); cleared otherwise."""
         rows = await self._run(
-            self._db.table("stores").update({"status": status}).eq("id", str(store_id))
+            self._db.table("stores")
+            .update({"status": status, "suspended_reason": reason if status == "suspended" else None})
+            .eq("id", str(store_id))
         )
         if not rows:
             raise NotFoundError("store_not_found", str(store_id))
+
+    # --- Subscriptions (Phase 14, migration 014) -------------------------------------
+
+    async def set_plan_end(self, store_id: UUID, ends_at: datetime) -> None:
+        await self._run(self._db.table("stores").update({"plan_ends_at": ends_at.isoformat()})
+                        .eq("id", str(store_id)))
+
+    async def stores_with_plan_end(self) -> list[Store]:
+        """Active stores and stores paused for not paying, with an end date."""
+        rows = await self._run(
+            self._db.table("stores").select("*").not_.is_("plan_ends_at", "null")
+            .in_("status", ["active", "suspended"])
+        )
+        return [Store.model_validate(row) for row in rows]
+
+    async def add_subscription_notice(self, store_id: UUID, ends_at: datetime, kind: str) -> bool:
+        """Remember a reminder; False if it was already sent for this end date."""
+        try:
+            await self._run(self._db.table("subscription_notices").insert(
+                {"store_id": str(store_id), "ends_at": ends_at.isoformat(), "kind": kind}))
+        except DuplicateError:
+            return False
+        return True
+
+    async def record_subscription_payment(self, store_id: UUID, plan: str, months: int, amount: Decimal,
+                                          method: str | None, reference: str | None,
+                                          recorded_by: int | None) -> dict[str, Any]:
+        """Extend the period and resume an unpaid pause, in one step (migration 014)."""
+        return await self._run(self._db.rpc("record_subscription_payment", {
+            "p_store_id": str(store_id), "p_plan": plan, "p_months": months, "p_amount": str(amount),
+            "p_method": method, "p_reference": reference, "p_recorded_by": recorded_by,
+        }))
+
+    async def subscription_payments(self, store_id: UUID, limit: int = 20) -> list[dict[str, Any]]:
+        return await self._run(
+            self._db.table("subscription_payments")
+            .select("id, plan, months, amount, method, reference, period_start, period_end, created_at")
+            .eq("store_id", str(store_id)).order("created_at", desc=True).limit(limit)
+        )
+
+    async def platform_admin_ids(self) -> list[int]:
+        rows = await self._run(self._db.table("platform_admin_telegram").select("telegram_id"))
+        return [int(row["telegram_id"]) for row in rows]
 
     async def set_store_plan(self, store_id: UUID, plan: str) -> None:
         rows = await self._run(self._db.table("stores").update({"plan": plan}).eq("id", str(store_id)))

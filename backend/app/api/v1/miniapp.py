@@ -43,6 +43,7 @@ from app.agents.inventory import GridRow, Inventory, InventoryError, summarize
 from app.agents.messages import bot_profile
 from app.agents.miniapp import AppAccess
 from app.agents.shop_types import ShopType, clean_labels, shop_json, shop_type_of, shop_types_json
+from app.agents.subscriptions import ai_limit
 from app.agents.onboarding import LINK_CODE_MINUTES, LINK_COMMAND, Onboarding, OnboardingError
 from app.agents.store_profile import (
     DeliveryArea,
@@ -227,7 +228,10 @@ async def me(access: AppAccess = Depends(app_access)) -> dict[str, Any]:
                   "staff_discount_percent": store.staff_discount_percent,
                   "payment_methods": payment_methods(store),
                   # Phase 13: the shop's type and its words for the two options.
-                  **shop_json(store)},
+                  **shop_json(store),
+                  # Phase 14: the plan and when it ends (None: not approved yet).
+                  "plan_ends_at": store.plan_ends_at,
+                  "suspended_reason": store.suspended_reason},
     }
 
 
@@ -249,7 +253,8 @@ async def analytics(
     access: AppAccess = Depends(app_access),
     db: SupabaseService = Depends(get_db),
 ) -> dict[str, Any]:
-    return await store_analytics(db, access.store.id, period, get_settings().ai_daily_calls_per_store)
+    return await store_analytics(db, access.store.id, period,
+                                 ai_limit(access.store, get_settings().ai_daily_calls_per_store))
 
 
 # --- Products and stock -----------------------------------------------------------------

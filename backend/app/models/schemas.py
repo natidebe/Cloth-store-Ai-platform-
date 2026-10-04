@@ -105,6 +105,10 @@ class Store(DbModel):
     # product options (agents/shop_types.py); the owner's renames, or None.
     shop_type: str = "clothing"
     option_labels: dict | None = None
+    # Subscriptions (migration 014, Phase 14): when the trial or paid period
+    # ends (None: not approved yet), and why a suspended store is suspended.
+    plan_ends_at: datetime | None = None
+    suspended_reason: str | None = None  # 'unpaid' (D67) or 'admin'
 
     @property
     def profile(self) -> StoreProfile:
@@ -137,6 +141,8 @@ class StoreSummary(DbModel):
     telegram_bot_username: str | None = None
     created_at: datetime | None = None
     orders: int = 0
+    plan_ends_at: datetime | None = None  # Phase 14
+    suspended_reason: str | None = None
 
 
 class StoreStaff(DbModel):

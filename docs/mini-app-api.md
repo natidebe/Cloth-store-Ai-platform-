@@ -51,6 +51,7 @@ The backend serves the built app (`frontend/dist`) for every path under
   "user": {"id": 123, "name": "Nati Man", "username": "nati", "language_code": "am"},
   "role": "owner",
   "store": {"id": "…", "name": "nati fashion", "status": "active", "plan": "free",
+            "plan_ends_at": "2026-10-11T09:05:29+00:00", "suspended_reason": null,
             "bot_username": "Abdisafashionbot", "staff_group_linked": true, "channel_linked": true}
 }
 ```
@@ -287,6 +288,13 @@ above plus `bot_connected` and `note`. 400: the token doesn't work; 409: the
 bot already belongs to a store.
 
 ### Platform admins only (D45)
-- `GET /admin/stores` → `[{"id", "name", "status", "plan", "telegram_bot_username", "created_at", "orders"}]`
+- `GET /admin/stores` → `[{"id", "name", "status", "plan", "telegram_bot_username", "created_at", "orders",
+  "plan_ends_at", "suspended_reason"}]` (Phase 14: when the trial or paid period ends; `suspended_reason`
+  `unpaid` = paused for not paying, `admin` = suspended by you)
+- `POST /admin/stores/{id}/payments` `{"plan": "basic" | "pro", "amount": 4500, "method": "Telebirr",
+  "reference": "TX123", "months": 3}` → 201 `{"payment_id", "plan", "period_start", "period_end", "resumed"}`:
+  3 months from the current end (or today), an unpaid pause turned back on, the shop thanked. 409 for a
+  pending store (approve it first: approval starts the 1-week trial).
+- `GET /admin/stores/{id}/payments` → the store's payments, newest first
 - `POST /admin/stores/{id}/approve`, `POST /admin/stores/{id}/suspend` → `{"store_id", "status", "plan"}`
 - `PUT /admin/stores/{id}/plan` `{"plan": "free" | "basic" | "pro"}`
