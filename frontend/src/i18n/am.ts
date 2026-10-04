@@ -122,6 +122,7 @@ const am: Texts = {
     inShop: 'በመደብር',
     walkIn: 'ቀጥታ ደንበኛ',
     itemsCount: '{{count}} እቃዎች',
+    moreItems: '+ ሌሎች {{count}}',
     statusNew: 'አዲስ',
     statusDelivered: 'ደርሷል',
     newCounterSale: 'አዲስ የመደብር ሽያጭ',
