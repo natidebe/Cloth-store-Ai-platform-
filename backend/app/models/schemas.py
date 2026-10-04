@@ -109,6 +109,8 @@ class Store(DbModel):
     # ends (None: not approved yet), and why a suspended store is suspended.
     plan_ends_at: datetime | None = None
     suspended_reason: str | None = None  # 'unpaid' (D67) or 'admin'
+    # Phase 15 (migration 015, D70): the owner's morning summary: 'am', 'en' or 'off'.
+    daily_summary: str = "am"
 
     @property
     def profile(self) -> StoreProfile:

@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
 from app.agents.catalog import Catalog
+from app.agents.daily_summary import DailySummaries
 from app.agents.orchestrator import Orchestrator
 from app.agents.subscriptions import Subscriptions
 from app.api.v1 import admin, catalog, health, miniapp, platform, platform_app, stores, webhook
@@ -74,6 +75,8 @@ async def lifespan(app: FastAPI):
             app.state.db, app.state.telegram,
             platform_token=settings.platform_bot_token.get_secret_value(),
             payment_info=settings.platform_payment_info, support=settings.support_username)
+        # Phase 15: the owner's morning summary.
+        app.state.orchestrator.daily_summaries = DailySummaries(app.state.db, app.state.telegram)
         recovery_task = asyncio.create_task(app.state.orchestrator.run_recovery_loop())
     yield
     if recovery_task is not None:

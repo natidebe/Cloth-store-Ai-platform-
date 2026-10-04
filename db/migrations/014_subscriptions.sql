@@ -4,6 +4,7 @@
 -- Everything is in one transaction: if any part fails, nothing is applied.
 -- Safe to run again.
 --
+
 -- Phase 14, subscriptions (decisions D64–D69):
 --   D64  a 1-week free trial (plan 'free'); shops already active get one from today
 --   D65  Basic / Pro: 3 months per payment, recorded by the platform admin

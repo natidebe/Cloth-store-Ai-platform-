@@ -1261,6 +1261,93 @@ AI replies a day, Basic 100.
 
 ---
 
+### Phase 15 — Quick wins: morning summary, export for the accountant, order updates to customers 🟡 Built (backend 542 tests pass, the 3 new database tests wait for migration 015; Mini App 56 tests pass); migration 015 to run, then my test in Telegram
+
+**Goal:** three small things every shop uses every day. Most of the data
+already exists (analytics, counter sales, order stages), so this phase is
+mostly new messages and buttons.
+
+**1. Morning summary to the owner (D70, D71)** — each morning (08:00 Addis
+time, alongside the Phase 14 daily check), in the private chat of the shop's
+creator (`stores.owner_telegram_id`), in Amharic or English:
+
+```
+☀️ Selam Shoes — yesterday (Oct 3)
+🛒 12 orders (9 Telegram · 3 in shop) · 38,500 ETB paid
+⏳ 2 delivery orders still unpaid (4,200 ETB)
+⚠️ Low on stock: Nike Air 42 Black (1), Leather bag Brown (0)
+🏆 Best seller: Nike Air (5)
+```
+
+- Numbers come from the same code as the Mini App's analytics
+  (`app/agents/analytics.py`, D57: Telegram + in shop), so they always match.
+- A day with no orders still sends a short line ("No orders yesterday"), so
+  the owner knows the bot is alive; low stock is listed either way.
+- Sent once a day per shop (remembered, like `subscription_notices`).
+- Paused shops (Phase 14) get no summary.
+- Settings → "Morning summary": Amharic (the default), English, or off
+  (`stores.daily_summary`).
+- The owner must have pressed Start in the shop's bot once; otherwise
+  Telegram refuses it, and it isn't retried that day.
+
+**2. Export for the accountant (D72, D73)** — Mini App → Orders →
+"Export", owners only: choose a month (this month, last month, or any
+month), and the bot sends the file to the owner's private chat. Files
+opened inside Telegram's web view often don't download, which is why the bot
+sends it instead.
+
+- **Sales sheet:** one row per item sold: date, order number, Telegram / in
+  shop, product, option 1 and 2 (the shop's words, Phase 13), quantity,
+  listed price, final price, discount, who sold it, payment method, paid or
+  not.
+- **Orders sheet:** one row per order: date, customer, phone, delivery or
+  pickup, status, total, payment method.
+- **Summary sheet** (first): money received, paid orders per channel,
+  discounts, unpaid and cancelled orders, per payment method.
+- Months are Addis Ababa months, by the day the order was placed (an order
+  placed Sep 30 and paid Oct 1 is in September's file).
+- Only this shop's data (a cross-store test, rule 9).
+
+**3. Order updates to customers (D74, D75)** — after a payment is confirmed,
+the staff group alert gets new buttons. Staff tap them, the order's stage
+changes (D7: `out_for_delivery`, `delivered`, already in the database), and
+the bot tells the customer in their language:
+
+| Staff tap | Order becomes | Customer gets |
+|---|---|---|
+| 🚚 On the way | `out_for_delivery` | "Your order #A123 is on the way 🚚" |
+| ✅ Delivered | `delivered` | "Your order #A123 was delivered. Thank you for shopping with Selam Shoes!" |
+| 📦 Ready for pickup (pickup orders) | stays `confirmed` (D75) | "Your order #A123 is ready. Pick it up at: (location, hours)" |
+| ✅ Picked up (pickup orders) | `delivered` | "Thank you for picking up order #A123!" |
+
+- After "Confirm payment" the confirmation note in the staff group carries
+  these buttons. Each tap posts who did it (D27) and leaves only the buttons
+  still to come; the order keeps who and when (`status_changed_by_name`).
+- A stage can't go backwards; tapping twice does nothing.
+- The Mini App's Orders list shows the new stages (still view-only, D48).
+
+**How:**
+- Migration `015_quick_wins.sql`: `stores.daily_summary`, the table
+  `daily_summaries` (sent once per day), and who moved an order on
+  (`orders.status_changed_*`). No new order stage (D75).
+- Backend: `app/agents/daily_summary.py` (the message, the daily check),
+  `app/agents/export.py` (the file, with `openpyxl`), the new buttons in
+  `app/agents/staff.py`, the customer texts in `app/agents/messages.py`,
+  `POST /orders/export` and `daily_summary` in settings
+  (`docs/mini-app-api.md`). Only `telegram_service.py` sends the file.
+- Mini App (`Front-end` branch): Orders → "Export for the accountant" (owners;
+  the last 4 months to choose from), Settings → "Morning summary" (Amharic,
+  English, off), and the badges On the way / Delivered / Picked up.
+
+**Check:** place two orders and a counter sale today → tomorrow at 08:00 the
+owner gets the summary with the right numbers (or move the clock in a test);
+export this month → the owner gets the file, it opens in Excel with Amharic
+names readable, totals match the Mini App; confirm a delivery order's payment
+→ tap On the way → the customer gets the message → tap Delivered → the
+customer gets the thank-you, and the buttons are gone.
+
+---
+
 ## 6. Decisions
 
 Answer each before the phase listed, and record the answer here.
@@ -1336,6 +1423,12 @@ Answer each before the phase listed, and record the answer here.
 | D67 | What happens when a shop doesn't pay? | Phase 14 | 3 days of grace, then paused automatically (reason "unpaid"); a payment turns it back on; admin suspensions are never undone automatically |
 | D68 | AI replies a day per plan? | Phase 14 | Trial 100, Basic 100, Pro 300; over it, typed messages go to staff |
 | D69 | When does the trial start? | Phase 14 | When the platform admin approves the shop |
+| D70 | Morning summary: only the owner's private chat, or the staff group too? | Phase 15 | The shop creator's private chat only (money is private); in Amharic or English, or off, chosen in Settings |
+| D71 | "Revenue" in the summary: paid orders only, or all orders placed? | Phase 15 | Money received that day (payments), plus a separate line for unpaid orders |
+| D72 | Export format: Excel (.xlsx) or CSV? | Phase 15 | Excel (.xlsx): Summary, Sales and Orders sheets |
+| D73 | Who may export: owners only, or staff too? | Phase 15 | Owners only |
+| D74 | Who may tap On the way / Delivered: anyone in the staff group? | Phase 15 | Yes, like D27; the order keeps who and when |
+| D75 | Pickup orders: add a "Ready for pickup" stage (database change) or only send the message? | Phase 15 | A message only: the stage stays `confirmed` until "Picked up" (`delivered`) |
 
 ---
 

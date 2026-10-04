@@ -81,6 +81,7 @@ class FakeDb:
         self.customer = Customer(id=uuid4(), store_id=STORE.id, telegram_id=CUSTOMER, name="Abebe")
         self.customer_updates = []
         self.payments = []
+        self.status_changes = []
         self.staff_logins = {}
 
     def _mine(self, store_id):
@@ -204,6 +205,15 @@ class FakeDb:
 
     async def note_payment_confirmer(self, store_id, payment_id, telegram_id, name):
         self.payments[-1]["confirmed_by"] = (telegram_id, name)
+
+    async def set_order_status(self, store_id, order_id, status, from_statuses, by_id=None, by_name=None):
+        """Phase 15: paid orders only, and only from `from_statuses` (like the database)."""
+        order = await self.get_order(store_id, order_id)
+        if order is None or order.payment_status != "paid" or order.status not in from_statuses:
+            return False
+        self.orders[order.idempotency_key] = order.model_copy(update={"status": status})
+        self.status_changes.append((order_id, status, by_id, by_name))
+        return True
 
     async def verify_staff(self, store_id, token):
         return self.staff_logins.get((store_id, token))

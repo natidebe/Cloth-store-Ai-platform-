@@ -192,6 +192,25 @@ class TelegramService:
         result = await self._call(bot_token, "sendPhoto", payload)
         return result.get("message_id") if isinstance(result, dict) else None
 
+    async def send_document(self, bot_token: str, chat_id: int, filename: str, data: bytes,
+                            caption: str = "", content_type: str = "application/octet-stream") -> int | None:
+        """Send a file (e.g. the accountant's Excel file, Phase 15). Uploaded
+        as a form, not JSON, so it doesn't go through _call."""
+        payload = {"chat_id": str(chat_id), "caption": _cut(caption, MAX_CAPTION_LENGTH)}
+        try:
+            response = await self._http.post(f"/bot{bot_token}/sendDocument", data=payload,
+                                             files={"document": (filename, data, content_type)})
+        except httpx.HTTPError as error:
+            raise TelegramError("sendDocument", type(error).__name__) from None
+        try:
+            body = response.json()
+        except ValueError:
+            raise TelegramError("sendDocument", "response was not JSON", response.status_code) from None
+        if not body.get("ok"):
+            raise TelegramError("sendDocument", body.get("description", "unknown error"), response.status_code)
+        result = body["result"]
+        return result.get("message_id") if isinstance(result, dict) else None
+
     async def answer_button(self, bot_token: str, callback_id: str, text: str,
                             *, popup: bool = False) -> None:
         """Answer a button press: a short notice for the person who pressed it
@@ -235,6 +254,14 @@ class TelegramService:
         await self._call(bot_token, "editMessageReplyMarkup", {
             "chat_id": chat_id, "message_id": message_id,
             "reply_markup": {"inline_keyboard": []},
+        })
+
+    async def set_buttons(self, bot_token: str, chat_id: int, message_id: int,
+                          buttons: list[Button | list[Button]]) -> None:
+        """Replace the buttons under a message (e.g. only the next step's)."""
+        await self._call(bot_token, "editMessageReplyMarkup", {
+            "chat_id": chat_id, "message_id": message_id,
+            "reply_markup": _keyboard(buttons) if buttons else {"inline_keyboard": []},
         })
 
     async def notify_staff(self, store: Store, text: str) -> bool:

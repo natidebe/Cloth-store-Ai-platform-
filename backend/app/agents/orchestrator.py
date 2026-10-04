@@ -134,6 +134,7 @@ class Orchestrator:
         self.app_access = MiniAppAccess(telegram)  # who may open the Mini App (Phase 10b)
         self.catalog = catalog
         self.subscriptions = None  # Phase 14 (main.py sets it)
+        self.daily_summaries = None  # Phase 15 (main.py sets it)
         self._tasks: set[asyncio.Task] = set()
 
     # --- Handling one customer ----------------------------------------------
@@ -432,6 +433,11 @@ class Orchestrator:
                     await self.subscriptions.maybe_check()
                 except Exception:
                     logger.exception("subscription check failed")
+            if self.daily_summaries is not None:
+                try:  # Phase 15: the owner's morning summary of yesterday
+                    await self.daily_summaries.maybe_send()
+                except Exception:
+                    logger.exception("morning summary failed")
 
     async def close(self) -> None:
         """At shutdown: stop running work. Unfinished rows are recovered at
