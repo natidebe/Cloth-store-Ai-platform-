@@ -1198,7 +1198,7 @@ nothing changes.
 
 ---
 
-### Phase 14 — Subscriptions: trial, paid periods, reminders, AI limits per plan 🟡 Planned: migration 014 next
+### Phase 14 — Subscriptions: trial, paid periods, reminders, AI limits per plan 🟡 Built (migration 014 run; backend 520 tests, Mini App 49 tests pass); waiting for my test in Telegram
 
 **Goal:** the platform knows when each shop's free trial or paid period ends,
 reminds the right people in time, pauses a shop that didn't pay, and gives
