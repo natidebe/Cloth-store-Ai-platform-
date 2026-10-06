@@ -116,6 +116,7 @@ const am: Texts = {
     order: 'ትዕዛዝ #{{number}}',
     item: '{{name}} · {{variant}} × {{quantity}}',
     paymentInGroup: 'ክፍያን በሰራተኞች ግሩፕ ውስጥ ያረጋግጡ።',
+    deliveryInGroup: 'ክፍያው ሲረከቡ ነው፦ በሰራተኞች ግሩፕ ውስጥ ዕቃው ሲወጣ “በመንገድ ላይ”፣ ከዚያ “ደርሷል እና ተከፍሏል” ይጫኑ።',
     filterTelegram: 'ቴሌግራም',
     filterInShop: 'በመደብር',
     telegram: 'ቴሌግራም',

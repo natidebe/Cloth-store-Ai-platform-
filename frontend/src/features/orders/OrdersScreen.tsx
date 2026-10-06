@@ -283,7 +283,14 @@ function OrderSheet({ order, onClose }: { order: Order; onClose: () => void }) {
             {t('orders.note')}: {order.note}
           </p>
         )}
-        {!shop && order.payment_status === 'unpaid' && <p>{t('orders.paymentInGroup')}</p>}
+        {!shop && order.payment_status === 'unpaid' && (
+          // Phase 15b (D76): delivery orders are paid on arrival, pickup orders first.
+          <p>
+            {order.fulfillment === 'delivery'
+              ? t('orders.deliveryInGroup')
+              : t('orders.paymentInGroup')}
+          </p>
+        )}
         {!shop &&
           order.payment_status === 'paid' &&
           (order.status === 'confirmed' || order.status === 'out_for_delivery') && (
