@@ -3,7 +3,7 @@ summary, the month's export for the accountant, and order updates to
 customers from the staff group (delivery: paid on arrival). No network: Telegram and the database are faked."""
 import io
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -12,6 +12,7 @@ import pytest
 from openpyxl import load_workbook
 
 from app.agents.daily_summary import ADDIS, DailySummaries, summary_text, yesterday
+from app.agents.ethiopian import ethiopian_text, from_ethiopian, to_ethiopian
 from app.agents.export import ExportError, build_export, month_bounds
 from app.agents.messages import t
 from app.agents.staff import order_buttons
@@ -359,17 +360,44 @@ def test_the_owner_turns_it_off_or_changes_the_language(world):
                       json={"daily_summary": "en"}).status_code == 403  # owners only
 
 
-# --- 2. The export for the accountant (D72/D73) -----------------------------------------------
+# --- 2. The export for the accountant (D72/D73, D79) ------------------------------------------
 
-def test_month_bounds_are_addis_months():
-    start, end = month_bounds("2026-09", MORNING)
-    assert (start.isoformat(), end.isoformat()) == ("2026-09-01T00:00:00+03:00", "2026-10-01T00:00:00+03:00")
-    start, end = month_bounds("2025-12", MORNING)
-    assert end.isoformat() == "2026-01-01T00:00:00+03:00"
-    assert month_bounds("2026-10", MORNING)[0].day == 1  # this month so far
+def test_gregorian_months_are_addis_months_and_show_their_ethiopian_days():
+    period = month_bounds("2026-09", MORNING)
+    assert (period.start.isoformat(), period.end.isoformat()) == ("2026-09-01T00:00:00+03:00",
+                                                                  "2026-10-01T00:00:00+03:00")
+    assert period.title == "September 2026" and period.slug == "2026-09"
+    assert period.other == "ነሐሴ 26, 2018 – መስከረም 20, 2019 ዓ.ም."
+    assert month_bounds("2025-12", MORNING).end.isoformat() == "2026-01-01T00:00:00+03:00"
+    assert month_bounds("2026-10", MORNING).start.day == 1  # this month so far
     for bad in ("2026-13", "2026-9", "", "1999-01", "2026-11"):  # the last: not started yet
         with pytest.raises(ExportError):
             month_bounds(bad, MORNING)
+
+
+def test_ethiopian_months_have_their_own_days():
+    meskerem = month_bounds("2019-01", MORNING, "ethiopian")  # Meskerem 2019 = Sep 11 – Oct 10, 2026
+    assert (meskerem.start.isoformat(), meskerem.end.isoformat()) == ("2026-09-11T00:00:00+03:00",
+                                                                      "2026-10-11T00:00:00+03:00")
+    assert meskerem.title == "መስከረም 2019 ዓ.ም. (Meskerem)" and meskerem.other == "Sep 11, 2026 – Oct 10, 2026"
+    assert meskerem.slug == "Meskerem-2019-EC"
+    nehase = month_bounds("2018-12", MORNING, "ethiopian")  # with Pagume, up to the new year
+    assert (nehase.start.date(), nehase.end.date()) == (date(2026, 8, 7), date(2026, 9, 11))
+    assert nehase.title.startswith("ነሐሴ + ጳጉሜ 2018")
+    for bad in ("2019-13", "2019-00", "2011-01", "2019-02"):  # Pagume alone, too old, not started yet
+        with pytest.raises(ExportError):
+            month_bounds(bad, MORNING, "ethiopian")
+
+
+def test_the_ethiopian_calendar():
+    assert to_ethiopian(date(2026, 9, 11)) == (2019, 1, 1)  # new year
+    assert to_ethiopian(date(2023, 9, 12)) == (2016, 1, 1)  # a day later before a Gregorian leap year
+    assert to_ethiopian(date(2023, 9, 11)) == (2015, 13, 6)  # Pagume 6
+    assert to_ethiopian(date(2027, 1, 7)) == (2019, 4, 29)  # Genna, Tahsas 29
+    assert ethiopian_text(date(2026, 10, 6)) == "መስከረም 26, 2019"
+    for ordinal in range(date(2020, 1, 1).toordinal(), date(2032, 1, 1).toordinal(), 7):
+        day = date.fromordinal(ordinal)
+        assert from_ethiopian(*to_ethiopian(day)) == day
 
 
 def _row(status="confirmed", paid=True, channel="telegram", items=(), payments=None, **fields):
@@ -401,39 +429,63 @@ def _book(export):
     return load_workbook(io.BytesIO(export.data))
 
 
-def test_the_workbook_has_summary_sales_and_orders():
-    start, _ = month_bounds("2026-09", MORNING)
-    export = build_export(STORE_A, EXPORT_ROWS, start)
+def test_the_workbook_has_every_sheet_in_both_calendars():
+    export = build_export(STORE_A, EXPORT_ROWS, month_bounds("2026-09", MORNING), MORNING)
     assert export.filename == "Selam-Shoes-2026-09.xlsx" and export.revenue == Decimal("10900")
     book = _book(export)
-    assert book.sheetnames == ["Summary", "Sales", "Orders"]
+    assert book.sheetnames == ["Summary", "By day", "By product", "Sales", "Orders"]
 
-    summary = {row[0]: row[1:] for row in book["Summary"].iter_rows(values_only=True) if row[0]}
-    assert summary["Selam Shoes"][0] == "September 2026"
+    rows = list(book["Summary"].iter_rows(values_only=True))
+    assert rows[0][:2] == ("Selam Shoes", "September 2026")
+    assert rows[1][1] == "ነሐሴ 26, 2018 – መስከረም 20, 2019 ዓ.ም."
+    summary = {row[0]: row[1:] for row in rows if row[0]}
     assert summary["Money received (paid orders and sales)"][0] == 10900
     assert summary["Paid orders and sales"][0] == 2
+    assert summary["Average sale"][0] == 5450
     assert summary["Discounts given in the shop"][0] == 100
     assert summary["Orders not paid"][0] == 1 and summary["Cancelled orders"][0] == 1
+    assert summary["  Pickup (Telegram)"][0] == 2 and summary["  In the shop"][0] == 1
     assert summary["Telebirr"][:2] == (1, 10000) and summary["Cash"][:2] == (1, 900)
 
+    days = list(book["By day"].iter_rows(values_only=True))
+    assert days[0] == ("Date", "Ethiopian date", "Orders", "Paid", "Money received", "Discounts")
+    assert len(days) == 31  # every day of September
+    sep14 = next(d for d in days[1:] if d[0] == datetime(2026, 9, 14))
+    assert sep14[1:] == ("መስከረም 4, 2019", 3, 2, 10900, 100)
+
+    products = list(book["By product"].iter_rows(values_only=True))
+    assert products[1] == ("Nike Air", "P101", 2, 10000, 0)  # the most money first
+    assert products[2] == ("Leather bag", "P101", 1, 900, 100)
+
     sales = list(book["Sales"].iter_rows(values_only=True))
-    assert sales[0][:8] == ("Date", "Order", "Where", "Product", "Code", "Color", "Size", "Quantity")
+    assert sales[0][:9] == ("Date", "Ethiopian date", "Order", "Where", "Product", "Code", "Color", "Size",
+                            "Quantity")
     assert len(sales) == 3  # only paid, not cancelled
     nike, bag = sales[1], sales[2]
-    assert nike[0] == datetime(2026, 9, 14, 10, 30)  # Addis time
-    assert nike[3:] == ("Nike Air", "P101", "Black", "42", 2, 5000, 5000, 0, 10000, "Telebirr", "Sara")
-    assert bag[2] == "In the shop" and bag[8:] == (1000, 900, 100, 900, "Cash", "Hana")
+    assert nike[:2] == (datetime(2026, 9, 14, 10, 30), "መስከረም 4, 2019")  # Addis time, both calendars
+    assert nike[4:] == ("Nike Air", "P101", "Black", "42", 2, 5000, 5000, 0, 10000, "Telebirr", "Sara")
+    assert bag[3] == "In the shop" and bag[9:] == (1000, 900, 100, 900, "Cash", "Hana")
 
     orders = list(book["Orders"].iter_rows(values_only=True))
     assert len(orders) == 5  # every order, with its stage
-    assert [o[6] for o in orders[1:]] == ["Paid", "Paid", "Waiting for payment", "Cancelled"]
+    assert [o[7] for o in orders[1:]] == ["Paid", "Paid", "Waiting for payment", "Cancelled"]
+
+
+def test_an_ethiopian_month_file():
+    export = build_export(STORE_A, EXPORT_ROWS, month_bounds("2019-01", MORNING, "ethiopian"), MORNING)
+    assert export.filename == "Selam-Shoes-Meskerem-2019-EC.xlsx"
+    book = _book(export)
+    assert next(book["Summary"].iter_rows(values_only=True))[:2] == ("Selam Shoes", "መስከረም 2019 ዓ.ም. (Meskerem)")
+    days = list(book["By day"].iter_rows(values_only=True))
+    assert days[1][:2] == (datetime(2026, 9, 11), "መስከረም 1, 2019")
+    assert days[-1][:2] == (datetime(2026, 10, 4), "መስከረም 24, 2019")  # up to today
 
 
 def test_the_columns_use_the_shops_own_words():
     phones = STORE_A.model_copy(update={"shop_type": "electronics"})
-    start, _ = month_bounds("2026-09", MORNING)
-    sales = next(_book(build_export(phones, [], start))["Sales"].iter_rows(values_only=True))
-    assert sales[5:7] == ("Color", "Storage")
+    sales = next(_book(build_export(phones, [], month_bounds("2026-09", MORNING), MORNING))["Sales"]
+                 .iter_rows(values_only=True))
+    assert sales[6:8] == ("Color", "Storage")
 
 
 def test_the_owner_gets_the_file_from_the_bot(world):
@@ -454,6 +506,12 @@ def test_the_owner_gets_the_file_from_the_bot(world):
     assert b'name="chat_id"\r\n\r\n1\r\n' in form  # ...to the owner who asked, in private
     assert b"Selam-Shoes-2026-09.xlsx" in form
 
+    # The same, by Ethiopian month (D79).
+    response = client.post(mini.url("/orders/export"), headers=mini.headers(OWNER),
+                           json={"month": "2019-01", "calendar": "ethiopian"})
+    assert response.status_code == 200 and response.json()["file"] == "Selam-Shoes-Meskerem-2019-EC.xlsx"
+    assert asked[-1][1].isoformat() == "2026-09-11T00:00:00+03:00"
+
 
 def test_export_is_for_owners_and_needs_the_bot_started(world):
     db, telegram, client, _, _ = world
@@ -466,6 +524,10 @@ def test_export_is_for_owners_and_needs_the_bot_started(world):
     assert client.post(path, headers=mini.headers(MEMBER), json={"month": "2026-09"}).status_code == 403
     assert client.post(path, headers=mini.headers(OWNER), json={"month": "2026-9"}).status_code == 422
     assert client.post(path, headers=mini.headers(OWNER), json={"month": "2099-01"}).status_code == 422
+    assert client.post(path, headers=mini.headers(OWNER),
+                       json={"month": "2019-13", "calendar": "ethiopian"}).status_code == 422
+    assert client.post(path, headers=mini.headers(OWNER),
+                       json={"month": "2026-09", "calendar": "julian"}).status_code == 422
     telegram.refuse_documents = True
     response = client.post(path, headers=mini.headers(OWNER), json={"month": "2026-09"})
     assert response.status_code == 409 and "@selam_bot" in response.json()["detail"]

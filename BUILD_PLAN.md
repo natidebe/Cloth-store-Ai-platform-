@@ -1388,6 +1388,27 @@ On the way → ❌ Not delivered: stock is back, the order is cancelled.
 
 ---
 
+### Phase 15c — The export in both calendars, and more for the accountant 🟡 Built (backend 493 tests pass; Mini App 59 tests pass); my test in Telegram
+
+**Goal:** Ethiopian shops and accountants count in ዓ.ም.: the export works
+by Ethiopian month too, and the file says more.
+
+- **Ethiopian or Gregorian month (D79):** the Export sheet has a calendar
+  switch (Ethiopian first in Amharic). An Ethiopian month has its own days
+  (Meskerem 2019 = Sep 11 – Oct 10, 2026); Nehase includes Pagume, so a year
+  is 12 files.
+- **Both calendars in the file:** the title shows both ("September 2026" and
+  "ነሐሴ 26, 2018 – መስከረም 20, 2019 ዓ.ም."), and every sheet has an
+  "Ethiopian date" column next to the date.
+- **New sheets:** By day (orders, paid, money received, discounts, every
+  day: the cash book) and By product (quantity, money, discounts, best first).
+- **Summary:** also the average sale and the orders by kind (delivery,
+  pickup, in the shop).
+- The calendar conversion: `app/agents/ethiopian.py` and the Mini App's
+  `lib/ethiopian.ts` (the same formula, checked against known dates).
+
+---
+
 ## 6. Decisions
 
 Answer each before the phase listed, and record the answer here.
@@ -1472,6 +1493,7 @@ Answer each before the phase listed, and record the answer here.
 | D76 | Delivery orders are paid on arrival: which staff buttons? | Phase 15b | 🚚 On the way first; then ✅ Delivered & paid (records the payment) or ❌ Not delivered |
 | D77 | When does a delivery order take its items out of stock? | Phase 15b | At On the way (it left the shop); Not delivered puts them back and cancels the order |
 | D78 | Asking for the payment screenshot | Phase 15b | Clearly, as the last line after a pickup order; delivery orders: send it when paying by transfer on arrival |
+| D79 | The export's month: Gregorian or Ethiopian? | Phase 15c | Both: the owner chooses; every date is in both calendars; Nehase includes Pagume |
 
 ---
 

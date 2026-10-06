@@ -183,12 +183,15 @@ the staff group: `confirmed` (paid) → `out_for_delivery` → `delivered`
 (pickup orders go straight from `confirmed` to `delivered`, "picked up").
 
 ### `POST /orders/export` (owners, Phase 15, D72/D73)
-`{"month": "2026-09"}` (Addis Ababa months, by the day the order was placed;
-not a month that hasn't started). The shop's bot sends an Excel file to the
-owner's private chat (files opened inside the Mini App often don't download):
-sheets Summary, Sales (one row per item of every paid order) and Orders.
+`{"month": "2026-09"}`, or an Ethiopian month (Phase 15c, D79):
+`{"month": "2019-01", "calendar": "ethiopian"}` = Meskerem 2019 (`12` =
+Nehase with Pagume). Addis Ababa days, by the day the order was placed; not a
+month that hasn't started. The shop's bot sends an Excel file to the owner's
+private chat (files opened inside the Mini App often don't download): sheets
+Summary, By day, By product, Sales (one row per item of every paid order) and
+Orders, every date in both calendars.
 ```json
-{"sent": true, "file": "Selam-Shoes-2026-09.xlsx", "orders": 42, "revenue": 185000}
+{"sent": true, "file": "Selam-Shoes-Meskerem-2019-EC.xlsx", "orders": 42, "revenue": 185000}
 ```
 409 if the bot can't write to the owner yet (they never pressed Start in it):
 show `detail`, which names the bot. 422 for a bad or future month.
