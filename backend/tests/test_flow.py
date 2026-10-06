@@ -206,6 +206,63 @@ class FakeDb:
     async def note_payment_confirmer(self, store_id, payment_id, telegram_id, name):
         self.payments[-1]["confirmed_by"] = (telegram_id, name)
 
+    def _save(self, order, **changes):
+        self.orders[order.idempotency_key] = order.model_copy(update=changes)
+
+    async def _changeable(self, store_id, order_id):
+        order = await self.get_order(store_id, order_id)
+        if order is None:
+            raise NotFoundError("order_not_found")
+        if order.status == "cancelled":
+            raise OrderRejectedError("order_cancelled")
+        return order
+
+    async def dispatch_order(self, store_id, order_id, by_telegram_id=None, by_name=None):
+        """Like dispatch_order (migration 016): unpaid, the stock goes down now."""
+        order = await self._changeable(store_id, order_id)
+        if order.fulfillment_method != "delivery":
+            raise OrderRejectedError("not_delivery")
+        if order.status not in ("pending", "confirmed"):
+            raise OrderRejectedError("already_dispatched")
+        if order.payment_status == "unpaid":
+            for item in order.items:
+                variant = self.variants[item.variant_id]
+                own_hold = item.quantity if variant.held >= item.quantity else 0
+                if variant.stock_quantity - (variant.held - own_hold) < item.quantity:
+                    raise OutOfStockError("out_of_stock", str(item.variant_id))
+            for item in order.items:
+                variant = self.variants[item.variant_id]
+                self.variants[item.variant_id] = variant.model_copy(update={
+                    "stock_quantity": variant.stock_quantity - item.quantity,
+                    "held": max(variant.held - item.quantity, 0)})
+        self._save(order, status="out_for_delivery")
+        self.status_changes.append((order_id, "out_for_delivery", by_telegram_id, by_name))
+
+    async def deliver_order(self, store_id, order_id, amount, method, by_telegram_id=None, by_name=None):
+        order = await self._changeable(store_id, order_id)
+        if order.status == "delivered":
+            raise OrderRejectedError("already_delivered")
+        if order.status != "out_for_delivery":
+            raise OrderRejectedError("not_on_the_way")
+        if order.payment_status == "unpaid" and amount:
+            self.payments.append({"order_id": order_id, "amount": amount, "method": method,
+                                  "confirmed_by": (by_telegram_id, by_name)})
+        self._save(order, status="delivered", payment_status="paid")
+        self.status_changes.append((order_id, "delivered", by_telegram_id, by_name))
+
+    async def return_order(self, store_id, order_id, by_telegram_id=None, by_name=None):
+        order = await self._changeable(store_id, order_id)
+        if order.status != "out_for_delivery":
+            raise OrderRejectedError("not_on_the_way")
+        if order.payment_status != "unpaid":
+            raise OrderRejectedError("already_paid")
+        for item in order.items:
+            variant = self.variants[item.variant_id]
+            self.variants[item.variant_id] = variant.model_copy(
+                update={"stock_quantity": variant.stock_quantity + item.quantity})
+        self._save(order, status="cancelled")
+        self.status_changes.append((order_id, "cancelled", by_telegram_id, by_name))
+
     async def set_order_status(self, store_id, order_id, status, from_statuses, by_id=None, by_name=None):
         """Phase 15: paid orders only, and only from `from_statuses` (like the database)."""
         order = await self.get_order(store_id, order_id)
@@ -733,15 +790,16 @@ async def test_delivery_order_is_placed_and_handed_to_staff():
     assert world.last_text() == "\n\n".join([
         t("delivery_handoff", "en", number=order_number(order.id), total="5,000 ETB", phone="0911223344"),
         f"{t('pay_on_delivery_with', 'en')}\n{PAYMENT_TEXT}",
+        t("screenshot_on_delivery", "en"),  # D78: a transfer on arrival: send the screenshot
     ])
     assert "delivery fee not included" in world.last_text()
-    assert t("after_paying", "en") not in world.last_text()  # no screenshot step for delivery
+    assert t("after_paying", "en") not in world.last_text()  # paid on arrival, not now
     # Staff: the order, the phone, the @username, and the buttons.
     alert_id = world.telegram.last_message_id(STAFF_CHAT)
     alert = world.telegram.to(STAFF_CHAT)[-1]
     assert alert.startswith("🚚 New DELIVERY order") and "0911223344" in alert and "@abebe_k" in alert
-    assert [label for label, _ in world.telegram.buttons(alert_id)] == [
-        f"✅ Confirm payment #{order_number(order.id)}", "▶️ Hand back to bot"]
+    assert [label for label, _ in world.telegram.buttons(alert_id)] == [  # D76: paid on arrival
+        f"🚚 On the way #{order_number(order.id)}", "▶️ Hand back to bot"]
     # The bot stays quiet while staff arrange it.
     assert world.conversation.bot_paused
     replies_before = len(world.telegram.to(CUSTOMER))
@@ -1098,14 +1156,15 @@ def test_pickup_message_shows_location_hours_and_instructions():
     text = payment_message(store, _order("pickup"), "am")
     assert t("pickup_where", "am", location="Bole, next to Edna Mall") in text
     assert t("pickup_hours", "am", hours=STORE.opening_hours) in text
-    assert text.endswith("Bring your order number.")
+    assert text.endswith(f"Bring your order number.\n\n{t('after_paying', 'am')}")  # D78: last
 
 
 def test_delivery_message_with_fees_and_accounts():
     store = STORE.model_copy(update={"delivery_info": "Bole & CMC 150 ETB"})
     text = delivery_message(store, _order("delivery"), "en")
     assert f"{t('delivery_fees', 'en')}\nBole & CMC 150 ETB" in text
-    assert text.endswith(f"{t('pay_on_delivery_with', 'en')}\n{PAYMENT_TEXT}")
+    assert text.endswith(f"{t('pay_on_delivery_with', 'en')}\n{PAYMENT_TEXT}\n\n"
+                         f"{t('screenshot_on_delivery', 'en')}")
 
 
 def test_delivery_message_without_accounts():

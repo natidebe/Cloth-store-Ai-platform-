@@ -86,6 +86,8 @@ _OUT_OF_STOCK = {"out_of_stock", "insufficient_stock"}
 _REJECTED = {
     "empty_order", "invalid_quantity", "price_missing", "invalid_fulfillment",
     "address_required", "order_cancelled", "already_paid", "incomplete_order",
+    # Delivery orders (migration 016)
+    "not_delivery", "already_dispatched", "already_delivered", "not_on_the_way",
     # Counter sales (migration 012)
     "duplicate_item", "invalid_price", "price_above_list", "discount_too_large", "held_by_online_order",
 }
@@ -337,6 +339,39 @@ class SupabaseService:
             rows.extend(page)
             if len(page) < page_size:
                 return rows
+
+    # Delivery orders paid on arrival (Phase 15b, migration 016): each step all or nothing.
+
+    async def dispatch_order(self, store_id: UUID, order_id: UUID, by_telegram_id: int | None,
+                             by_name: str | None) -> None:
+        """🚚 On the way: an unpaid order's items leave the stock now (D77).
+        Raises OutOfStockError (detail: the variant), NotFoundError, or
+        OrderRejectedError (not_delivery, already_dispatched, order_cancelled)."""
+        await self._run(self._db.rpc("dispatch_order", {
+            "p_store_id": str(store_id), "p_order_id": str(order_id),
+            "p_by_telegram_id": by_telegram_id, "p_by_name": by_name,
+        }))
+
+    async def deliver_order(self, store_id: UUID, order_id: UUID, amount: Decimal | None, method: str | None,
+                            by_telegram_id: int | None, by_name: str | None) -> UUID | None:
+        """✅ Delivered & paid: delivered, and the payment recorded if it wasn't
+        paid yet (returns its id). Raises OrderRejectedError (already_delivered,
+        not_on_the_way, order_cancelled) or NotFoundError."""
+        payment_id = await self._run(self._db.rpc("deliver_order", {
+            "p_store_id": str(store_id), "p_order_id": str(order_id),
+            "p_amount": str(amount) if amount is not None else None, "p_method": method,
+            "p_by_telegram_id": by_telegram_id, "p_by_name": by_name,
+        }))
+        return UUID(payment_id) if payment_id else None
+
+    async def return_order(self, store_id: UUID, order_id: UUID, by_telegram_id: int | None,
+                           by_name: str | None) -> None:
+        """❌ Not delivered: the stock goes back and the order is cancelled.
+        Raises OrderRejectedError (not_on_the_way, already_paid, order_cancelled)."""
+        await self._run(self._db.rpc("return_order", {
+            "p_store_id": str(store_id), "p_order_id": str(order_id),
+            "p_by_telegram_id": by_telegram_id, "p_by_name": by_name,
+        }))
 
     async def set_order_status(self, store_id: UUID, order_id: UUID, status: str, from_statuses: list[str],
                                changed_by_telegram_id: int | None = None,

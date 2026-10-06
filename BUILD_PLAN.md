@@ -1348,6 +1348,46 @@ customer gets the thank-you, and the buttons are gone.
 
 ---
 
+### Phase 15b — Delivery paid on arrival, and asking for the screenshot 🟡 Built (backend 490 tests pass; the 4 new database tests wait for migration 016); migration 016 to run, then my test in Telegram
+
+**Goal:** before going live: delivery customers pay when the items arrive
+(D29), so staff must be able to send the order out before any payment, and
+the stock must be right while it's on the road.
+
+**Delivery orders (D76, D77)** — the staff group alert for a new delivery
+order shows the order's next step, and each tap tells the customer:
+
+| Staff tap | Order | Stock | Customer gets |
+|---|---|---|---|
+| 🚚 On the way | `out_for_delivery` | goes down now (the item left the shop) | "On the way! You pay 5,000 ETB when you receive it" + the shop's accounts + "send the screenshot if you pay by transfer" |
+| ✅ Delivered & paid | `delivered`, paid (the payment is recorded, with who) | — | "Delivered and paid. Thank you!" |
+| ❌ Not delivered | `cancelled` | comes back | "Your order was cancelled. If you still want it, write to us." |
+
+- Before, a delivery order showed "Confirm payment" first, and its items were
+  held for 5 minutes only: the last piece could be sold while on the road.
+- A screenshot the customer sends while it's on the way reaches the staff
+  group with ✅ Delivered & paid under it.
+- A payment confirmed another way while on the way doesn't take the stock a
+  second time; a paid order can't be "Not delivered" (refund by hand first).
+- The buttons always follow the order's stage (`order_buttons` in
+  `app/agents/staff.py`). Pickup is unchanged: Confirm payment → Ready for
+  pickup → Picked up.
+
+**The screenshot (D78):** after a pickup order, "📸 Important: after paying,
+send a screenshot of the payment here" is now the last thing the customer
+reads; delivery orders say to send it when paying by transfer on arrival.
+
+**How:** migration `016_delivery_flow.sql`: `dispatch_order`,
+`deliver_order`, `return_order` (each all or nothing, rule 11) and
+`confirm_payment` no longer taking stock for an order already on the way.
+
+**Check:** order with delivery → the group shows 🚚 On the way → tap it: the
+customer is told what to pay, stock goes down by one → tap ✅ Delivered &
+paid: the order is paid in the Mini App and in the analytics. Another order:
+On the way → ❌ Not delivered: stock is back, the order is cancelled.
+
+---
+
 ## 6. Decisions
 
 Answer each before the phase listed, and record the answer here.
@@ -1429,6 +1469,9 @@ Answer each before the phase listed, and record the answer here.
 | D73 | Who may export: owners only, or staff too? | Phase 15 | Owners only |
 | D74 | Who may tap On the way / Delivered: anyone in the staff group? | Phase 15 | Yes, like D27; the order keeps who and when |
 | D75 | Pickup orders: add a "Ready for pickup" stage (database change) or only send the message? | Phase 15 | A message only: the stage stays `confirmed` until "Picked up" (`delivered`) |
+| D76 | Delivery orders are paid on arrival: which staff buttons? | Phase 15b | 🚚 On the way first; then ✅ Delivered & paid (records the payment) or ❌ Not delivered |
+| D77 | When does a delivery order take its items out of stock? | Phase 15b | At On the way (it left the shop); Not delivered puts them back and cancels the order |
+| D78 | Asking for the payment screenshot | Phase 15b | Clearly, as the last line after a pickup order; delivery orders: send it when paying by transfer on arrival |
 
 ---
 

@@ -227,9 +227,16 @@ TEXTS: dict[str, dict[Language, str]] = {
         "en": "Our team will send you the payment details shortly.",
         "am": "የክፍያ መረጃውን ቡድናችን በቅርቡ ይልክልዎታል።",
     },
+    # D78: asked for clearly, as the last thing the customer reads.
     "after_paying": {
-        "en": "After paying, please send a screenshot of the payment here.",
-        "am": "ከከፈሉ በኋላ የክፍያውን ስክሪንሾት እዚህ ይላኩልን።",
+        "en": "📸 Important: after paying, send a screenshot of the payment here. "
+              "We'll check it and confirm your order.",
+        "am": "📸 አስፈላጊ፦ ከከፈሉ በኋላ የክፍያውን ስክሪንሾት እዚህ ይላኩልን። አይተን ትዕዛዝዎን እናረጋግጣለን።",
+    },
+    # Delivery orders are paid on arrival (D29): by transfer, a screenshot helps staff.
+    "screenshot_on_delivery": {
+        "en": "📸 If you pay by Telebirr or bank transfer, please send the screenshot here.",
+        "am": "📸 በቴሌብር ወይም በባንክ ከከፈሉ፣ እባክዎ ስክሪንሾቱን እዚህ ይላኩልን።",
     },
 
     # Sent only after a STAFF member confirmed the payment (Phase 9).
@@ -241,6 +248,21 @@ TEXTS: dict[str, dict[Language, str]] = {
     "order_on_the_way": {
         "en": "🚚 Your order #{number} is on the way!",
         "am": "🚚 ትዕዛዝ #{number} በመንገድ ላይ ነው!",
+    },
+    # Phase 15b (D76): a delivery order not paid yet: paid when it arrives.
+    "order_on_the_way_pay": {
+        "en": "🚚 Your order #{number} is on the way! You pay {total} when you receive it "
+              "(plus the delivery fee).",
+        "am": "🚚 ትዕዛዝ #{number} በመንገድ ላይ ነው! ዕቃውን ሲረከቡ {total} ይከፍላሉ (የማድረሻ ክፍያ ተጨማሪ ነው)።",
+    },
+    "you_can_pay_with": {"en": "💵 You can pay with:", "am": "💵 በእነዚህ መክፈል ይችላሉ:"},
+    "order_delivered_paid": {
+        "en": "✅ Order #{number} delivered and paid. Thank you for shopping with {shop}!",
+        "am": "✅ ትዕዛዝ #{number} ደርሷል፤ ክፍያውንም ተቀብለናል። ከ{shop} ስለገዙ እናመሰግናለን!",
+    },
+    "order_not_delivered": {
+        "en": "Your order #{number} was cancelled. If you still want it, write to us here.",
+        "am": "ትዕዛዝ #{number} ተሰርዟል። አሁንም ከፈለጉት እዚህ ይጻፉልን።",
     },
     "order_delivered": {
         "en": "✅ Your order #{number} was delivered. Thank you for shopping with {shop}!",
