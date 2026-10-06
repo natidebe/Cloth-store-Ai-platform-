@@ -5,6 +5,7 @@ import type {
   CounterSaleInput,
   CounterSaleResult,
   Analytics,
+  ExportCalendar,
   ExportResult,
   BotChange,
   Connections,
@@ -85,9 +86,12 @@ export const storeApi = {
     return api<OrderPage>(`${store(storeId)}/orders?${query.toString()}`);
   },
 
-  /** Owners: "2026-09" → the bot sends the month's Excel file to their private chat. */
-  exportOrders: (storeId: string, month: string) =>
-    api<ExportResult>(`${store(storeId)}/orders/export`, { method: 'POST', body: { month } }),
+  /** Owners: "2026-09" (or "2019-01" ዓ.ም.) → the bot sends the month's Excel file to their private chat. */
+  exportOrders: (storeId: string, month: string, calendar: ExportCalendar) =>
+    api<ExportResult>(`${store(storeId)}/orders/export`, {
+      method: 'POST',
+      body: { month, calendar },
+    }),
 
   availability: (storeId: string, variantId: string) =>
     api<Availability>(`${store(storeId)}/variants/${variantId}/availability`),

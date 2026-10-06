@@ -333,7 +333,11 @@ const en = {
   },
   exportSheet: {
     title: 'Export for the accountant',
-    hint: 'An Excel file with every sale and order of the month, the totals and the payment methods. The bot sends it to your Telegram.',
+    hint: 'An Excel file with every sale and order of the month, the totals by day, by product and by payment method. The bot sends it to your Telegram.',
+    calendar: 'Calendar',
+    ethiopian: 'Ethiopian (E.C.)',
+    gregorian: 'Gregorian (G.C.)',
+    bothCalendars: 'Every date in the file is shown in both calendars.',
     month: 'Month',
     send: 'Send to my Telegram',
     sent: 'Sent! Open your chat with @{{bot}}.',
