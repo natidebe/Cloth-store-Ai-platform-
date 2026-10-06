@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 
+import { ethiopianMonthName, recentEthiopianMonths, toEthiopian } from '@/lib/ethiopian';
 import { recentMonths } from '@/lib/format';
 import { analytics, me, order, STORE_ID } from '@/test/fixtures';
 import { renderApp } from '@/test/render';
@@ -193,11 +194,47 @@ describe('Order stages and the export (Phase 15)', () => {
     expect(within(sheet).getAllByRole('radio')).toHaveLength(4);
     await user.click(within(sheet).getAllByRole('radio')[1] as HTMLElement);
     await user.click(within(sheet).getByRole('button', { name: 'Send to my Telegram' }));
-    await waitFor(() => expect(asked).toEqual({ month: lastMonth }));
+    await waitFor(() => expect(asked).toEqual({ month: lastMonth, calendar: 'gregorian' }));
     expect(
       await screen.findByText('Sent! Open your chat with @nati_fashion_bot.'),
     ).toBeInTheDocument();
     expect(thisMonth).toMatch(/^\d{4}-\d{2}$/);
+  });
+
+  it('exports an Ethiopian month', async () => {
+    let asked: unknown;
+    server.use(
+      http.post(`${storeApiBase}/orders/export`, async ({ request }) => {
+        asked = await request.json();
+        return HttpResponse.json({ sent: true, file: 'x.xlsx', orders: 3, revenue: 9000 });
+      }),
+    );
+    const { user } = renderApp(`/s/${STORE_ID}/orders`);
+    await user.click(await screen.findByRole('button', { name: 'Export for the accountant' }));
+    const sheet = await screen.findByRole('dialog');
+    await user.click(within(sheet).getByRole('tab', { name: 'Ethiopian (E.C.)' }));
+    const [thisMonth] = recentEthiopianMonths();
+    expect(
+      within(sheet).getByRole('radio', { name: ethiopianMonthName(thisMonth ?? '', 'en') }),
+    ).toBeInTheDocument();
+    await user.click(within(sheet).getByRole('button', { name: 'Send to my Telegram' }));
+    await waitFor(() => expect(asked).toEqual({ month: thisMonth, calendar: 'ethiopian' }));
+  });
+
+  it('converts to the Ethiopian calendar', () => {
+    expect(toEthiopian(2026, 9, 11)).toEqual([2019, 1, 1]); // new year
+    expect(toEthiopian(2023, 9, 11)).toEqual([2015, 13, 6]); // Pagume 6
+    expect(toEthiopian(2027, 1, 7)).toEqual([2019, 4, 29]); // Genna
+    // Pagume belongs to Nehase's export; 22:00 UTC on Sep 10 is already Sep 11 (new year) in Addis.
+    expect(recentEthiopianMonths(new Date('2026-09-08T09:00:00Z'), 2)).toEqual([
+      '2018-12',
+      '2018-11',
+    ]);
+    expect(recentEthiopianMonths(new Date('2026-09-10T22:00:00Z'), 2)).toEqual([
+      '2019-01',
+      '2018-12',
+    ]);
+    expect(ethiopianMonthName('2018-12', 'am')).toBe('ነሐሴ + ጳጉሜ 2018');
   });
 
   it('says what to do when the bot cannot write to the owner', async () => {

@@ -67,6 +67,9 @@ export interface Me {
 /** Phase 15 (D70): yesterday's numbers every morning, in Amharic or English, or off. */
 export type DailySummary = 'am' | 'en' | 'off';
 
+/** Phase 15c (D79): export a Gregorian (GC) or an Ethiopian (ዓ.ም.) month. */
+export type ExportCalendar = 'gregorian' | 'ethiopian';
+
 /** Phase 15 (D72): a month's Excel file, sent to the owner by the shop's bot. */
 export interface ExportResult {
   sent: boolean;

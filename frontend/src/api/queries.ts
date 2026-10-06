@@ -9,6 +9,7 @@ import {
 import { storeApi } from './endpoints';
 import type {
   CounterSaleInput,
+  ExportCalendar,
   GridRow,
   OrderFilter,
   Period,
@@ -211,7 +212,10 @@ export function useSaveSettings(storeId: string) {
 }
 
 export function useExportOrders(storeId: string) {
-  return useMutation({ mutationFn: (month: string) => storeApi.exportOrders(storeId, month) });
+  return useMutation({
+    mutationFn: ({ month, calendar }: { month: string; calendar: ExportCalendar }) =>
+      storeApi.exportOrders(storeId, month, calendar),
+  });
 }
 
 export function useLinkCode(storeId: string) {
