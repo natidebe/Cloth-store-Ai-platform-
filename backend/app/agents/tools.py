@@ -45,7 +45,7 @@ class StaffAlert:
     """A message for the staff group about one customer (sent by staff.py)."""
     text: str
     telegram_id: int  # the customer it's about; staff can Reply to it
-    order_id: UUID | None = None  # adds a "Confirm payment" button
+    order_id: UUID | None = None  # adds the order's next step (e.g. "Confirm payment")
     hand_back: bool = False  # adds a "Hand back to bot" button
     photo_file_id: str | None = None  # send this photo, with the text as its caption
 
@@ -137,7 +137,6 @@ def payment_message(store: Store, order: OrderWithItems, language: Language = "e
         f"{t('order_holding', language, store, minutes=ORDER_HOLD_MINUTES)}",
         f"{t('how_to_pay', language, store)}\n"
         f"{store.payment_instructions or t('payment_default', language, store)}",
-        t("after_paying", language, store),
     ]
     pickup = []
     if store.location:
@@ -148,6 +147,7 @@ def payment_message(store: Store, order: OrderWithItems, language: Language = "e
         pickup.append(store.pickup_instructions)
     if pickup:
         parts.append("\n".join(pickup))
+    parts.append(t("after_paying", language, store))  # D78: last, so it isn't missed
     return "\n\n".join(parts)
 
 
@@ -161,7 +161,8 @@ def delivery_message(store: Store, order: OrderWithItems, language: Language = "
     if store.delivery_info:
         parts.append(f"{t('delivery_fees', language, store)}\n{store.delivery_info}")
     if store.payment_instructions:
-        parts.append(f"{t('pay_on_delivery_with', language, store)}\n{store.payment_instructions}")
+        parts.append(f"{t('pay_on_delivery_with', language, store)}\n{store.payment_instructions}\n\n"
+                     f"{t('screenshot_on_delivery', language, store)}")
     else:
         parts.append(t("pay_on_delivery", language, store))
     return "\n\n".join(parts)
@@ -192,8 +193,9 @@ def delivery_order_alert(customer: Customer, order: OrderWithItems,
         f"🚚 New DELIVERY order #{order_number(order.id)} — please call the customer\n"
         f"{items}\nTotal: {format_price(order.total_price)} (delivery fee not included)\n"
         f"Customer: {contact} (Telegram id {customer.telegram_id})\n"
-        "Arrange the delivery address. The customer was told they pay when they receive "
-        "the items. The bot "
+        "Arrange the delivery address. The customer pays when they receive the items: "
+        "tap 🚚 On the way when it leaves the shop (the stock goes down then), then "
+        "✅ Delivered & paid, or ❌ Not delivered (the stock comes back). The bot "
         "stays silent in this chat until you hand it back. Reply to this message to "
         "write to the customer."
     )

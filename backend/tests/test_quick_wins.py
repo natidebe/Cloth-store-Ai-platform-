@@ -1,6 +1,6 @@
-"""Phase 15, quick wins (D70–D75): the owner's morning summary, the month's
-export for the accountant, and order updates to customers from the staff
-group. No network: Telegram and the database are faked."""
+"""Phase 15, quick wins (D70–D75) and 15b (D76–D78): the owner's morning
+summary, the month's export for the accountant, and order updates to
+customers from the staff group (delivery: paid on arrival). No network: Telegram and the database are faked."""
 import io
 import json
 from datetime import datetime, timedelta, timezone
@@ -14,12 +14,21 @@ from openpyxl import load_workbook
 from app.agents.daily_summary import ADDIS, DailySummaries, summary_text, yesterday
 from app.agents.export import ExportError, build_export, month_bounds
 from app.agents.messages import t
-from app.agents.staff import next_steps
+from app.agents.staff import order_buttons
 from app.agents.tools import order_number
-from app.models.schemas import Store
+from app.models.schemas import OrderWithItems, Store
 from app.services.telegram_service import TELEGRAM_API, TelegramService
 from tests import test_miniapp as mini
-from tests.test_flow import CUSTOMER, STAFF_CHAT, STORE, World, placed_order
+from tests.test_flow import (
+    AF1_WHITE_42,
+    CUSTOMER,
+    PAYMENT_TEXT,
+    STAFF_CHAT,
+    STORE,
+    World,
+    placed_order,
+    up_to_confirm,
+)
 from tests.test_miniapp import MEMBER, OWNER, STORE_A, world  # noqa: F401  (fixture)
 from tests.test_staff import STAFF_MEMBER, _button_answers, _press, _staff
 
@@ -32,20 +41,27 @@ def anyio_backend():
     return "asyncio"
 
 
-# --- 3. Order updates to customers (D74/D75) -----------------------------------------------
+# --- 3. Order updates to customers (D74–D78) ------------------------------------------------
 
-async def _paid(w: World, fulfillment="pickup"):
-    """A placed order, paid with the staff group's button. Returns the order
+async def _paid_pickup(w: World):
+    """A pickup order, paid with the staff group's button. Returns the order
     and the id of the staff note carrying its next steps."""
     order = await placed_order(w)
-    w.db.orders[order.idempotency_key] = order.model_copy(update={"fulfillment_method": fulfillment})
     await w.send_photo()
     await _staff(w, _press(f"pay:{order.id}", w.telegram.last_message_id(STAFF_CHAT)))
     return order, w.telegram.last_message_id(STAFF_CHAT)
 
 
-def _status(w, order):
-    return next(o for o in w.db.orders.values() if o.id == order.id).status
+async def _delivery_order(w: World):
+    """A delivery order (paid on arrival, D29): the order and its staff alert."""
+    await up_to_confirm(w, fulfillment="btn_delivery")
+    await w.tap(t("btn_confirm", "en"))
+    [order] = w.db.orders.values()
+    return order, w.telegram.last_message_id(STAFF_CHAT)
+
+
+def _order(w, order):
+    return next(o for o in w.db.orders.values() if o.id == order.id)
 
 
 def _buttons_now(w):
@@ -55,69 +71,107 @@ def _buttons_now(w):
 
 
 @pytest.mark.anyio
-async def test_after_payment_staff_get_the_next_steps():
+async def test_a_delivery_order_goes_on_the_way_then_is_delivered_and_paid():
     w = World()
-    order, note = await _paid(w, "pickup")
+    order, alert = await _delivery_order(w)
     number = order_number(order.id)
-    assert w.telegram.buttons(note) == [(f"📦 Ready for pickup #{number}", f"ready:{order.id}"),
-                                            (f"✅ Picked up #{number}", f"done:{order.id}")]
-    assert "Confirmed by Sara" in w.telegram.to(STAFF_CHAT)[-1]
+    # D76: no "Confirm payment" first: the customer pays on arrival.
+    assert w.telegram.buttons(alert) == [(f"🚚 On the way #{number}", f"ship:{order.id}"),
+                                         ("▶️ Hand back to bot", f"resume:{CUSTOMER}")]
+    assert w.db.variants[AF1_WHITE_42].stock_quantity == 2
 
-    w = World()
-    order, note = await _paid(w, "delivery")
-    number = order_number(order.id)
-    assert w.telegram.buttons(note) == [(f"🚚 On the way #{number}", f"ship:{order.id}"),
-                                            (f"✅ Delivered #{number}", f"done:{order.id}")]
-
-
-@pytest.mark.anyio
-async def test_delivery_on_the_way_then_delivered():
-    w = World()
-    order, note = await _paid(w, "delivery")
-    number = order_number(order.id)
-
-    await _staff(w, _press(f"ship:{order.id}", note))
-    assert _status(w, order) == "out_for_delivery"
-    assert w.telegram.to(CUSTOMER)[-1] == t("order_on_the_way", "en", number=number)
-    assert _buttons_now(w) == [(f"✅ Delivered #{number}", f"done:{order.id}")]  # only what's left
-    assert "is on the way" in w.telegram.to(STAFF_CHAT)[-1] and "(Sara)" in w.telegram.to(STAFF_CHAT)[-1]
+    await _staff(w, _press(f"ship:{order.id}", alert))
+    assert _order(w, order).status == "out_for_delivery"
+    assert w.db.variants[AF1_WHITE_42].stock_quantity == 1  # D77: it left the shop
+    told = w.telegram.to(CUSTOMER)[-1]
+    assert told.startswith(t("order_on_the_way_pay", "en", number=number, total="5,000 ETB"))
+    assert PAYMENT_TEXT in told and t("screenshot_on_delivery", "en") in told  # D78
+    assert _buttons_now(w) == [(f"✅ Delivered & paid #{number}", f"done:{order.id}"),
+                               (f"❌ Not delivered #{number}", f"back:{order.id}")]
     assert w.db.status_changes[-1] == (order.id, "out_for_delivery", STAFF_MEMBER, "Sara")  # who (D74)
 
-    told = len(w.telegram.to(CUSTOMER))
-    await _staff(w, _press(f"ship:{order.id}", note))  # tapped twice
+    await _staff(w, _press(f"ship:{order.id}", alert))  # tapped twice
     assert _button_answers(w)[-1] == (f"Order #{number} is already on the way.", True)
-    assert len(w.telegram.to(CUSTOMER)) == told
+    assert w.db.variants[AF1_WHITE_42].stock_quantity == 1  # not taken twice
 
-    await _staff(w, _press(f"done:{order.id}", note))
-    assert _status(w, order) == "delivered"
-    assert w.telegram.to(CUSTOMER)[-1] == t("order_delivered", "en", number=number, shop=STORE.name)
+    # The customer pays by transfer and sends the screenshot: staff see the order's next step.
+    await w.send_photo(caption="paid")
+    screenshot = w.telegram.last_message_id(STAFF_CHAT)
+    assert (f"✅ Delivered & paid #{number}", f"done:{order.id}") in w.telegram.buttons(screenshot)
+
+    await _staff(w, _press(f"done:{order.id}", screenshot))
+    paid = _order(w, order)
+    assert (paid.status, paid.payment_status) == ("delivered", "paid")
+    assert w.db.payments[-1]["amount"] == order.total_price
+    assert w.db.payments[-1]["confirmed_by"] == (STAFF_MEMBER, "Sara")
+    assert w.db.variants[AF1_WHITE_42].stock_quantity == 1  # already taken at On the way
+    assert w.telegram.to(CUSTOMER)[-1] == t("order_delivered_paid", "en", number=number, shop=STORE.name)
     assert _buttons_now(w) == []
+    assert not w.conversation.bot_paused  # finished: the bot answers again
 
-    await _staff(w, _press(f"ship:{order.id}", note))  # never backwards
-    assert _status(w, order) == "delivered"
+    await _staff(w, _press(f"done:{order.id}", alert))
     assert _button_answers(w)[-1] == (f"Order #{number} was already delivered.", True)
+    assert len(w.db.payments) == 1
 
 
 @pytest.mark.anyio
-async def test_pickup_ready_then_picked_up():
+async def test_not_delivered_puts_the_stock_back_and_cancels():
     w = World()
-    order, note = await _paid(w, "pickup")
+    order, alert = await _delivery_order(w)
     number = order_number(order.id)
+    await _staff(w, _press(f"ship:{order.id}", alert))
+    assert w.db.variants[AF1_WHITE_42].stock_quantity == 1
+
+    await _staff(w, _press(f"back:{order.id}", alert))
+    assert _order(w, order).status == "cancelled"
+    assert w.db.variants[AF1_WHITE_42].stock_quantity == 2
+    assert w.telegram.to(CUSTOMER)[-1] == t("order_not_delivered", "en", number=number)
+    assert _buttons_now(w) == [] and w.db.payments == []
+
+
+@pytest.mark.anyio
+async def test_delivered_needs_on_the_way_first_and_sold_out_is_refused():
+    w = World()
+    order, alert = await _delivery_order(w)
+    number = order_number(order.id)
+    await _staff(w, _press(f"done:{order.id}", alert))
+    assert _button_answers(w)[-1] == (f"Tap 🚚 On the way for order #{number} first.", True)
+
+    w.db.variants[AF1_WHITE_42] = w.db.variants[AF1_WHITE_42].model_copy(
+        update={"stock_quantity": 0, "held": 0})  # sold in the shop meanwhile
+    told = len(w.telegram.to(CUSTOMER))
+    await _staff(w, _press(f"ship:{order.id}", alert))
+    answer, popup = _button_answers(w)[-1]
+    assert popup and "sold out" in answer and "Nothing was changed" in answer
+    assert _order(w, order).status == "pending" and len(w.telegram.to(CUSTOMER)) == told
+
+
+@pytest.mark.anyio
+async def test_pickup_is_paid_first_then_ready_then_picked_up():
+    w = World()
+    order, note = await _paid_pickup(w)
+    number = order_number(order.id)
+    assert w.telegram.buttons(note) == [(f"📦 Ready for pickup #{number}", f"ready:{order.id}"),
+                                        (f"✅ Picked up #{number}", f"done:{order.id}")]
+    assert "Confirmed by Sara" in w.telegram.to(STAFF_CHAT)[-1]
 
     await _staff(w, _press(f"ready:{order.id}", note))
-    assert _status(w, order) == "confirmed"  # D75: a message only
+    assert _order(w, order).status == "confirmed"  # D75: a message only
     ready = w.telegram.to(CUSTOMER)[-1]
     assert ready.startswith(t("order_ready", "en", number=number))
     assert t("pickup_hours", "en", hours=STORE.opening_hours) in ready  # when to come, from the profile
     assert _buttons_now(w) == [(f"✅ Picked up #{number}", f"done:{order.id}")]
 
     await _staff(w, _press(f"done:{order.id}", note))
-    assert _status(w, order) == "delivered"
+    assert _order(w, order).status == "delivered"
     assert w.telegram.to(CUSTOMER)[-1] == t("order_picked_up", "en", number=number, shop=STORE.name)
+
+    await _staff(w, _press(f"done:{order.id}", note))
+    assert _button_answers(w)[-1] == (f"Order #{number} was already picked up.", True)
 
 
 @pytest.mark.anyio
-async def test_steps_are_refused_for_unpaid_orders_and_the_wrong_kind():
+async def test_pickup_steps_are_refused_unpaid_and_delivery_buttons_dont_fit():
     w = World()
     order = await placed_order(w)  # not paid
     await w.send_photo()
@@ -126,50 +180,70 @@ async def test_steps_are_refused_for_unpaid_orders_and_the_wrong_kind():
     await _staff(w, _press(f"done:{order.id}", alert))
     answer, popup = _button_answers(w)[-1]
     assert popup and "isn't paid yet" in answer
-    assert _status(w, order) == "pending" and len(w.telegram.to(CUSTOMER)) == told
+    assert _order(w, order).status == "pending" and len(w.telegram.to(CUSTOMER)) == told
 
     w = World()
-    order, note = await _paid(w, "pickup")
-    await _staff(w, _press(f"ship:{order.id}", note))  # "on the way" for a pickup order
-    assert _button_answers(w)[-1] == ("This button doesn't fit this order.", True)
-    assert _status(w, order) == "confirmed"
+    order, note = await _paid_pickup(w)
+    for step in ("ship", "back"):  # delivery buttons on a pickup order
+        await _staff(w, _press(f"{step}:{order.id}", note))
+        assert _button_answers(w)[-1] == ("This button doesn't fit this order.", True)
+    assert _order(w, order).status == "confirmed"
+
+
+@pytest.mark.anyio
+async def test_the_pickup_message_ends_with_the_screenshot_request():
+    w = World()
+    await placed_order(w)
+    assert w.last_text().endswith(t("after_paying", "en"))  # D78: the last thing they read
 
 
 @pytest.mark.anyio
 async def test_amharic_customer_hears_it_in_amharic():
     w = World(language="am")  # the customer chose Amharic (D29)
     await w.say("ኤር ፎርስ")
-    for label in ("White", "42", "1", t("btn_continue", "am"), t("btn_pickup", "am")):
+    for label in ("White", "42", "1", t("btn_continue", "am"), t("btn_delivery", "am")):
         await w.tap(label)
     await w.say("አበበ")
     await w.say("0911223344")
     await w.tap(t("btn_confirm", "am"))
     [order] = w.db.orders.values()
-    await w.send_photo()
-    await _staff(w, _press(f"pay:{order.id}", w.telegram.last_message_id(STAFF_CHAT)))
-    await _staff(w, _press(f"ready:{order.id}", w.telegram.last_message_id(STAFF_CHAT)))
-    assert w.telegram.to(CUSTOMER)[-1].startswith(t("order_ready", "am", number=order_number(order.id)))
-    await _staff(w, _press(f"done:{order.id}", w.telegram.last_message_id(STAFF_CHAT)))
-    assert w.telegram.to(CUSTOMER)[-1] == t("order_picked_up", "am", number=order_number(order.id),
-                                                shop=STORE.name)
+    alert = w.telegram.last_message_id(STAFF_CHAT)
+    await _staff(w, _press(f"ship:{order.id}", alert))
+    number = order_number(order.id)
+    assert w.telegram.to(CUSTOMER)[-1].startswith(
+        t("order_on_the_way_pay", "am", number=number, total="5,000 ብር"))
+    await _staff(w, _press(f"done:{order.id}", alert))
+    assert w.telegram.to(CUSTOMER)[-1] == t("order_delivered_paid", "am", number=number, shop=STORE.name)
 
 
 @pytest.mark.anyio
 async def test_another_stores_order_cant_be_moved():
     w = World()
-    order, note = await _paid(w, "delivery")
+    order, _ = await _delivery_order(w)
     other = STORE.model_copy(update={"id": uuid4()})
     result = await w.orchestrator.staff.advance_order(other, order.id, "ship")
     assert not result.ok and result.message == "Order not found."
-    assert _status(w, order) == "confirmed"
+    assert _order(w, order).status == "pending"
 
 
-def test_next_step_buttons():
-    order_id = uuid4()
-    assert [d for _, d in next_steps(order_id, "delivery")] == [f"ship:{order_id}", f"done:{order_id}"]
-    assert [d for _, d in next_steps(order_id, None)] == [f"ship:{order_id}", f"done:{order_id}"]  # older orders
-    assert next_steps(order_id, "pickup", done="done") == []
-    assert all(len(d) <= 64 for _, d in next_steps(order_id, "pickup"))  # Telegram's limit
+def test_the_buttons_follow_the_orders_stage():
+    def order(**fields):
+        return OrderWithItems(**{"id": uuid4(), "store_id": uuid4(), **fields})
+
+    def steps(o, **kwargs):
+        return [data.split(":")[0] for _, data in order_buttons(o, **kwargs)]
+
+    assert steps(order(fulfillment_method="delivery")) == ["ship"]
+    assert steps(order(fulfillment_method="delivery", status="out_for_delivery")) == ["done", "back"]
+    assert steps(order(fulfillment_method="delivery", status="out_for_delivery", payment_status="paid")) == ["done"]
+    assert steps(order(fulfillment_method="pickup")) == ["pay"]
+    assert steps(order(fulfillment_method="pickup", status="confirmed", payment_status="paid")) == ["ready", "done"]
+    assert steps(order(fulfillment_method="pickup", status="confirmed", payment_status="paid"),
+                 ready_sent=True) == ["done"]
+    assert steps(order(status="delivered", payment_status="paid")) == []
+    assert steps(order(status="cancelled")) == []
+    assert all(len(d) <= 64 for _, d in order_buttons(order(fulfillment_method="delivery",
+                                                            status="out_for_delivery")))  # Telegram's limit
 
 
 # --- 1. The morning summary (D70/D71) --------------------------------------------------------
