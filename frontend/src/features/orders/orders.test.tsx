@@ -157,6 +157,27 @@ describe('Order stages and the export (Phase 15)', () => {
     expect(within(sheet).getByText(/buttons in the staff group/)).toBeInTheDocument();
   });
 
+  it('says how each kind of unpaid order is handled in the staff group', async () => {
+    server.use(
+      http.get(`${storeApiBase}/orders`, () =>
+        HttpResponse.json({
+          orders: [order(), { ...order(), id: 'o-2', number: 'PICK01', fulfillment: 'pickup' }],
+          more: false,
+        }),
+      ),
+    );
+    const { user } = renderApp(`/s/${STORE_ID}/orders`);
+    await user.click(await screen.findByText(/#AB12CD/)); // delivery: paid on arrival
+    expect(
+      within(await screen.findByRole('dialog')).getByText(/tap On the way when it leaves/),
+    ).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByText(/#PICK01/));
+    expect(
+      within(await screen.findByRole('dialog')).getByText('Confirm payments in the staff group.'),
+    ).toBeInTheDocument();
+  });
+
   it('lets the owner send a month to their Telegram', async () => {
     let asked: unknown;
     server.use(

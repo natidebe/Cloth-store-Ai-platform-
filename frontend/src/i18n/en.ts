@@ -116,6 +116,8 @@ const en = {
     order: 'Order #{{number}}',
     item: '{{name}} · {{variant}} × {{quantity}}',
     paymentInGroup: 'Confirm payments in the staff group.',
+    deliveryInGroup:
+      'Paid on arrival: in the staff group, tap On the way when it leaves, then Delivered & paid.',
     filterTelegram: 'Telegram',
     filterInShop: 'In-shop',
     telegram: 'Telegram',
