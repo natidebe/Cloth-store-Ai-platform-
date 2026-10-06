@@ -23,7 +23,8 @@ created the store). Members are "staff", the group's admins "owners":
                POST /api/v1/app/stores/{store}/products/{product}/publish to the channel
                GET/PUT /api/v1/app/stores/{store}/settings                payment accounts, delivery, ...
                GET  /api/v1/app/stores/{store}/connections                the linked group and channel
-               POST /api/v1/app/stores/{store}/orders/export   {"month": "2026-09"}  Excel file sent by the bot
+               POST /api/v1/app/stores/{store}/orders/export   {"month": "2026-09", "calendar": "gregorian"}
+                                                               Excel file sent by the bot (or "ethiopian": "2019-01")
                POST /api/v1/app/stores/{store}/link-code                  /link code for the group/channel
                PUT  /api/v1/app/stores/{store}/bot-token                  change the bot (D17)
 """
@@ -40,7 +41,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.agents.analytics import Period, store_analytics
 from app.agents.catalog import Catalog
 from app.agents.counter import CounterSaleError, CounterSales, SaleLine, SaleRequest
-from app.agents.export import XLSX, ExportError, build_export, month_bounds
+from app.agents.export import XLSX, Calendar, ExportError, build_export, month_bounds
 from app.agents.inventory import GridRow, Inventory, InventoryError, summarize
 from app.agents.messages import bot_profile
 from app.agents.miniapp import AppAccess
@@ -464,7 +465,8 @@ async def list_orders(
 
 
 class ExportIn(BaseModel):
-    month: str = Field(pattern=r"^\d{4}-\d{2}$")  # "2026-09"
+    month: str = Field(pattern=r"^\d{4}-\d{2}$")  # "2026-09", or "2019-01" = Meskerem 2019 (ዓ.ም.)
+    calendar: Calendar = "gregorian"  # Phase 15c (D79)
 
 
 @router.post("/orders/export")
@@ -477,20 +479,20 @@ async def export_orders(body: ExportIn, access: AppAccess = Depends(owner_access
     them (they never pressed Start in it)."""
     store = access.store
     try:
-        start, end = month_bounds(body.month)
+        period = month_bounds(body.month, calendar=body.calendar)
     except ExportError as error:
         raise HTTPException(status_code=422, detail=error.message)
-    export = build_export(store, await db.orders_for_export(store.id, start, end), start)
+    export = build_export(store, await db.orders_for_export(store.id, period.start, period.end), period)
     try:
         await orchestrator.telegram.send_document(
             store.telegram_bot_token.get_secret_value(), access.user.id, export.filename, export.data,
-            caption=f"📊 {store.name}: sales and orders, {start:%B %Y}", content_type=XLSX)
+            caption=f"📊 {store.name}: sales and orders, {period.title}\n({period.other})", content_type=XLSX)
     except TelegramError as error:
         logger.info("export not delivered", extra={"error": error.description})
         bot = f"@{store.telegram_bot_username}" if store.telegram_bot_username else "the shop's bot"
         raise HTTPException(status_code=409, detail=f"The bot can't send you the file yet. Open {bot}, "
                                                     "press Start, then try again.")
-    logger.info("export sent", extra={"orders": export.orders, "month": body.month})
+    logger.info("export sent", extra={"orders": export.orders, "month": body.month, "calendar": body.calendar})
     return {"sent": True, "file": export.filename, "orders": export.orders, "revenue": export.revenue}
 
 
